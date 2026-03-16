@@ -1,0 +1,26 @@
+{
+  "name": "@ownables/platform-browser",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@ownables/core": "workspace:*",
+    "axios": "^1.13.6",
+    "blockstore-core": "^6.1.2",
+    "buffer": "^6.0.3",
+    "eqty-core": "^1.0.2",
+    "ipfs-unixfs-importer": "^16.1.4",
+    "jszip": "^3.10.1",
+    "mime": "^4.1.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

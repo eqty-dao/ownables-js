@@ -1,0 +1,21 @@
+{
+  "name": "@ownables/platform-viem",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@ownables/core": "workspace:*",
+    "eqty-core": "^1.0.2",
+    "viem": "^2.47.4"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

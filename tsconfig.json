@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/platform-browser" },
+    { "path": "./packages/platform-viem" },
+    { "path": "./packages/react" }
+  ]
+}

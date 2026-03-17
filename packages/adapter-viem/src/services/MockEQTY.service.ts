@@ -1,7 +1,5 @@
 import { Binary, Event, Message } from "eqty-core";
-
-type TypedDataDomain = Record<string, unknown>;
-type TypedDataField = { name: string; type: string };
+import type { TypedDataDomain, TypedDataField } from "../types/EQTY";
 
 const DUMMY_SIG = `0x${"1".repeat(130)}`;
 

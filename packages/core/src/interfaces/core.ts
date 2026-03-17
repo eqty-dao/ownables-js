@@ -1,6 +1,5 @@
 import type { Event, Message } from 'eqty-core';
 import type { TypedPackage } from '../types/TypedPackage';
-import type { StateDump } from '../services/Ownable.service';
 
 export type LogProgress = (step: string, meta?: Record<string, unknown>) => void;
 

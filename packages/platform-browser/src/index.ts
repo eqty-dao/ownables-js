@@ -1,4 +1,3 @@
-export { default as BuilderService } from './services/Builder.service';
 export { default as IDBService } from './services/IDB.service';
 export { default as LocalStorageService } from './services/LocalStorage.service';
 export { default as PackageService } from './services/Package.service';

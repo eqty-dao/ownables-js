@@ -339,6 +339,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@ownables/adapter-viem@workspace:packages/adapter-viem":
+  version: 0.0.0-use.local
+  resolution: "@ownables/adapter-viem@workspace:packages/adapter-viem"
+  dependencies:
+    "@ownables/core": "workspace:*"
+    eqty-core: "npm:^1.0.2"
+    viem: "npm:^2.47.4"
+  languageName: unknown
+  linkType: soft
+
+"@ownables/builder-client@workspace:packages/builder-client":
+  version: 0.0.0-use.local
+  resolution: "@ownables/builder-client@workspace:packages/builder-client"
+  dependencies:
+    axios: "npm:^1.13.6"
+  languageName: unknown
+  linkType: soft
+
 "@ownables/core@workspace:*, @ownables/core@workspace:packages/core":
   version: 0.0.0-use.local
   resolution: "@ownables/core@workspace:packages/core"
@@ -348,7 +366,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@ownables/platform-browser@workspace:*, @ownables/platform-browser@workspace:packages/platform-browser":
+"@ownables/platform-browser@workspace:packages/platform-browser":
   version: 0.0.0-use.local
   resolution: "@ownables/platform-browser@workspace:packages/platform-browser"
   dependencies:
@@ -360,28 +378,6 @@ __metadata:
     ipfs-unixfs-importer: "npm:^16.1.4"
     jszip: "npm:^3.10.1"
     mime: "npm:^4.1.0"
-  languageName: unknown
-  linkType: soft
-
-"@ownables/platform-viem@workspace:*, @ownables/platform-viem@workspace:packages/platform-viem":
-  version: 0.0.0-use.local
-  resolution: "@ownables/platform-viem@workspace:packages/platform-viem"
-  dependencies:
-    "@ownables/core": "workspace:*"
-    eqty-core: "npm:^1.0.2"
-    viem: "npm:^2.47.4"
-  languageName: unknown
-  linkType: soft
-
-"@ownables/react@workspace:packages/react":
-  version: 0.0.0-use.local
-  resolution: "@ownables/react@workspace:packages/react"
-  dependencies:
-    "@ownables/core": "workspace:*"
-    "@ownables/platform-browser": "workspace:*"
-    "@ownables/platform-viem": "workspace:*"
-  peerDependencies:
-    react: ^18 || ^19
   languageName: unknown
   linkType: soft
 

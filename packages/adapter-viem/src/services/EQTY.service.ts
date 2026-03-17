@@ -15,13 +15,9 @@ import {
   parseAbiItem,
 } from "viem";
 import { base, baseSepolia } from "viem/chains";
+import type { EQTYServiceDeps } from "../types/EQTY";
 
 const ZERO_HASH = Binary.fromHex("0x" + "0".repeat(64));
-
-interface EQTYServiceDeps {
-  anchorClient?: { anchor(payload: Array<{ key: Binary; value: Binary }>): Promise<string> };
-  signer?: ViemSigner;
-}
 
 /**
  * EQTYService

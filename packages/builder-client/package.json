@@ -1,5 +1,5 @@
 {
-  "name": "@ownables/react",
+  "name": "@ownables/builder-client",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,12 +9,7 @@
     "dist"
   ],
   "dependencies": {
-    "@ownables/core": "workspace:*",
-    "@ownables/platform-browser": "workspace:*",
-    "@ownables/platform-viem": "workspace:*"
-  },
-  "peerDependencies": {
-    "react": "^18 || ^19"
+    "axios": "^1.13.6"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

@@ -8,10 +8,12 @@ export default defineConfig({
       '@ownables/platform-browser': fileURLToPath(
         new URL('./packages/platform-browser/src/index.ts', import.meta.url)
       ),
-      '@ownables/platform-viem': fileURLToPath(
-        new URL('./packages/platform-viem/src/index.ts', import.meta.url)
+      '@ownables/adapter-viem': fileURLToPath(
+        new URL('./packages/adapter-viem/src/index.ts', import.meta.url)
       ),
-      '@ownables/react': fileURLToPath(new URL('./packages/react/src/index.ts', import.meta.url)),
+      '@ownables/builder-client': fileURLToPath(
+        new URL('./packages/builder-client/src/index.ts', import.meta.url)
+      ),
     },
   },
   test: {

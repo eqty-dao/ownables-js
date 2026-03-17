@@ -3,7 +3,7 @@
   "references": [
     { "path": "./packages/core" },
     { "path": "./packages/platform-browser" },
-    { "path": "./packages/platform-viem" },
-    { "path": "./packages/react" }
+    { "path": "./packages/adapter-viem" },
+    { "path": "./packages/builder-client" }
   ]
 }

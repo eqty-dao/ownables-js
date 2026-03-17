@@ -5,6 +5,10 @@ export * from './types/TypedCosmWasmMsg';
 export * from './types/TypedOwnableInfo';
 export * from './types/TypedPackage';
 export * from './types/MessageInfo';
+export * from './types/OwnableRuntime';
+export * from './types/SIWE';
+export * from './types/EventChainStore';
+export * from './types/Polling';
 export { default as TypedDict } from './types/TypedDict';
 
 export * from './services/SIWE.service';

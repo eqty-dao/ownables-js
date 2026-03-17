@@ -1,20 +1,9 @@
 import axios from "axios";
-
-export interface UploadOptions {
-  templateId?: number;
-  name?: string;
-  sender?: string;
-  signedTransaction?: string;
-}
-
-interface BuilderHttpClient {
-  get(url: string, config?: Record<string, unknown>): Promise<{ data: any }>;
-  post(
-    url: string,
-    body: unknown,
-    config?: Record<string, unknown>
-  ): Promise<{ data: any }>;
-}
+import type {
+  UploadOptions,
+  BuilderHttpClient,
+  BuilderClientOptions,
+} from "../types/Builder";
 
 export default class BuilderService {
   public static URL: string = import.meta.env.VITE_OBUILDER ?? "";
@@ -31,12 +20,7 @@ export default class BuilderService {
 
   constructor(
     private chainId: number,
-    options: {
-      url?: string;
-      secret?: string;
-      httpClient?: BuilderHttpClient;
-      formDataFactory?: () => FormData;
-    } = {}
+    options: BuilderClientOptions = {}
   ) {
     this.url = options.url ?? BuilderService.URL;
     this.secret = options.secret ?? BuilderService.SECRET;

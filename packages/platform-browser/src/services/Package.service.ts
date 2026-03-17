@@ -14,56 +14,6 @@ import { EventChain } from "eqty-core";
 const getMimeType = (filename: string): string | null | undefined =>
   (mime as any)?.getType?.(filename);
 
-const defaultExampleUrl = import.meta.env.VITE_OWNABLE_EXAMPLES_URL;
-
-const defaultExamples: TypedPackageStub[] = defaultExampleUrl
-  ? [
-      {
-        title: "Antenna",
-        name: "ownable-antenna",
-        description: "Add-on for Robot",
-        stub: true,
-      },
-      {
-        title: "Armor",
-        name: "ownable-armor",
-        description: "Add-on for Robot",
-        stub: true,
-      },
-      {
-        title: "Car",
-        name: "ownable-car",
-        description: "Ride for HODLers",
-        stub: true,
-      },
-      {
-        title: "Paint",
-        name: "ownable-paint",
-        description: "Consumable for Robot",
-        stub: true,
-      },
-      {
-        title: "Potion",
-        name: "ownable-potion",
-        description: "Drink a colorful potion",
-        stub: true,
-      },
-      {
-        title: "Robot",
-        name: "ownable-robot",
-        description: "An adorable robot companion",
-        stub: true,
-      },
-      {
-        title: "Speakers",
-        name: "ownable-speakers",
-        description: "Add-on for Robot",
-        stub: true,
-      },
-    ]
-  : [];
-export const HAS_EXAMPLES = defaultExampleUrl !== "";
-
 const capabilitiesStaticOwnable = {
   isDynamic: false,
   hasMetadata: false,
@@ -88,8 +38,8 @@ export default class PackageService {
       calculateCidFn?: (files: File[]) => Promise<string>;
     } = {}
   ) {
-    this.exampleUrl = options.exampleUrl ?? defaultExampleUrl;
-    this.examples = options.examples ?? defaultExamples;
+    this.exampleUrl = options.exampleUrl;
+    this.examples = options.examples ?? [];
     this.calculateCidFn = options.calculateCidFn ?? calculateCid;
   }
 

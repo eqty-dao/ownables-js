@@ -10,10 +10,10 @@
       "@ownables/core/*": ["packages/core/src/*"],
       "@ownables/platform-browser": ["packages/platform-browser/src/index.ts"],
       "@ownables/platform-browser/*": ["packages/platform-browser/src/*"],
-      "@ownables/platform-viem": ["packages/platform-viem/src/index.ts"],
-      "@ownables/platform-viem/*": ["packages/platform-viem/src/*"],
-      "@ownables/react": ["packages/react/src/index.ts"],
-      "@ownables/react/*": ["packages/react/src/*"]
+      "@ownables/adapter-viem": ["packages/adapter-viem/src/index.ts"],
+      "@ownables/adapter-viem/*": ["packages/adapter-viem/src/*"],
+      "@ownables/builder-client": ["packages/builder-client/src/index.ts"],
+      "@ownables/builder-client/*": ["packages/builder-client/src/*"]
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,

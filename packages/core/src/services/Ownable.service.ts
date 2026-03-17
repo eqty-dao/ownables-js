@@ -10,63 +10,21 @@ import type {
 import JSZip from "jszip";
 import type { TypedPackage } from "../types/TypedPackage";
 import type { TypedOwnableInfo } from "../types/TypedOwnableInfo";
+import type {
+  CosmWasmMessageInfo,
+  CosmWasmEvent,
+  OwnableRPC,
+  StateDump,
+  StateSnapshot,
+} from "../types/OwnableRuntime";
 import EventChainService from "./EventChain.service";
 import { withProgress } from "../progress";
-
-export type StateDump = Array<[ArrayLike<number>, ArrayLike<number>]>;
-
-interface MessageInfo {
-  sender: string;
-  funds: Array<{}>;
-}
-
-interface CosmWasmEvent {
-  type: string;
-  attributes: TypedDict<string>;
-}
-
-export interface OwnableRPC {
-  init: (id: string, js: string, wasm: Uint8Array) => Promise<any>;
-  instantiate: (
-    msg: TypedDict,
-    info: MessageInfo
-  ) => Promise<{ attributes: TypedDict<string>; state: StateDump }>;
-  execute: (
-    msg: TypedDict,
-    info: MessageInfo,
-    state: StateDump
-  ) => Promise<{
-    attributes: TypedDict<string>;
-    events: Array<CosmWasmEvent>;
-    data: string;
-    state: StateDump;
-  }>;
-  externalEvent: (
-    msg: TypedDict,
-    info: TypedDict,
-    state: StateDump
-  ) => Promise<{
-    attributes: TypedDict<string>;
-    events: Array<CosmWasmEvent>;
-    data: string;
-    state: StateDump;
-  }>;
-  query: (msg: TypedDict, state: StateDump) => Promise<any>;
-  refresh: (state: StateDump) => Promise<void>;
-}
-
-interface StateSnapshot {
-  eventIndex: number;
-  blockHash: string;
-  stateDump: StateDump;
-  timestamp: Date;
-}
 
 export default class OwnableService {
   private readonly SNAPSHOT_INTERVAL = 50;
 
   constructor(
-    private readonly idb: StateStore,
+    private readonly stateStore: StateStore,
     private readonly eventChains: EventChainService,
     private readonly eqty: AnchorProvider,
     private readonly packages: PackageAssetIO,
@@ -199,14 +157,14 @@ export default class OwnableService {
         timestamp: new Date(),
       };
 
-      if (!(await this.idb.hasStore(snapshotStoreId))) {
-        await this.idb.createStore(snapshotStoreId);
+      if (!(await this.stateStore.hasStore(snapshotStoreId))) {
+        await this.stateStore.createStore(snapshotStoreId);
       }
 
-      await this.idb.set(snapshotStoreId, `snapshot_${eventIndex}`, snapshot);
+      await this.stateStore.set(snapshotStoreId, `snapshot_${eventIndex}`, snapshot);
 
       // Cleanup old snapshots (keep only last 3)
-      const keys = await this.idb.keys(snapshotStoreId);
+      const keys = await this.stateStore.keys(snapshotStoreId);
       if (keys.length > 3) {
         const sortedKeys = keys
           .map((key) => parseInt(key.replace("snapshot_", "")))
@@ -218,7 +176,7 @@ export default class OwnableService {
           .map((index) => `snapshot_${index}`);
 
         for (const key of keysToDelete) {
-          await this.idb.delete(snapshotStoreId, key);
+          await this.stateStore.delete(snapshotStoreId, key);
         }
       }
     } catch (error) {
@@ -231,38 +189,38 @@ export default class OwnableService {
   ): Promise<StateSnapshot | null> {
     const storeId = `ownable:${chainId}`;
     const snapshotStoreId = `${storeId}.snapshots`;
-    const exist = await this.idb.hasStore(snapshotStoreId);
+    const exist = await this.stateStore.hasStore(snapshotStoreId);
 
     if (!exist) {
       return null;
     }
 
-    const snapshots = await this.idb.keys(snapshotStoreId);
+    const snapshots = await this.stateStore.keys(snapshotStoreId);
     if (snapshots.length === 0) return null;
 
     const latestKey = snapshots
       .map((key) => parseInt(key.replace("snapshot_", "")))
       .sort((a, b) => b - a)[0];
 
-    return await this.idb.get(snapshotStoreId, `snapshot_${latestKey}`);
+    return await this.stateStore.get(snapshotStoreId, `snapshot_${latestKey}`);
   }
 
   async listSnapshots(chainId: string): Promise<StateSnapshot[]> {
     const storeId = `ownable:${chainId}`;
     const snapshotStoreId = `${storeId}.snapshots`;
 
-    if (!(await this.idb.hasStore(snapshotStoreId))) {
+    if (!(await this.stateStore.hasStore(snapshotStoreId))) {
       return [];
     }
 
-    const snapshots = await this.idb.keys(snapshotStoreId);
+    const snapshots = await this.stateStore.keys(snapshotStoreId);
     const sortedKeys = snapshots
       .map((key) => parseInt(key.replace("snapshot_", "")))
       .sort((a, b) => a - b);
 
     return Promise.all(
       sortedKeys.map((index) =>
-        this.idb.get(snapshotStoreId, `snapshot_${index}`)
+        this.stateStore.get(snapshotStoreId, `snapshot_${index}`)
       )
     );
   }
@@ -271,8 +229,8 @@ export default class OwnableService {
     const storeId = `ownable:${chainId}`;
     const snapshotStoreId = `${storeId}.snapshots`;
 
-    if (await this.idb.hasStore(snapshotStoreId)) {
-      await this.idb.deleteStore(snapshotStoreId);
+    if (await this.stateStore.hasStore(snapshotStoreId)) {
+      await this.stateStore.deleteStore(snapshotStoreId);
     }
   }
 
@@ -286,7 +244,7 @@ export default class OwnableService {
     const info = {
       sender: event.signerAddress || this.eqty.address,
       funds: [],
-    } as MessageInfo;
+    } as CosmWasmMessageInfo;
     const { "@context": context, ...msg } = event.parsedData;
 
     let result;
@@ -385,7 +343,7 @@ export default class OwnableService {
     stateDump: StateDump,
     onProgress?: LogProgress
   ): Promise<StateDump> {
-    const info = { sender: this.eqty.address, funds: [] } as MessageInfo;
+    const info = { sender: this.eqty.address, funds: [] } as CosmWasmMessageInfo;
     const { state: newStateDump } = await this.rpc(chain.id).execute(
       msg,
       info,
@@ -448,7 +406,7 @@ export default class OwnableService {
     consumable: EventChain,
     onProgress?: LogProgress
   ): Promise<void> {
-    const info: MessageInfo = {
+    const info: CosmWasmMessageInfo = {
       sender: this.eqty.address,
       funds: [],
     };
@@ -558,12 +516,12 @@ export default class OwnableService {
     if (stateDump) stores.push(stateStoreId);
 
     await this.retryOperation(async () => {
-      const hasStore = await this.idb.hasStore(storeId);
+      const hasStore = await this.stateStore.hasStore(storeId);
       if (hasStore) {
         return;
       }
 
-      await this.idb.createStore(...stores);
+      await this.stateStore.createStore(...stores);
 
       const data: TypedDict = {
         [storeId]: chainData,
@@ -574,19 +532,19 @@ export default class OwnableService {
       }
 
       try {
-        await this.idb.setAll(data);
+        await this.stateStore.setAll(data);
       } catch (error) {
         // If setAll fails, attempt to clean up
         console.error("Failed to set data, cleaning up stores...");
         await Promise.all(
-          stores.map((store) => this.idb.deleteStore(store).catch(() => {}))
+          stores.map((store) => this.stateStore.deleteStore(store).catch(() => {}))
         );
         throw error;
       }
 
       const verifyData = await Promise.all([
-        this.idb.get(storeId, "state"),
-        stateDump ? this.idb.getAll(stateStoreId) : Promise.resolve(null),
+        this.stateStore.get(storeId, "state"),
+        stateDump ? this.stateStore.getAll(stateStoreId) : Promise.resolve(null),
       ]);
 
       if (
@@ -604,7 +562,7 @@ export default class OwnableService {
     const stateStoreId = `${storeId}.state`;
 
     await this.retryOperation(async () => {
-      const storedState = await this.idb.get(storeId, "state");
+      const storedState = await this.stateStore.get(storeId, "state");
       if (storedState === chain.state) return;
 
       const data = {
@@ -617,7 +575,7 @@ export default class OwnableService {
       };
 
       if (this.anchoring) {
-        const previousHash = await this.idb.get(
+        const previousHash = await this.stateStore.get(
           `ownable:${chain.id}`,
           "latestHash"
         );
@@ -631,7 +589,7 @@ export default class OwnableService {
         await this.eqty.anchor(...anchors);
       }
 
-      await this.idb.setAll(data);
+      await this.stateStore.setAll(data);
 
       const eventCount = chain.events.length;
       if (eventCount % this.SNAPSHOT_INTERVAL === 0) {
@@ -639,7 +597,7 @@ export default class OwnableService {
       }
 
       // Verify write
-      const verifyState = await this.idb.get(storeId, "state");
+      const verifyState = await this.stateStore.get(storeId, "state");
       if (verifyState !== chain.state.hex) {
         throw new Error("State verification failed after write");
       }

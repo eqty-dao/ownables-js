@@ -1,17 +1,8 @@
 import { Binary, EventChain, IEventChainJSON } from "eqty-core";
 import type { AnchorProvider, KVStore, StateStore } from "../interfaces/core";
-import { StateDump } from "./Ownable.service";
+import type { StateDump } from "../types/OwnableRuntime";
 import type TypedDict from "../types/TypedDict";
-
-interface StoredChainInfo {
-  chain: IEventChainJSON;
-  state: string;
-  package: string;
-  uniqueMessageHash: string;
-  created: Date;
-  latestHash: string;
-  keywords: string[];
-}
+import type { StoredChainInfo } from "../types/EventChainStore";
 
 export default class EventChainService {
   constructor(

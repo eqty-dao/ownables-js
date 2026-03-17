@@ -14,8 +14,8 @@ jobs:
         package:
           - core
           - platform-browser
-          - platform-viem
-          - react
+          - adapter-viem
+          - builder-client
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -1,12 +1,5 @@
 import type { KVStore } from "../interfaces/core";
-
-interface RelayPollingClient {
-  url?: string;
-  relay: { get(path: string, headers?: Record<string, string>): Promise<any> };
-  isAvailable(): Promise<boolean>;
-  ensureAuthenticated(): Promise<boolean>;
-  getAuthHeaders(): Record<string, string>;
-}
+import type { RelayPollingClient } from "../types/Polling";
 
 export class PollingService {
   private tries = 3;

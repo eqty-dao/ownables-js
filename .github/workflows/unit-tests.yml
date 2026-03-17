@@ -16,6 +16,7 @@ jobs:
           - platform-browser
           - adapter-viem
           - builder-client
+          - platform-node
     steps:
       - name: Checkout
         uses: actions/checkout@v4

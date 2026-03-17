@@ -14,6 +14,9 @@ export default defineConfig({
       '@ownables/builder-client': fileURLToPath(
         new URL('./packages/builder-client/src/index.ts', import.meta.url)
       ),
+      '@ownables/platform-node': fileURLToPath(
+        new URL('./packages/platform-node/src/index.ts', import.meta.url)
+      ),
     },
   },
   test: {

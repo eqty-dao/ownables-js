@@ -8,6 +8,7 @@ Shared Ownables JavaScript libraries extracted from the SDK into a Yarn v4 monor
 - `@ownables/platform-browser`: browser-specific adapters and services (storage, relay wiring, package IO).
 - `@ownables/adapter-viem`: viem/EVM adapters and services.
 - `@ownables/builder-client`: client for Ownables builder upload APIs.
+- `@ownables/platform-node`: node-specific adapters (sandbox runtime, state store, package IO).
 
 ## Requirements
 
@@ -37,6 +38,7 @@ packages/
   platform-browser/
   adapter-viem/
   builder-client/
+  platform-node/
 ```
 
 ## CI

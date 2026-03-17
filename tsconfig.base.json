@@ -13,7 +13,9 @@
       "@ownables/adapter-viem": ["packages/adapter-viem/src/index.ts"],
       "@ownables/adapter-viem/*": ["packages/adapter-viem/src/*"],
       "@ownables/builder-client": ["packages/builder-client/src/index.ts"],
-      "@ownables/builder-client/*": ["packages/builder-client/src/*"]
+      "@ownables/builder-client/*": ["packages/builder-client/src/*"],
+      "@ownables/platform-node": ["packages/platform-node/src/index.ts"],
+      "@ownables/platform-node/*": ["packages/platform-node/src/*"]
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,

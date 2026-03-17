@@ -4,6 +4,7 @@
     { "path": "./packages/core" },
     { "path": "./packages/platform-browser" },
     { "path": "./packages/adapter-viem" },
+    { "path": "./packages/adapter-ethers" },
     { "path": "./packages/builder-client" },
     { "path": "./packages/platform-node" }
   ]

@@ -12,6 +12,8 @@
       "@ownables/platform-browser/*": ["packages/platform-browser/src/*"],
       "@ownables/adapter-viem": ["packages/adapter-viem/src/index.ts"],
       "@ownables/adapter-viem/*": ["packages/adapter-viem/src/*"],
+      "@ownables/adapter-ethers": ["packages/adapter-ethers/src/index.ts"],
+      "@ownables/adapter-ethers/*": ["packages/adapter-ethers/src/*"],
       "@ownables/builder-client": ["packages/builder-client/src/index.ts"],
       "@ownables/builder-client/*": ["packages/builder-client/src/*"],
       "@ownables/platform-node": ["packages/platform-node/src/index.ts"],

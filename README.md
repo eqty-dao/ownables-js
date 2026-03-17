@@ -9,7 +9,7 @@ Use these packages to validate, execute, and interact with Ownables in both brow
 - Ownables-aware apps that read and execute Ownable state.
 - Browser integrations with storage, package loading, and relay support.
 - Node integrations with sandboxed execution and persistent state stores.
-- EVM integrations through viem-based adapters.
+- EVM integrations through viem- or ethers-based adapters.
 
 ## Packages
 
@@ -17,6 +17,7 @@ Use these packages to validate, execute, and interact with Ownables in both brow
 - `@ownables/platform-browser`: browser adapters and services.
 - `@ownables/platform-node`: node adapters (sandbox RPC, state store, package IO).
 - `@ownables/adapter-viem`: viem/EVM adapter services.
+- `@ownables/adapter-ethers`: ethers/EVM adapter services.
 - `@ownables/builder-client`: client for Ownables builder APIs.
 
 ## Requirements
@@ -50,6 +51,7 @@ packages/
   platform-browser/
   platform-node/
   adapter-viem/
+  adapter-ethers/
   builder-client/
 ```
 

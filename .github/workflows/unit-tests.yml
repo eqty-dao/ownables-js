@@ -15,6 +15,7 @@ jobs:
           - core
           - platform-browser
           - adapter-viem
+          - adapter-ethers
           - builder-client
           - platform-node
     steps:

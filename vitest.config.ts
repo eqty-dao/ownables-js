@@ -11,6 +11,9 @@ export default defineConfig({
       '@ownables/adapter-viem': fileURLToPath(
         new URL('./packages/adapter-viem/src/index.ts', import.meta.url)
       ),
+      '@ownables/adapter-ethers': fileURLToPath(
+        new URL('./packages/adapter-ethers/src/index.ts', import.meta.url)
+      ),
       '@ownables/builder-client': fileURLToPath(
         new URL('./packages/builder-client/src/index.ts', import.meta.url)
       ),

@@ -1,19 +1,32 @@
 # ownables-js
 
-Shared Ownables JavaScript libraries extracted from the SDK into a Yarn v4 monorepo.
+TypeScript libraries for integrating Ownables in applications.
+
+Use these packages to validate, execute, and interact with Ownables in both browser and Node.js environments.
+
+## What you can build
+
+- Ownables-aware apps that read and execute Ownable state.
+- Browser integrations with storage, package loading, and relay support.
+- Node integrations with sandboxed execution and persistent state stores.
+- EVM integrations through viem-based adapters.
 
 ## Packages
 
-- `@ownables/core`: domain services, shared interfaces, and orchestration logic.
-- `@ownables/platform-browser`: browser-specific adapters and services (storage, relay wiring, package IO).
-- `@ownables/adapter-viem`: viem/EVM adapters and services.
-- `@ownables/builder-client`: client for Ownables builder upload APIs.
-- `@ownables/platform-node`: node-specific adapters (sandbox runtime, state store, package IO).
+- `@ownables/core`: core Ownables domain logic and shared interfaces.
+- `@ownables/platform-browser`: browser adapters and services.
+- `@ownables/platform-node`: node adapters (sandbox RPC, state store, package IO).
+- `@ownables/adapter-viem`: viem/EVM adapter services.
+- `@ownables/builder-client`: client for Ownables builder APIs.
 
 ## Requirements
 
 - Node.js 22+
-- Corepack enabled (`corepack enable`)
+- Corepack enabled:
+
+```bash
+corepack enable
+```
 
 ## Install
 
@@ -21,34 +34,29 @@ Shared Ownables JavaScript libraries extracted from the SDK into a Yarn v4 monor
 yarn install
 ```
 
-## Scripts
+## Development
 
-- `yarn test`: run all tests.
-- `yarn test packages/core/tests`: run tests for a specific package path.
+- `yarn build`: build all workspace packages.
+- `yarn typecheck`: run TypeScript checks.
 - `yarn lint`: run ESLint.
-- `yarn typecheck`: run TypeScript checks in all workspaces.
-- `yarn build`: build all workspaces.
-- `yarn format`: run Prettier write.
+- `yarn test`: run all tests.
+- `yarn test packages/<package>/tests`: run tests for one package.
 
-## Workspace Layout
+## Monorepo layout
 
 ```text
 packages/
   core/
   platform-browser/
+  platform-node/
   adapter-viem/
   builder-client/
-  platform-node/
 ```
 
-## CI
+## Release
 
-GitHub Actions workflow:
-
-- `.github/workflows/unit-tests.yml`
-
-Runs matrix unit tests per package using `yarn test` with path filters.
+Releases are automated with semantic-release via GitHub Actions (`.github/workflows/release.yml`).
 
 ## License
 
-MIT. See [LICENSE](./LICENSE).
+MIT — see [LICENSE](./LICENSE).

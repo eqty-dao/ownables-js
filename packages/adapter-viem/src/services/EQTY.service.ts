@@ -28,6 +28,7 @@ export default class EQTYService {
   private anchorClient: AnchorClient<any>;
   private anchorQueue: Array<{ key: Binary; value: Binary }> = [];
   public readonly signer: ViemSigner;
+  private readonly lockableClientOverride;
 
   private getChain() {
     switch (this.chainId) {
@@ -86,6 +87,7 @@ export default class EQTYService {
     }
 
     this.signer = deps.signer ?? new ViemSigner(this.walletClient);
+    this.lockableClientOverride = deps.lockableClient;
   }
 
   async anchor(
@@ -225,5 +227,90 @@ export default class EQTYService {
       anchors: txHashes,
       map: anchorsMap,
     };
+  }
+
+  private async lockableRead<T>(
+    contractAddress: string,
+    functionName: 'ownerOf' | 'isLocked' | 'unlockChallenge' | 'isUnlockProofValid',
+    args: Array<bigint | string>
+  ): Promise<T> {
+    return (await (this.publicClient as any).readContract({
+      address: contractAddress as `0x${string}`,
+      abi: [
+        { name: 'ownerOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ name: 'owner', type: 'address' }] },
+        { name: 'isLocked', type: 'function', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ name: 'locked', type: 'bool' }] },
+        { name: 'unlockChallenge', type: 'function', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ name: 'challenge', type: 'bytes32' }] },
+        { name: 'isUnlockProofValid', type: 'function', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }, { name: 'proof', type: 'bytes' }], outputs: [{ name: 'valid', type: 'bool' }] },
+      ],
+      functionName,
+      args,
+    })) as T;
+  }
+
+  private normalizeChallenge(challenge: string | bigint): string {
+    if (typeof challenge === 'bigint') {
+      return `0x${challenge.toString(16).padStart(64, '0')}`;
+    }
+
+    return challenge;
+  }
+
+  async getOwner(contractAddress: string, tokenId: string): Promise<string> {
+    if (this.lockableClientOverride) {
+      return this.lockableClientOverride.ownerOf(BigInt(tokenId));
+    }
+
+    return this.lockableRead<string>(contractAddress, 'ownerOf', [BigInt(tokenId)]);
+  }
+
+  async isLocked(contractAddress: string, tokenId: string): Promise<boolean> {
+    if (this.lockableClientOverride) {
+      return this.lockableClientOverride.isLocked(BigInt(tokenId));
+    }
+
+    return this.lockableRead<boolean>(contractAddress, 'isLocked', [BigInt(tokenId)]);
+  }
+
+  async getUnlockChallenge(contractAddress: string, tokenId: string): Promise<string> {
+    if (this.lockableClientOverride) {
+      const challenge = await this.lockableClientOverride.unlockChallenge(BigInt(tokenId));
+      return this.normalizeChallenge(challenge);
+    }
+
+    const challenge = await this.lockableRead<string | bigint>(contractAddress, 'unlockChallenge', [
+      BigInt(tokenId),
+    ]);
+    return this.normalizeChallenge(challenge);
+  }
+
+  async signUnlockChallenge(challenge: string): Promise<string> {
+    const account = (this.walletClient as any).account;
+    if (!account) {
+      throw new Error('Wallet client account is required for unlock challenge signing');
+    }
+
+    const raw = challenge.startsWith('0x')
+      ? (challenge as `0x${string}`)
+      : (`0x${Buffer.from(challenge, 'utf8').toString('hex')}` as `0x${string}`);
+
+    return (this.walletClient as any).signMessage({
+      account,
+      message: { raw },
+    });
+  }
+
+  async isUnlockProofValid(
+    contractAddress: string,
+    tokenId: string,
+    proof: string
+  ): Promise<boolean> {
+    if (this.lockableClientOverride) {
+      return this.lockableClientOverride.isUnlockProofValid(BigInt(tokenId), proof);
+    }
+
+    return this.lockableRead<boolean>(contractAddress, 'isUnlockProofValid', [
+      BigInt(tokenId),
+      proof,
+    ]);
   }
 }

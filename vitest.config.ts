@@ -29,6 +29,9 @@ export default defineConfig({
       '@ownables/notify-publisher': fileURLToPath(
         new URL('./packages/notify-publisher/src/index.ts', import.meta.url)
       ),
+      '@ownables/authority': fileURLToPath(
+        new URL('./packages/authority/src/index.ts', import.meta.url)
+      ),
     },
   },
   test: {

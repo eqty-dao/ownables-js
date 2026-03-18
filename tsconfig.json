@@ -9,6 +9,7 @@
     { "path": "./packages/platform-node" },
     { "path": "./packages/notify-core" },
     { "path": "./packages/notify-client" },
-    { "path": "./packages/notify-publisher" }
+    { "path": "./packages/notify-publisher" },
+    { "path": "./packages/authority" }
   ]
 }

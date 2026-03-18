@@ -6,4 +6,10 @@ export type TypedDataField = { name: string; type: string };
 export interface EQTYServiceDeps {
   anchorClient?: { anchor(payload: Array<{ key: Binary; value: Binary }>): Promise<string> };
   signer?: ViemSigner;
+  lockableClient?: {
+    ownerOf(tokenId: bigint): Promise<string>;
+    isLocked(tokenId: bigint): Promise<boolean>;
+    unlockChallenge(tokenId: bigint): Promise<string | bigint>;
+    isUnlockProofValid(tokenId: bigint, proof: string): Promise<boolean>;
+  };
 }

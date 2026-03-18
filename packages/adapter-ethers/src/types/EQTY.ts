@@ -20,6 +20,12 @@ export interface EthersSignerLike {
 export interface EQTYServiceDeps {
   anchorClient?: EthersAnchorClientLike;
   signer?: EthersSignerLike;
+  lockableClient?: {
+    ownerOf(tokenId: bigint): Promise<string>;
+    isLocked(tokenId: bigint): Promise<boolean>;
+    unlockChallenge(tokenId: bigint): Promise<string | bigint>;
+    isUnlockProofValid(tokenId: bigint, proof: string): Promise<boolean>;
+  };
 }
 
 export interface EIP1193Provider {

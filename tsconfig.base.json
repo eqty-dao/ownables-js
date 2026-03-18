@@ -23,7 +23,9 @@
       "@ownables/notify-client": ["packages/notify-client/src/index.ts"],
       "@ownables/notify-client/*": ["packages/notify-client/src/*"],
       "@ownables/notify-publisher": ["packages/notify-publisher/src/index.ts"],
-      "@ownables/notify-publisher/*": ["packages/notify-publisher/src/*"]
+      "@ownables/notify-publisher/*": ["packages/notify-publisher/src/*"],
+      "@ownables/authority": ["packages/authority/src/index.ts"],
+      "@ownables/authority/*": ["packages/authority/src/*"]
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,

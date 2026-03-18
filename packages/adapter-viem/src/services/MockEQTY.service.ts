@@ -94,4 +94,26 @@ export default class MockEQTYService {
 
     return { verified: true, anchors: hashMap, map };
   }
+
+  async getOwner(_contractAddress: string, _tokenId: string): Promise<string> {
+    return this.address;
+  }
+
+  async isLocked(_contractAddress: string, _tokenId: string): Promise<boolean> {
+    return true;
+  }
+
+  async getUnlockChallenge(_contractAddress: string, tokenId: string): Promise<string> {
+    const seed = `${this.chainId}:${tokenId}`.padEnd(32, '0').slice(0, 32);
+    return `0x${Buffer.from(seed, 'utf8').toString('hex').slice(0, 64)}`;
+  }
+
+  async signUnlockChallenge(challenge: string): Promise<string> {
+    const hex = challenge.startsWith('0x') ? challenge.slice(2) : Buffer.from(challenge, 'utf8').toString('hex');
+    return `0x${hex.padEnd(130, '1').slice(0, 130)}`;
+  }
+
+  async isUnlockProofValid(_contractAddress: string, _tokenId: string, proof: string): Promise<boolean> {
+    return proof.startsWith('0x') && proof.length >= 4;
+  }
 }

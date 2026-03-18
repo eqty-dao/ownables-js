@@ -942,6 +942,14 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@ownables/authority@workspace:packages/authority":
+  version: 0.0.0-use.local
+  resolution: "@ownables/authority@workspace:packages/authority"
+  dependencies:
+    "@ownables/core": "workspace:*"
+  languageName: unknown
+  linkType: soft
+
 "@ownables/builder-client@workspace:packages/builder-client":
   version: 0.0.0-use.local
   resolution: "@ownables/builder-client@workspace:packages/builder-client"

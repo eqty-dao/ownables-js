@@ -45,7 +45,13 @@ yarn install
 - `yarn lint`: run ESLint.
 - `yarn test`: run all tests.
 - `yarn test packages/<package>/tests`: run tests for one package.
-- Notify integration examples: [docs/notify-integration.md](./docs/notify-integration.md)
+
+## Temporary docs
+
+- Docs index and scope: [docs/temporary-docs.md](./docs/temporary-docs.md)
+- Core runtime quickstart: [docs/core-runtime-quickstart.md](./docs/core-runtime-quickstart.md)
+- Platform and adapter quickstart: [docs/platforms-and-adapters.md](./docs/platforms-and-adapters.md)
+- Notify integration guide: [docs/notify-integration.md](./docs/notify-integration.md)
 
 ## Monorepo layout
 

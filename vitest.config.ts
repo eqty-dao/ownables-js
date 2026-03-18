@@ -20,6 +20,15 @@ export default defineConfig({
       '@ownables/platform-node': fileURLToPath(
         new URL('./packages/platform-node/src/index.ts', import.meta.url)
       ),
+      '@ownables/notify-core': fileURLToPath(
+        new URL('./packages/notify-core/src/index.ts', import.meta.url)
+      ),
+      '@ownables/notify-client': fileURLToPath(
+        new URL('./packages/notify-client/src/index.ts', import.meta.url)
+      ),
+      '@ownables/notify-publisher': fileURLToPath(
+        new URL('./packages/notify-publisher/src/index.ts', import.meta.url)
+      ),
     },
   },
   test: {

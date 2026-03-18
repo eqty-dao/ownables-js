@@ -1,6 +1,10 @@
 import type { KVStore } from "../interfaces/core";
 import type { RelayPollingClient } from "../types/Polling";
 
+/**
+ * @deprecated Relay polling is legacy and will be removed in a future major version.
+ * Prefer hub-backed notification flows.
+ */
 export class PollingService {
   private tries = 3;
   private intervalId?: ReturnType<typeof setInterval>;

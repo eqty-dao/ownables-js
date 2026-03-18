@@ -1,0 +1,82 @@
+import { describe, expect, it, vi } from "vitest";
+
+import {
+  NotifyAcceptService,
+  NotifyClientService,
+  NotifyInboxService,
+  type NotifyClientTransport,
+  type NotifyRawMessage,
+} from "../src";
+
+const makeMessage = (eventId: string, receivedAt: string): NotifyRawMessage => ({
+  id: `msg_${eventId}`,
+  receivedAt,
+  payload: {
+    type: "ownables.v1.available",
+    eventId,
+    createdAt: "2026-03-18T10:00:00.000Z",
+    ownableId: "owb_1",
+    cid: "bafy123",
+    scope: "direct",
+    issuerAddress: "0x1111111111111111111111111111111111111111",
+    ownerAddress: "0x2222222222222222222222222222222222222222",
+    accept: {
+      url: "https://hub.example.com/api/v1/ownables/owb_1/download",
+      method: "POST",
+    },
+  },
+});
+
+describe("NotifyClientService", () => {
+  it("delegates lifecycle methods to transport", async () => {
+    const transport: NotifyClientTransport = {
+      initialize: vi.fn(),
+      register: vi.fn(),
+      subscribe: vi.fn(),
+      watchNotifications: vi.fn().mockReturnValue(() => undefined),
+      watchSubscriptions: vi.fn().mockReturnValue(() => undefined),
+    };
+
+    const service = new NotifyClientService(transport);
+    await service.initialize();
+    await service.register();
+    await service.subscribe({ account: "0xabc" });
+
+    expect(transport.initialize).toHaveBeenCalledTimes(1);
+    expect(transport.register).toHaveBeenCalledTimes(1);
+    expect(transport.subscribe).toHaveBeenCalledWith({ account: "0xabc" });
+  });
+});
+
+describe("NotifyInboxService", () => {
+  it("dedupes by eventId and marks as read", () => {
+    const inbox = new NotifyInboxService();
+    const first = inbox.ingest(makeMessage("evt_1", "2026-03-18T10:00:00.000Z"));
+    const second = inbox.ingest(makeMessage("evt_1", "2026-03-18T10:10:00.000Z"));
+
+    expect(first).toEqual(second);
+    expect(inbox.list()).toHaveLength(1);
+
+    inbox.markRead("evt_1", "2026-03-18T11:00:00.000Z");
+    expect(inbox.list()[0]?.readAt).toBe("2026-03-18T11:00:00.000Z");
+  });
+});
+
+describe("NotifyAcceptService", () => {
+  it("posts to accept url and returns status", async () => {
+    const fetchFn = vi.fn().mockResolvedValue({ ok: true, status: 201 });
+    const service = new NotifyAcceptService({ fetchFn });
+    const result = await service.accept({
+      id: "msg_1",
+      eventId: "evt_1",
+      receivedAt: "2026-03-18T10:00:00.000Z",
+      payload: makeMessage("evt_1", "2026-03-18T10:00:00.000Z").payload,
+    });
+
+    expect(result).toEqual({ ok: true, status: 201 });
+    expect(fetchFn).toHaveBeenCalledWith(
+      "https://hub.example.com/api/v1/ownables/owb_1/download",
+      { method: "POST" }
+    );
+  });
+});

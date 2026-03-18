@@ -17,7 +17,13 @@
       "@ownables/builder-client": ["packages/builder-client/src/index.ts"],
       "@ownables/builder-client/*": ["packages/builder-client/src/*"],
       "@ownables/platform-node": ["packages/platform-node/src/index.ts"],
-      "@ownables/platform-node/*": ["packages/platform-node/src/*"]
+      "@ownables/platform-node/*": ["packages/platform-node/src/*"],
+      "@ownables/notify-core": ["packages/notify-core/src/index.ts"],
+      "@ownables/notify-core/*": ["packages/notify-core/src/*"],
+      "@ownables/notify-client": ["packages/notify-client/src/index.ts"],
+      "@ownables/notify-client/*": ["packages/notify-client/src/*"],
+      "@ownables/notify-publisher": ["packages/notify-publisher/src/index.ts"],
+      "@ownables/notify-publisher/*": ["packages/notify-publisher/src/*"]
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,

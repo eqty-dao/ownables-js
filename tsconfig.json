@@ -6,6 +6,9 @@
     { "path": "./packages/adapter-viem" },
     { "path": "./packages/adapter-ethers" },
     { "path": "./packages/builder-client" },
-    { "path": "./packages/platform-node" }
+    { "path": "./packages/platform-node" },
+    { "path": "./packages/notify-core" },
+    { "path": "./packages/notify-client" },
+    { "path": "./packages/notify-publisher" }
   ]
 }

@@ -7,7 +7,7 @@ Use these packages to validate, execute, and interact with Ownables in both brow
 ## What you can build
 
 - Ownables-aware apps that read and execute Ownable state.
-- Browser integrations with storage, package loading, and relay support.
+- Browser integrations with storage, package loading, and Relay (legacy) support.
 - Node integrations with sandboxed execution and persistent state stores.
 - EVM integrations through viem- or ethers-based adapters.
 
@@ -19,6 +19,9 @@ Use these packages to validate, execute, and interact with Ownables in both brow
 - `@ownables/adapter-viem`: viem/EVM adapter services.
 - `@ownables/adapter-ethers`: ethers/EVM adapter services.
 - `@ownables/builder-client`: client for Ownables builder APIs.
+- `@ownables/notify-core`: shared Ownables notification types, validation, and message building.
+- `@ownables/notify-client`: DI services for notification subscribe/inbox/accept flows.
+- `@ownables/notify-publisher`: DI service for publishing Ownables notification events.
 
 ## Requirements
 
@@ -42,6 +45,7 @@ yarn install
 - `yarn lint`: run ESLint.
 - `yarn test`: run all tests.
 - `yarn test packages/<package>/tests`: run tests for one package.
+- Notify integration examples: [docs/notify-integration.md](./docs/notify-integration.md)
 
 ## Monorepo layout
 
@@ -53,6 +57,9 @@ packages/
   adapter-viem/
   adapter-ethers/
   builder-client/
+  notify-core/
+  notify-client/
+  notify-publisher/
 ```
 
 ## Release

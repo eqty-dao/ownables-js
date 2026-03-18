@@ -13,6 +13,10 @@ import {
 const getMimeType = (filename: string): string | null | undefined =>
   (mime as any)?.getType?.(filename);
 
+/**
+ * @deprecated Relay transport is legacy and will be removed in a future major version.
+ * Prefer hub upload/download with WalletConnect Notify packages.
+ */
 export class RelayService {
   public static readonly URL =
     import.meta.env.VITE_RELAY || import.meta.env.VITE_LOCAL;

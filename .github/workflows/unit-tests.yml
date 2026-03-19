@@ -29,7 +29,9 @@ jobs:
           cache: yarn
 
       - name: Enable Corepack
-        run: corepack enable
+        run: |
+          corepack enable
+          corepack prepare yarn@4.13.0 --activate
 
       - name: Install
         run: yarn install --immutable

@@ -22,7 +22,6 @@ Use these packages to validate, execute, and interact with Ownables in both brow
 - `@ownables/notify-core`: shared Ownables notification types, validation, and message building.
 - `@ownables/notify-client`: DI services for notification subscribe/inbox/accept flows.
 - `@ownables/notify-publisher`: DI service for publishing Ownables notification events.
-- `@ownables/authority`: authority orchestration for archive registration, CID mapping, and unlock proof flows.
 
 ## Requirements
 
@@ -67,12 +66,11 @@ packages/
   notify-core/
   notify-client/
   notify-publisher/
-  authority/
 ```
 
 ## Release
 
-Releases are automated with semantic-release via GitHub Actions (`.github/workflows/release.yml`).
+Releases are automated with semantic-release via GitHub Actions (`.github/workflows/publish.yml`).
 
 ## License
 

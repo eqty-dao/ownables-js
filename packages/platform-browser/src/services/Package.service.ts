@@ -27,6 +27,13 @@ export default class PackageService {
   private readonly exampleUrl: string | undefined;
   private readonly examples: TypedPackageStub[];
   private readonly calculateCidFn: (files: File[]) => Promise<string>;
+  private readonly fetchFn: (input: string, init?: RequestInit) => Promise<Response>;
+  private readonly fileFactory: (
+    parts: BlobPart[],
+    name: string,
+    options?: FilePropertyBag
+  ) => File;
+  private readonly fileReaderFactory: () => FileReader;
 
   constructor(
     private idb: IDBService,
@@ -36,11 +43,21 @@ export default class PackageService {
       exampleUrl?: string;
       examples?: TypedPackageStub[];
       calculateCidFn?: (files: File[]) => Promise<string>;
+      fetchFn?: (input: string, init?: RequestInit) => Promise<Response>;
+      fileFactory?: (
+        parts: BlobPart[],
+        name: string,
+        options?: FilePropertyBag
+      ) => File;
+      fileReaderFactory?: () => FileReader;
     } = {}
   ) {
     this.exampleUrl = options.exampleUrl;
     this.examples = options.examples ?? [];
     this.calculateCidFn = options.calculateCidFn ?? calculateCid;
+    this.fetchFn = options.fetchFn ?? ((input, init) => fetch(input, init));
+    this.fileFactory = options.fileFactory ?? ((parts, name, fileOptions) => new File(parts, name, fileOptions));
+    this.fileReaderFactory = options.fileReaderFactory ?? (() => new FileReader());
   }
 
   list(): Array<TypedPackage | TypedPackageStub> {
@@ -145,7 +162,7 @@ export default class PackageService {
           .map(async ([filename, file]) => {
             const blob = await file.async("blob");
             const type = getMimeType(filename) || "application/octet-stream";
-            return new File([blob], filename, { type });
+            return this.fileFactory([blob], filename, { type });
           })
       );
     }
@@ -158,7 +175,7 @@ export default class PackageService {
         .map(async ([filename, file]) => {
           const blob = await file.async("blob");
           const type = getMimeType(filename) || "application/octet-stream";
-          return new File([blob], filename, { type });
+          return this.fileFactory([blob], filename, { type });
         })
     );
   }
@@ -525,7 +542,7 @@ export default class PackageService {
 
     const filename = key.replace(/^ownable-/, "") + ".zip";
 
-    const response = await fetch(`${this.exampleUrl}/${filename}`);
+    const response = await this.fetchFn(`${this.exampleUrl}/${filename}`);
     if (!response.ok)
       throw new Error(
         `Failed to download example ownable: ${response.statusText}`
@@ -540,7 +557,7 @@ export default class PackageService {
         "Failed to download example ownable: invalid content type"
       );
 
-    const zipFile = new File([await response.blob()], `${key}.zip`, {
+    const zipFile = this.fileFactory([await response.blob()], `${key}.zip`, {
       type: "application/zip",
     });
 
@@ -553,7 +570,7 @@ export default class PackageService {
     read: (fr: FileReader, contents: Blob | File) => void
   ): Promise<string | ArrayBuffer> {
     return new Promise((resolve, reject) => {
-      const fileReader = new FileReader();
+      const fileReader = this.fileReaderFactory();
       this.idb.get(`package:${cid}`, name).then(
         (mediaFile: File) => {
           if (!mediaFile) {

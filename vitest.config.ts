@@ -35,14 +35,13 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['packages/*/src/**/*.test.ts', 'packages/*/tests/**/*.test.ts'],
     environment: 'node',
     globals: true,
     passWithNoTests: true,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
-      reportsDirectory: './coverage'
-    }
-  }
+      reportsDirectory: './coverage',
+    },
+  },
 });

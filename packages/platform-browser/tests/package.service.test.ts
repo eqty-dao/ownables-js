@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import JSZip from 'jszip';
+import { EventChain } from 'eqty-core';
 
 import PackageService from '../src/services/Package.service';
 
@@ -451,6 +452,275 @@ describe('PackageService', () => {
     );
 
     await expect(service.isCurrentEvent({ id: 'chain-1', events: [1] } as any)).resolves.toBe(true);
+  });
+
+  it('covers constructor defaults and info uniqueMessageHash filtering', () => {
+    const service = new PackageService(
+      {} as any,
+      {} as any,
+      {
+        get: () => [
+          {
+            title: 'Stored',
+            name: 'stored',
+            cid: 'cid-1',
+            uniqueMessageHash: 'mh-1',
+            versions: [{ date: new Date(), cid: 'cid-1', uniqueMessageHash: 'mh-1' }],
+            ...capabilities,
+          },
+        ],
+        set: () => undefined,
+      } as any
+    );
+
+    expect(typeof (service as any).fetchFn).toBe('function');
+    expect(typeof (service as any).fileReaderFactory).toBe('function');
+    expect(service.info('cid-1', 'mh-1').name).toBe('stored');
+    expect(() => service.info('cid-1', 'mh-missing')).toThrow('Package not found');
+  });
+
+  it('updates existing package info with new versions', () => {
+    const localPackages: any[] = [
+      {
+        title: 'Pkg',
+        name: 'pkg',
+        cid: 'cid-1',
+        keywords: ['old'],
+        versions: [{ date: new Date(), cid: 'cid-1' }],
+        ...capabilities,
+      },
+    ];
+    const service = createService(
+      {} as any,
+      {} as any,
+      {
+        get: () => localPackages,
+        set: (_k: string, v: any[]) => {
+          localPackages.splice(0, localPackages.length, ...v);
+        },
+      } as any
+    );
+
+    const updated = (service as any).storePackageInfo(
+      'Pkg',
+      'pkg',
+      'desc',
+      'cid-1',
+      ['new'],
+      capabilities
+    );
+    expect(updated.description).toBe('desc');
+    expect(updated.versions.length).toBe(2);
+    expect(updated.keywords).toEqual(['new']);
+  });
+
+  it('extractAssets supports chain and non-chain modes with mime detection', async () => {
+    const service = createService({} as any, {} as any, { get: () => [], set: () => undefined } as any);
+    const zip = new JSZip();
+    zip.file('a.txt', 'A');
+    zip.file('chain.json', '{"id":"c1","events":[]}');
+    zip.file('.hidden', 'x');
+    const zipFile = (await zip.generateAsync({ type: 'uint8array' })) as any;
+
+    const noChain = await service.extractAssets(zipFile, false);
+    expect(noChain.map((f) => f.name).sort()).toEqual(['a.txt']);
+
+    const withChain = await service.extractAssets(zipFile, true);
+    expect(withChain.map((f) => f.name).sort()).toEqual(['a.txt', 'chain.json']);
+  });
+
+  it('handles store and verification failures including quota errors', async () => {
+    const idb = {
+      hasStore: vi.fn().mockResolvedValue(false),
+      createStore: vi.fn(),
+      setAll: vi.fn().mockResolvedValue(undefined),
+      keys: vi.fn().mockResolvedValue([]),
+    };
+    const service = createService(idb as any, {} as any, { get: () => [], set: () => undefined } as any);
+    await expect(
+      (service as any).storeAssets('cid-1', [new File(['x'], 'a.txt')])
+    ).rejects.toThrow('was not created successfully');
+
+    idb.setAll.mockRejectedValueOnce(Object.assign(new Error('quota exceeded'), { name: 'QuotaExceededError' }));
+    await expect(
+      (service as any).storeAssets('cid-2', [new File(['x'], 'a.txt')])
+    ).rejects.toThrow('Device storage quota exceeded');
+
+    const serviceVerify = createService(
+      { hasStore: vi.fn().mockResolvedValue(false), keys: vi.fn() } as any,
+      {} as any,
+      { get: () => [], set: () => undefined } as any
+    );
+    await expect((serviceVerify as any).verifyStoreExists('missing', 1)).rejects.toThrow(
+      'was not created successfully'
+    );
+
+    const serviceQuota = createService(
+      {
+        hasStore: vi.fn().mockResolvedValue(true),
+        keys: vi.fn().mockRejectedValue(Object.assign(new Error('quota'), { name: 'QuotaExceededError' })),
+      } as any,
+      {} as any,
+      { get: () => [], set: () => undefined } as any
+    );
+    await expect((serviceQuota as any).verifyStoreExists('s', 1)).rejects.toThrow(
+      'Device storage quota exceeded'
+    );
+
+    const serviceGeneric = createService(
+      {
+        hasStore: vi.fn().mockResolvedValue(true),
+        keys: vi.fn().mockRejectedValue(new Error('keys failed')),
+      } as any,
+      {} as any,
+      { get: () => [], set: () => undefined } as any
+    );
+    await expect((serviceGeneric as any).verifyStoreExists('s', 1)).rejects.toThrow(
+      'keys failed'
+    );
+  });
+
+  it('retries store verification with warnings and rethrows after final failure', async () => {
+    const service = createService({} as any, {} as any, { get: () => [], set: () => undefined } as any);
+    const verifySpy = vi
+      .spyOn(service as any, 'verifyStoreExists')
+      .mockRejectedValueOnce(new Error('fail-1'))
+      .mockRejectedValueOnce(new Error('fail-2'))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(
+      (service as any).retryStoreVerification('s', 1, 3, 0)
+    ).resolves.toBeUndefined();
+    expect(verifySpy).toHaveBeenCalledTimes(3);
+    expect(logger.warn).toHaveBeenCalled();
+
+    verifySpy.mockReset();
+    verifySpy.mockRejectedValue(new Error('always-fail'));
+    await expect((service as any).retryStoreVerification('s', 1, 2, 0)).rejects.toThrow(
+      'always-fail'
+    );
+  });
+
+  it('throws for missing json files and missing package/chain in processPackage', async () => {
+    const service = createService(
+      { hasStore: vi.fn().mockResolvedValue(false) } as any,
+      {} as any,
+      { get: () => [], set: () => undefined } as any,
+      { calculateCidFn: vi.fn().mockResolvedValue('cid-1') }
+    );
+    vi.spyOn(service, 'extractAssets').mockResolvedValue([] as any);
+    await expect(service.getChainJson('chain.json', new File(['x'], 'x.zip'))).rejects.toThrow(
+      'Invalid package: missing chain.json'
+    );
+    await expect((service as any).getPackageJson('package.json', [])).rejects.toThrow(
+      'Invalid package: missing package.json'
+    );
+    await expect(
+      (service as any).getPackageJson('package.json', [
+        new File([JSON.stringify({ name: 'ok' })], 'package.json'),
+      ])
+    ).resolves.toEqual({ name: 'ok' });
+
+    vi.spyOn(service as any, 'getPackageJson').mockResolvedValue(undefined);
+    await expect(service.processPackage([{ name: 'package.json' }] as any)).rejects.toThrow(
+      'Missing package.json'
+    );
+
+    (service as any).getPackageJson.mockResolvedValue({ name: 'pkg' });
+    vi.spyOn(service as any, 'getChainJson').mockResolvedValue(undefined);
+    await expect(
+      service.processPackage({ data: { buffer: new Uint8Array([1]) } }, 'm1', true)
+    ).rejects.toThrow('Missing chain.json for relay package');
+  });
+
+  it('attaches chain and message hash for relay packages', async () => {
+    const idb = {
+      hasStore: vi.fn().mockResolvedValue(false),
+      createStore: vi.fn(),
+      setAll: vi.fn(),
+      keys: vi.fn().mockResolvedValue(['package.json']),
+    };
+    const local: any[] = [];
+    const service = createService(
+      idb as any,
+      {} as any,
+      {
+        get: () => local,
+        set: (_k: string, v: any[]) => {
+          local.splice(0, local.length, ...v);
+        },
+      } as any,
+      { calculateCidFn: vi.fn().mockResolvedValue('cid-relay') }
+    );
+    vi.spyOn(service as any, 'extractAssets').mockResolvedValue([new File(['{}'], 'package.json')] as any);
+    vi.spyOn(service as any, 'getPackageJson').mockResolvedValue({ name: 'relay-pkg', keywords: [] });
+    vi.spyOn(service as any, 'getChainJson').mockResolvedValue({ id: 'chain-1', events: [] });
+    vi.spyOn(service as any, 'getCapabilities').mockResolvedValue(capabilities);
+    vi.spyOn(service as any, 'storeAssets').mockResolvedValue(undefined);
+    const fromSpy = vi.spyOn(EventChain, 'from').mockReturnValue({ id: 'chain-1' } as any);
+
+    const pkg = await service.processPackage(
+      { data: { buffer: new Uint8Array([1]) } },
+      'mh-1',
+      true
+    );
+    expect(pkg?.chain).toEqual({ id: 'chain-1' });
+    expect(pkg?.uniqueMessageHash).toBe('mh-1');
+    fromSpy.mockRestore();
+  });
+
+  it('covers import verification fallback paths', async () => {
+    const service = createService(
+      { hasStore: vi.fn().mockResolvedValue(false) } as any,
+      {} as any,
+      { get: () => [], set: () => undefined } as any
+    );
+    vi.spyOn(service, 'extractAssets').mockResolvedValue([new File(['x'], 'a.txt')] as any);
+    vi.spyOn(service, 'processPackage').mockResolvedValue({ cid: 'cid-1' } as any);
+    const retrySpy = vi.spyOn(service as any, 'retryStoreVerification').mockRejectedValue(new Error('retry fail'));
+
+    await expect(service.import(new File(['x'], 'x.zip'))).resolves.toEqual({ cid: 'cid-1' });
+    expect(retrySpy).toHaveBeenCalled();
+
+    const service2 = createService(
+      { hasStore: vi.fn().mockResolvedValue(true) } as any,
+      {} as any,
+      { get: () => [], set: () => undefined } as any
+    );
+    vi.spyOn(service2, 'extractAssets').mockResolvedValue([new File(['x'], 'a.txt')] as any);
+    vi.spyOn(service2, 'processPackage').mockResolvedValue({ cid: 'cid-2' } as any);
+    vi.spyOn(service2 as any, 'verifyStoreExists').mockRejectedValue(new Error('verify fail'));
+    const retrySpy2 = vi.spyOn(service2 as any, 'retryStoreVerification').mockResolvedValue(undefined);
+
+    await expect(service2.import(new File(['x'], 'y.zip'))).resolves.toEqual({ cid: 'cid-2' });
+    expect(retrySpy2).toHaveBeenCalled();
+
+    retrySpy2.mockReset();
+    retrySpy2.mockRejectedValue(new Error('retry explode'));
+    await expect(service2.import(new File(['x'], 'z.zip'))).resolves.toEqual({ cid: 'cid-2' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(logger.error).toHaveBeenCalledWith(
+      'Background store verification failed after retries:',
+      expect.any(Error)
+    );
+  });
+
+  it('handles relay import entries with empty extracted assets or undefined pkg', async () => {
+    const relay = {
+      readAll: vi.fn().mockResolvedValue([
+        { hash: 'h1', message: { data: { buffer: new Uint8Array([1]) }, timestamp: Date.now(), meta: {} } },
+      ]),
+      checkDuplicateMessage: vi.fn().mockImplementation(async (items: any[]) => items),
+    };
+    const service = createService(
+      { hasStore: vi.fn().mockResolvedValue(false) } as any,
+      relay as any,
+      { get: () => [], set: () => undefined } as any
+    );
+    vi.spyOn(service as any, 'extractAssets').mockResolvedValue([] as any);
+    vi.spyOn(service, 'processPackage').mockResolvedValue(undefined as any);
+
+    await expect(service.importFromRelay()).resolves.toEqual([[], false]);
   });
 
 });

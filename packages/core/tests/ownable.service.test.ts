@@ -492,4 +492,220 @@ describe('OwnableService', () => {
     await expect(service.zip(chain)).resolves.toBe(zip);
     expect(zip.file).toHaveBeenCalledWith('chain.json', JSON.stringify(chain.toJSON()));
   });
+
+  it('covers default runtime source and clearRpc warning/noop branches', () => {
+    const localLogger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const service = new OwnableService(
+      {} as any,
+      { anchoring: false } as any,
+      {} as any,
+      {} as any,
+      undefined as any,
+      localLogger as any
+    );
+
+    expect((service as any).runtimeSource.getWorkerPrelude()).toBe('');
+    expect(() => service.clearRpc('missing')).not.toThrow();
+
+    const rpc = {} as Record<string, unknown>;
+    Object.defineProperty(rpc, 'handler', {
+      configurable: false,
+      value: true,
+      writable: false,
+    });
+    (service as any)._rpc.set('id-warn', rpc);
+    service.clearRpc('id-warn');
+    expect(localLogger.warn).toHaveBeenCalledWith(
+      'Unexpected error clearing RPC:',
+      expect.any(Error)
+    );
+  });
+
+  it('creates with anchoring and returns tx hash when anchors are submitted', async () => {
+    const fakeChain = {
+      id: 'chain-create',
+      state: { hex: '0xstate' },
+      latestHash: { hex: `0x${'1'.repeat(64)}` },
+      add: vi.fn(),
+      startingWith: vi.fn().mockReturnValue({ anchorMap: [{ key: 'k', value: 'v' }] }),
+    } as any;
+    const createSpy = vi.spyOn(EventChain, 'create').mockReturnValue(fakeChain);
+    const eqty = {
+      address: '0x1111111111111111111111111111111111111111',
+      chainId: 84532,
+      sign: vi.fn().mockResolvedValue(undefined),
+      anchor: vi.fn().mockResolvedValue(undefined),
+      submitAnchors: vi.fn().mockResolvedValue('0xtx'),
+    };
+    const service = createService(
+      {} as any,
+      { anchoring: true } as any,
+      eqty as any,
+      {} as any
+    );
+
+    const result = await service.create({ ...basePkg, isDynamic: true } as any);
+    expect(result.txHash).toBe('0xtx');
+    expect(eqty.sign).toHaveBeenCalledTimes(1);
+    expect(eqty.anchor).toHaveBeenCalledTimes(1);
+    expect(eqty.submitAnchors).toHaveBeenCalledTimes(1);
+    createSpy.mockRestore();
+  });
+
+  it('initializes with existing rpc and exercises file reader callback path', async () => {
+    const service = createService(
+      createStateStore() as any,
+      {} as any,
+      {} as any,
+      {
+        getAssetAsText: vi.fn().mockResolvedValue('module.exports = {}'),
+        getAsset: vi.fn().mockImplementation(async (_cid: string, _name: string, read: any) => {
+          const reader: any = {
+            result: null,
+            readAsArrayBuffer: (file: any) => {
+              reader.result = new Uint8Array(file).buffer;
+            },
+          };
+          read(reader, Uint8Array.from([1, 2, 3]));
+          return reader.result;
+        }),
+      } as any
+    );
+    const chain = { id: 'chain-init-2', events: [] } as any;
+    const rpc = { init: vi.fn().mockResolvedValue(undefined) } as any;
+    (service as any)._rpc.set(chain.id, {} as any);
+    vi.spyOn(service, 'apply').mockResolvedValue([] as any);
+    vi.spyOn(service, 'initStore').mockResolvedValue(undefined as any);
+
+    await service.init(chain, 'cid-1', rpc);
+    expect(rpc.init).toHaveBeenCalledTimes(1);
+  });
+
+  it('manages snapshots: create, read latest, list, and delete', async () => {
+    const stateStore = createStateStore();
+    const service = createService(stateStore as any, {} as any, {} as any, {} as any);
+    const chain = { id: 'snap-chain', latestHash: { hex: '0x01' } } as any;
+
+    await (service as any).createSnapshot(chain, [['a', 1]], 0);
+    chain.latestHash.hex = '0x02';
+    await (service as any).createSnapshot(chain, [['b', 2]], 1);
+    chain.latestHash.hex = '0x03';
+    await (service as any).createSnapshot(chain, [['c', 3]], 2);
+    chain.latestHash.hex = '0x04';
+    await (service as any).createSnapshot(chain, [['d', 4]], 3);
+
+    const latest = await (service as any).getLatestSnapshot(chain.id);
+    expect(latest.eventIndex).toBe(3);
+
+    const snapshots = await service.listSnapshots(chain.id);
+    expect(snapshots.map((s) => s.eventIndex)).toEqual([1, 2, 3]);
+
+    await service.deleteSnapshots(chain.id);
+    await expect(service.listSnapshots(chain.id)).resolves.toEqual([]);
+  });
+
+  it('uses snapshot resume path, skips undefined events and yields between batches', async () => {
+    const snapshot = {
+      eventIndex: 0,
+      blockHash: 'h0',
+      stateDump: [['snap', 1]],
+      timestamp: new Date(),
+    };
+    const stateStore = {
+      hasStore: vi.fn().mockResolvedValue(true),
+      keys: vi.fn().mockResolvedValue(['snapshot_0']),
+      get: vi.fn().mockResolvedValue(snapshot),
+    };
+    const service = createService(stateStore as any, {} as any, { address: '0xabc' } as any, {} as any);
+    const rpc = {
+      execute: vi.fn().mockResolvedValue({ state: [['next', 1]] }),
+      instantiate: vi.fn().mockResolvedValue({ state: [['init', 1]] }),
+      externalEvent: vi.fn().mockResolvedValue({ state: [['ext', 1]] }),
+    };
+    const events = Array.from({ length: 12 }, (_, i) =>
+      i === 5
+        ? undefined
+        : ({
+            parsedData: { '@context': 'execute_msg.json', n: i },
+            hash: { hex: i === 0 ? 'h0' : `h${i}` },
+            signerAddress: '0x1',
+          } as any)
+    );
+    const chain = { id: 'chain-batch', events } as any;
+    (service as any)._rpc.set(chain.id, rpc);
+    const timeoutSpy = vi.spyOn(global, 'setTimeout');
+
+    const result = await service.apply(chain, [] as any);
+    expect(result).toEqual([['next', 1]]);
+    expect(timeoutSpy).toHaveBeenCalled();
+    timeoutSpy.mockRestore();
+  });
+
+  it('creates recovery snapshot when apply fails after first event', async () => {
+    const stateStore = {
+      hasStore: vi.fn().mockResolvedValue(false),
+      keys: vi.fn().mockResolvedValue([]),
+    };
+    const service = createService(stateStore as any, {} as any, { address: '0xabc' } as any, {} as any);
+    const createSnapshotSpy = vi
+      .spyOn(service as any, 'createSnapshot')
+      .mockResolvedValue(undefined);
+    const rpc = {
+      execute: vi
+        .fn()
+        .mockResolvedValueOnce({ state: [['ok', 1]] })
+        .mockRejectedValueOnce(new Error('boom')),
+      instantiate: vi.fn(),
+      externalEvent: vi.fn(),
+    };
+    const chain = {
+      id: 'chain-fail',
+      events: [
+        { parsedData: { '@context': 'execute_msg.json', a: 1 }, hash: { hex: 'h1' } },
+        { parsedData: { '@context': 'execute_msg.json', a: 2 }, hash: { hex: 'h2' } },
+      ],
+    } as any;
+    (service as any)._rpc.set(chain.id, rpc);
+
+    await expect(service.apply(chain, [] as any)).rejects.toThrow('boom');
+    expect(createSnapshotSpy).toHaveBeenCalledWith(chain, [['ok', 1]], 0);
+  });
+
+  it('throws when consume event is missing and store short-circuits when state unchanged', async () => {
+    const stateRef = { hex: '0xstate' };
+    const service = createService(
+      {
+        get: vi.fn().mockResolvedValue(stateRef),
+        setAll: vi.fn(),
+      } as any,
+      {
+        getStateDump: vi.fn().mockResolvedValue([['s', 1]]),
+      } as any,
+      { address: '0xabc', sign: vi.fn(), anchor: vi.fn() } as any,
+      {} as any
+    );
+    const consumer = { id: 'consumer-1', state: { hex: '0x1' } } as any;
+    const consumable = { id: 'consumable-1', state: { hex: '0x2' } } as any;
+    (service as any)._rpc.set(consumable.id, {
+      execute: vi.fn().mockResolvedValue({ events: [], state: [['x', 1]] }),
+    });
+    (service as any)._rpc.set(consumer.id, {
+      externalEvent: vi.fn(),
+    });
+
+    await expect(service.consume(consumer, consumable)).rejects.toThrow(
+      'No consume event emitted'
+    );
+
+    await service.store(
+      { id: 'same-state', state: stateRef, events: [] } as any,
+      [] as any
+    );
+    expect((service as any).stateStore.setAll).not.toHaveBeenCalled();
+  });
 });

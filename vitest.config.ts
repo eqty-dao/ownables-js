@@ -51,6 +51,7 @@ export default defineConfig({
       exclude: [
         '**/*.d.ts',
         '**/types/**',
+        '**/interfaces/**',
         '**/index.ts',
         '**/*.test.ts',
         '**/tests/**',

@@ -52,6 +52,32 @@ describe('EQTYService', () => {
     expect(anchorClient.anchor).toHaveBeenCalledTimes(1);
   });
 
+  it('supports base mainnet chain id', async () => {
+    const service = createService(
+      '0xabc',
+      8453,
+      { account: '0xabc', signMessage: vi.fn().mockResolvedValue('0xproof') } as any,
+      { getBlockNumber: vi.fn().mockResolvedValue(1n), getLogs: vi.fn().mockResolvedValue([]) } as any,
+      undefined,
+      { anchorClient: { anchor: vi.fn() }, signer: {} as any }
+    );
+
+    await expect(service.verifyAnchors()).resolves.toEqual({ verified: false, anchors: {}, map: {} });
+  });
+
+  it('builds default viem clients and anchor client from ethereum provider', async () => {
+    const service = createService(
+      '0x1111111111111111111111111111111111111111',
+      84532,
+      undefined,
+      undefined,
+      { request: vi.fn() } as any,
+      {}
+    );
+
+    await expect(service.verifyAnchors()).resolves.toEqual({ verified: false, anchors: {}, map: {} });
+  });
+
   it('throws when provider inputs are missing and no ethereum provider is supplied', () => {
     expect(() => createService('0xabc', 84532, undefined, undefined, undefined, {} as any)).toThrow(
       'No Ethereum provider found'
@@ -73,6 +99,45 @@ describe('EQTYService', () => {
 
     anchorClient.anchor.mockResolvedValueOnce('0xtx');
     await expect(service.submitAnchors()).resolves.toBe('0xtx');
+  });
+
+  it('returns undefined when submitting empty queue and supports key/value anchor input', async () => {
+    const anchorClient = { anchor: vi.fn().mockResolvedValue('0xtx') };
+    const service = createService(
+      '0xabc',
+      84532,
+      { account: '0xabc', signMessage: vi.fn() } as any,
+      { getBlockNumber: vi.fn(), getLogs: vi.fn() } as any,
+      undefined,
+      { anchorClient, signer: {} as any }
+    );
+
+    await expect(service.anchor()).resolves.toBeUndefined();
+    await expect(service.submitAnchors()).resolves.toBeUndefined();
+
+    await service.anchor({
+      key: Binary.fromHex(`0x${'1'.repeat(64)}`),
+      value: Binary.fromHex(`0x${'2'.repeat(64)}`),
+    } as any);
+    await expect(service.submitAnchors()).resolves.toBe('0xtx');
+  });
+
+  it('delegates sign() to subject.signWith', async () => {
+    const signer = { sig: true } as any;
+    const service = createService(
+      '0xabc',
+      84532,
+      { account: '0xabc', signMessage: vi.fn() } as any,
+      { getBlockNumber: vi.fn(), getLogs: vi.fn() } as any,
+      undefined,
+      { anchorClient: { anchor: vi.fn() }, signer }
+    );
+    const subjectA = { signWith: vi.fn().mockResolvedValue(undefined) };
+    const subjectB = { signWith: vi.fn().mockResolvedValue(undefined) };
+
+    await service.sign(subjectA as any, subjectB as any);
+    expect(subjectA.signWith).toHaveBeenCalledWith(signer);
+    expect(subjectB.signWith).toHaveBeenCalledWith(signer);
   });
 
   it('verifies anchors for empty and no-log responses', async () => {
@@ -202,5 +267,32 @@ describe('EQTYService', () => {
     expect(result.anchors[key1.hex]).toBe('0xtx1');
     expect(result.anchors[key2.hex]).toBeUndefined();
     expect(result.map[key1.hex]).toBe(`0x${'d'.repeat(64)}`);
+  });
+
+  it('verifies binary anchors with zero hash defaults and handles bigint log values', async () => {
+    const key = Binary.fromHex(`0x${'e'.repeat(64)}`);
+    const publicClient = {
+      getBlockNumber: vi.fn().mockResolvedValue(100001n),
+      getLogs: vi.fn().mockResolvedValue([
+        {
+          transactionHash: '0xtx2',
+          args: { value: 5n },
+        },
+      ]),
+      readContract: vi.fn(),
+    };
+    const service = createService(
+      '0xabc',
+      84532,
+      { account: '0xabc', signMessage: vi.fn() } as any,
+      publicClient as any,
+      undefined,
+      { anchorClient: { anchor: vi.fn() } as any, signer: {} as any }
+    );
+
+    const result = await service.verifyAnchors(key);
+    expect(result.verified).toBe(true);
+    expect(result.anchors[key.hex]).toBe('0xtx2');
+    expect(result.map[key.hex]).toBe(`0x${'0'.repeat(64)}`);
   });
 });

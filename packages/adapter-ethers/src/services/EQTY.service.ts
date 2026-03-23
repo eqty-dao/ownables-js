@@ -18,7 +18,7 @@ const BASE_CHAIN_ID = 8453;
 const BASE_SEPOLIA_CHAIN_ID = 84532;
 const ZERO_HASH = Binary.fromHex(`0x${'0'.repeat(64)}`);
 
-/* c8 ignore start */
+/* v8 ignore start */
 // Default ethers adapters are integration wiring; DI-based unit tests inject deps instead.
 class EthersSignerAdapter implements EthersSignerLike {
   constructor(private readonly signer: Signer) {}
@@ -62,7 +62,7 @@ class EthersAnchorContract implements EthersAnchorContractLike {
     return this.contract.maxAnchors();
   }
 }
-/* c8 ignore stop */
+/* v8 ignore stop */
 
 export default class EQTYService {
   private readonly provider: Provider;
@@ -105,11 +105,11 @@ export default class EQTYService {
     if (options.deps?.anchorClient) {
       this.anchorClient = options.deps.anchorClient as AnchorClient<string>;
     } else {
-      /* c8 ignore start */
+      /* v8 ignore start */
       const contractAddress = AnchorClient.contractAddress(this.chainId);
       const contract = new EthersAnchorContract(this.signerClient as Signer, contractAddress);
       this.anchorClient = new AnchorClient(contract);
-      /* c8 ignore stop */
+      /* v8 ignore stop */
     }
 
     this.signer = options.deps?.signer ?? new EthersSignerAdapter(this.signerClient as Signer);
@@ -255,7 +255,7 @@ export default class EQTYService {
   private lockableContract(address: string) {
     if (this.lockableClientOverride) return this.lockableClientOverride;
 
-    /* c8 ignore next 15 */
+    /* v8 ignore next 15 */
     return new Contract(
       getAddress(address),
       [

@@ -16,4 +16,10 @@ describe('MockEQTYService lockable methods (ethers adapter)', () => {
     expect(proof).toMatch(/^0x[0-9a-f]{130}$/);
     await expect(service.isUnlockProofValid('0xdef', '1', proof)).resolves.toBe(true);
   });
+
+  it('signs non-hex challenge text and rejects malformed proofs', async () => {
+    const service = new MockEQTYService('0xabc', 84532);
+    await expect(service.signUnlockChallenge('hello')).resolves.toMatch(/^0x[0-9a-f]{130}$/);
+    await expect(service.isUnlockProofValid('0xdef', '1', 'bad')).resolves.toBe(false);
+  });
 });

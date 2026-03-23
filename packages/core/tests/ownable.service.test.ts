@@ -188,6 +188,136 @@ describe('OwnableService', () => {
     expect(await stateStore.get(`ownable:${chain.id}`, 'state')).toBe(chain.state.hex);
   });
 
+  it('executes rpc message, signs event, and stores resulting state', async () => {
+    const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
+    const service = new OwnableService(
+      {} as any,
+      {} as any,
+      { address: '0xabc', sign: vi.fn() } as any,
+      {} as any
+    );
+    const rpc = {
+      execute: vi.fn().mockResolvedValue({ state: [['k', 'v']] }),
+    };
+    (service as any)._rpc.set(chain.id, rpc);
+    const storeSpy = vi.spyOn(service, 'store').mockResolvedValue(undefined as any);
+
+    const msg = { ping: true } as any;
+    const result = await service.execute(chain, msg, [] as any);
+
+    expect(result).toEqual([['k', 'v']]);
+    expect(rpc.execute).toHaveBeenCalledTimes(1);
+    expect(storeSpy).toHaveBeenCalledWith(chain, [['k', 'v']]);
+  });
+
+  it('applies event chain and handles instantiate/execute/external contexts', async () => {
+    const service = new OwnableService(
+      {
+        hasStore: vi.fn().mockResolvedValue(false),
+        keys: vi.fn().mockResolvedValue([]),
+      } as any,
+      {} as any,
+      { address: '0xabc' } as any,
+      {} as any
+    );
+    const rpc = {
+      instantiate: vi.fn().mockResolvedValue({ state: [['s1', 1]] }),
+      execute: vi.fn().mockResolvedValue({ state: [['s2', 2]] }),
+      externalEvent: vi.fn().mockResolvedValue({ state: [['s3', 3]] }),
+    };
+    const chain = {
+      id: 'chain-apply',
+      events: [
+        { parsedData: { '@context': 'instantiate_msg.json', foo: 1 }, signerAddress: '0x1', hash: { hex: '0x1' } },
+        { parsedData: { '@context': 'execute_msg.json', bar: 2 }, signerAddress: '0x2', hash: { hex: '0x2' } },
+        {
+          parsedData: { '@context': 'external_event_msg.json', type: 'x', attributes: { a: 1 } },
+          signerAddress: '0x3',
+          hash: { hex: '0x3' },
+        },
+      ],
+    } as any;
+    (service as any)._rpc.set(chain.id, rpc);
+
+    const state = await service.apply(chain, [] as any);
+    expect(state).toEqual([['s3', 3]]);
+    expect(rpc.instantiate).toHaveBeenCalledTimes(1);
+    expect(rpc.execute).toHaveBeenCalledTimes(1);
+    expect(rpc.externalEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws on unknown event context during apply', async () => {
+    const service = new OwnableService(
+      { hasStore: vi.fn().mockResolvedValue(false), keys: vi.fn().mockResolvedValue([]) } as any,
+      {} as any,
+      { address: '0xabc' } as any,
+      {} as any
+    );
+    const chain = {
+      id: 'chain-apply-error',
+      events: [{ parsedData: { '@context': 'unknown.json' }, hash: { hex: '0x1' } }],
+    } as any;
+    (service as any)._rpc.set(chain.id, {
+      instantiate: vi.fn(),
+      execute: vi.fn(),
+      externalEvent: vi.fn(),
+    });
+
+    await expect(service.apply(chain, [] as any)).rejects.toThrow('Unknown event type');
+  });
+
+  it('consumes ownable and submits shared anchors', async () => {
+    const consumer = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
+    const consumable = EventChain.create('0x2222222222222222222222222222222222222222', 84532);
+    const eventChains = {
+      getStateDump: vi.fn().mockResolvedValue([['state', 1]]),
+    };
+    const eqty = { address: '0xabc', sign: vi.fn(), submitAnchors: vi.fn().mockResolvedValue('0xtx') };
+    const service = new OwnableService({} as any, eventChains as any, eqty as any, {} as any);
+    const rpcConsumer = {
+      externalEvent: vi.fn().mockResolvedValue({ state: [['consumer', 1]] }),
+    };
+    const rpcConsumable = {
+      execute: vi.fn().mockResolvedValue({
+        events: [{ type: 'consume', attributes: { any: 'value' } }],
+        state: [['consumable', 1]],
+      }),
+    };
+    (service as any)._rpc.set(consumer.id, rpcConsumer);
+    (service as any)._rpc.set(consumable.id, rpcConsumable);
+    vi.spyOn(service, 'store').mockResolvedValue(undefined as any);
+    vi.spyOn(service, 'submitAnchors').mockResolvedValue('0xtx');
+
+    await service.consume(consumer, consumable);
+
+    expect(rpcConsumable.execute).toHaveBeenCalled();
+    expect(rpcConsumer.externalEvent).toHaveBeenCalled();
+    expect(eqty.sign).toHaveBeenCalledTimes(2);
+  });
+
+  it('initializes rpc with package assets and persists initial store', async () => {
+    const service = new OwnableService(
+      {} as any,
+      {} as any,
+      {} as any,
+      {
+        getAssetAsText: vi.fn().mockResolvedValue('module.exports = {}'),
+        getAsset: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
+      } as any,
+      { getWorkerPrelude: () => '/*prelude*/' }
+    );
+    const chain = { id: 'chain-init', events: [] } as any;
+    const rpc = { init: vi.fn().mockResolvedValue(undefined) } as any;
+    const applySpy = vi.spyOn(service, 'apply').mockResolvedValue([['k', 'v']] as any);
+    const initStoreSpy = vi.spyOn(service, 'initStore').mockResolvedValue(undefined as any);
+
+    await service.init(chain, 'cid-1', rpc, 'msg-1');
+
+    expect(rpc.init).toHaveBeenCalledTimes(1);
+    expect(applySpy).toHaveBeenCalledWith(chain, []);
+    expect(initStoreSpy).toHaveBeenCalledWith(chain, 'cid-1', 'msg-1', [['k', 'v']]);
+  });
+
   it('throws when consume state is mismatched', async () => {
     const service = new OwnableService(
       {} as any,

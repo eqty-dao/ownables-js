@@ -435,6 +435,35 @@ describe('OwnableService', () => {
     expect(eqty.anchor).toHaveBeenCalled();
   });
 
+  it('skips initStore write when store already exists', async () => {
+    const stateStore = createStateStore();
+    const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
+    await stateStore.createStore(`ownable:${chain.id}`);
+    const service = new OwnableService(
+      stateStore as any,
+      {} as any,
+      {} as any,
+      { info: vi.fn().mockReturnValue({ keywords: [] }) } as any
+    );
+
+    await service.initStore(chain, 'cid-1', 'msg-1', [['k', 'v']] as any);
+    expect(stateStore.setAll).not.toHaveBeenCalled();
+  });
+
+  it('retries initStore when post-write verification has no state entries', async () => {
+    const stateStore = createStateStore();
+    stateStore.getAll.mockResolvedValue([]);
+    const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
+    const service = new OwnableService(
+      stateStore as any,
+      {} as any,
+      {} as any,
+      { info: vi.fn().mockReturnValue({ keywords: [] }) } as any
+    );
+
+    await expect(service.initStore(chain, 'cid-1', 'msg-1', [['k', 'v']] as any)).resolves.toBeUndefined();
+  });
+
   it('zips ownable chain and rejects empty chains', async () => {
     const zip = { file: vi.fn() };
     const service = new OwnableService(

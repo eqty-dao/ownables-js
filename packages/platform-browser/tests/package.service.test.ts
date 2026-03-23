@@ -395,4 +395,53 @@ describe('PackageService', () => {
     await expect(service.importFromRelay()).resolves.toBeNull();
   });
 
+  it('sets triggerRefresh when relay package already exists in idb', async () => {
+    const relay = {
+      readAll: vi.fn().mockResolvedValue([
+        { hash: 'h1', message: { data: { buffer: new Uint8Array([1]) }, timestamp: Date.now(), meta: {} } },
+      ]),
+      checkDuplicateMessage: vi.fn().mockImplementation(async (items: any[]) => items),
+    };
+    const service = new PackageService(
+      { hasStore: vi.fn().mockResolvedValue(true) } as any,
+      relay as any,
+      { get: () => [], set: () => undefined } as any
+    );
+    vi.spyOn(service as any, 'extractAssets').mockResolvedValue([{ name: 'package.json' }]);
+    vi.spyOn(service, 'processPackage').mockResolvedValue({ cid: 'cid-1', name: 'pkg' } as any);
+
+    await expect(service.importFromRelay()).resolves.toEqual([[{ cid: 'cid-1', name: 'pkg' }], true]);
+  });
+
+  it('continues importFromRelay when a message fails processing', async () => {
+    const relay = {
+      readAll: vi.fn().mockResolvedValue([
+        { hash: 'h1', message: { data: { buffer: new Uint8Array([1]) }, timestamp: Date.now(), meta: {} } },
+      ]),
+      checkDuplicateMessage: vi.fn().mockImplementation(async (items: any[]) => items),
+    };
+    const service = new PackageService(
+      { hasStore: vi.fn().mockResolvedValue(false) } as any,
+      relay as any,
+      { get: () => [], set: () => undefined } as any
+    );
+    vi.spyOn(service as any, 'extractAssets').mockResolvedValue([{ name: 'package.json' }]);
+    vi.spyOn(service, 'processPackage').mockRejectedValue(new Error('boom'));
+
+    await expect(service.importFromRelay()).resolves.toEqual([[], false]);
+  });
+
+  it('treats missing stored chain as current event', async () => {
+    const service = new PackageService(
+      {
+        hasStore: vi.fn().mockResolvedValue(true),
+        get: vi.fn().mockResolvedValue(undefined),
+      } as any,
+      {} as any,
+      { get: () => [], set: () => undefined } as any
+    );
+
+    await expect(service.isCurrentEvent({ id: 'chain-1', events: [1] } as any)).resolves.toBe(true);
+  });
+
 });

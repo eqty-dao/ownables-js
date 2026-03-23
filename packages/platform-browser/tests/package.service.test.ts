@@ -141,6 +141,20 @@ describe('PackageService', () => {
     expect(localStorage.set).toHaveBeenCalled();
   });
 
+  it('throws from import when processPackage returns null', async () => {
+    const service = new PackageService(
+      { hasStore: vi.fn().mockResolvedValue(false) } as any,
+      {} as any,
+      { get: () => [], set: () => undefined } as any
+    );
+    vi.spyOn(service, 'extractAssets').mockResolvedValue([{ name: 'package.json' }] as any);
+    vi.spyOn(service, 'processPackage').mockResolvedValue(null as any);
+
+    await expect(service.import(new File([new Blob(['x'])], 'x.zip'))).rejects.toThrow(
+      'Failed to process package'
+    );
+  });
+
   it('returns null for duplicate relay package when chain is not current', async () => {
     const service = new PackageService(
       {
@@ -179,6 +193,22 @@ describe('PackageService', () => {
     expect(relay.checkDuplicateMessage).toHaveBeenCalled();
   });
 
+  it('returns null when importFromRelay has no messages or errors', async () => {
+    const serviceEmpty = new PackageService(
+      {} as any,
+      { readAll: vi.fn().mockResolvedValue([]) } as any,
+      { get: () => [], set: () => undefined } as any
+    );
+    await expect(serviceEmpty.importFromRelay()).resolves.toBeNull();
+
+    const serviceErr = new PackageService(
+      {} as any,
+      { readAll: vi.fn().mockRejectedValue(new Error('relay error')) } as any,
+      { get: () => [], set: () => undefined } as any
+    );
+    await expect(serviceErr.importFromRelay()).resolves.toBeNull();
+  });
+
   it('validates download content type', async () => {
     const fetchFn = vi
       .fn()
@@ -203,6 +233,60 @@ describe('PackageService', () => {
 
     await expect(service.downloadExample('ownable-x')).rejects.toThrow('invalid content type');
     await expect(service.downloadExample('ownable-x')).rejects.toThrow('Failed to download example ownable');
+  });
+
+  it('parses chain json and decodes base64 event payloads', async () => {
+    const service = new PackageService({} as any, {} as any, { get: () => [], set: () => undefined } as any);
+    const chainJson = {
+      events: [
+        {
+          data: `base64:${Buffer.from(JSON.stringify({ hello: 'world' }), 'utf8').toString('base64')}`,
+        },
+      ],
+    };
+    vi.spyOn(service, 'extractAssets').mockResolvedValue([
+      new File([JSON.stringify(chainJson)], 'chain.json', { type: 'application/json' }),
+    ] as any);
+
+    const parsed = await service.getChainJson('chain.json', new File([new Blob(['zip'])], 'x.zip'));
+    expect(parsed.events[0].parsedData).toEqual({ hello: 'world' });
+  });
+
+  it('evaluates current event length logic', async () => {
+    const idb = {
+      hasStore: vi.fn().mockResolvedValue(true),
+      get: vi.fn().mockResolvedValue({ events: [1, 2] }),
+    };
+    const service = new PackageService(idb as any, {} as any, { get: () => [], set: () => undefined } as any);
+
+    await expect(service.isCurrentEvent({ id: 'chain-1', events: [1, 2, 3] } as any)).resolves.toBe(true);
+    await expect(service.isCurrentEvent({ id: 'chain-1', events: [1] } as any)).resolves.toBeUndefined();
+  });
+
+  it('computes capabilities for static and dynamic packages', async () => {
+    const service = new PackageService({} as any, {} as any, { get: () => [], set: () => undefined } as any);
+    const staticCaps = await (service as any).getCapabilities([
+      new File(['{}'], 'package.json', { type: 'application/json' }),
+    ]);
+    expect(staticCaps.isDynamic).toBe(false);
+
+    vi.spyOn(service as any, 'getPackageJson')
+      .mockResolvedValueOnce({ oneOf: [{ required: ['get_info', 'get_metadata', 'is_consumer_of', 'get_widget_state'] }] })
+      .mockResolvedValueOnce({ oneOf: [{ required: ['consume', 'transfer'] }] });
+    const dynamicCaps = await (service as any).getCapabilities([
+      new File(['{}'], 'package.json'),
+      new File(['wasm'], 'ownable_bg.wasm'),
+      new File(['{}'], 'query_msg.json'),
+      new File(['{}'], 'execute_msg.json'),
+    ]);
+    expect(dynamicCaps).toEqual({
+      isDynamic: true,
+      hasMetadata: true,
+      hasWidgetState: true,
+      isConsumable: true,
+      isConsumer: true,
+      isTransferable: true,
+    });
   });
 
 });

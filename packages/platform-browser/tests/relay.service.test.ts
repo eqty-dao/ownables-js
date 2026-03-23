@@ -3,6 +3,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { RelayService } from '../src/services/Relay.service';
 
 describe('RelayService', () => {
+  it('clears wallet auth token via static helper', () => {
+    const removeItem = vi.fn();
+    RelayService.clearWalletAuth('0xabc', 84532, { removeItem } as any);
+    expect(removeItem).toHaveBeenCalledWith('relay_siwe_token:0xabc:84532');
+  });
+
   it('authenticates with injected siwe client and storage', async () => {
     const storage = new Map<string, string>();
     const storageApi = {
@@ -50,6 +56,20 @@ describe('RelayService', () => {
     expect(ok).toBe(true);
     expect(service.getAuthHeaders()).toEqual({ Authorization: 'Bearer token-1' });
     expect(siweClient.authenticate).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns false from ensureAuthenticated when auth fails', async () => {
+    const service = new RelayService(
+      { address: '0xabc', chainId: 84532, signer: {} } as any,
+      {
+        relayUrl: 'https://relay.test',
+        relayClient: { get: vi.fn() } as any,
+        siweClient: { authenticate: vi.fn().mockResolvedValue({ success: false }) } as any,
+        storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+      }
+    );
+
+    await expect(service.ensureAuthenticated()).resolves.toBe(false);
   });
 
   it('lists messages from injected relay client', async () => {
@@ -161,6 +181,71 @@ describe('RelayService', () => {
     );
 
     await expect(service.removeOwnable('hash-1')).rejects.toThrow('Failed to remove ownable from Relay');
+  });
+
+  it('throws when sendOwnable recipient is missing', async () => {
+    const service = new RelayService(
+      { address: '0xabc', chainId: 84532, signer: {}, sign: vi.fn(), anchor: vi.fn() } as any,
+      {
+        relayUrl: 'https://relay.test',
+        relayClient: { get: vi.fn(), send: vi.fn() } as any,
+        siweClient: { authenticate: vi.fn() } as any,
+        storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+      }
+    );
+
+    await expect(service.sendOwnable('', new Uint8Array([1]), {} as any)).rejects.toThrow(
+      'Recipient not provided'
+    );
+  });
+
+  it('returns null from list when relay is unavailable', async () => {
+    const service = new RelayService(
+      { address: '0xabc', chainId: 84532, signer: {} } as any,
+      {
+        relayUrl: '',
+        relayClient: { get: vi.fn() } as any,
+        siweClient: { authenticate: vi.fn() } as any,
+        storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+      }
+    );
+    await expect(service.list()).resolves.toBeNull();
+  });
+
+  it('handles readMessage invalid response shapes', async () => {
+    const service = new RelayService(
+      { address: '0xabc', chainId: 84532, signer: {} } as any,
+      {
+        relayUrl: 'https://relay.test',
+        relayClient: {
+          get: vi.fn().mockResolvedValueOnce('bad-response').mockResolvedValueOnce({}),
+        } as any,
+        siweClient: { authenticate: vi.fn().mockResolvedValue({ success: true, token: 't' }) } as any,
+        storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+      }
+    );
+
+    await expect(service.readMessage('h1')).rejects.toThrow('Invalid response format');
+    await expect(service.readMessage('h2')).rejects.toThrow('Failed to create message from JSON');
+  });
+
+  it('readAll filters failed message reads', async () => {
+    const service = new RelayService(
+      { address: '0xabc', chainId: 84532, signer: {} } as any,
+      {
+        relayUrl: 'https://relay.test',
+        relayClient: { get: vi.fn() } as any,
+        siweClient: { authenticate: vi.fn() } as any,
+        storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+      }
+    );
+    vi.spyOn(service, 'list').mockResolvedValue({ messages: [{ hash: 'h1' }, { hash: 'h2' }], total: 2, hasMore: false });
+    vi.spyOn(service, 'readMessage')
+      .mockRejectedValueOnce(new Error('fail'))
+      .mockResolvedValueOnce({ message: { ok: true }, hash: 'h2' });
+
+    const result = await service.readAll();
+    expect(result).toEqual([{ message: { ok: true }, hash: 'h2' }]);
   });
 
   it('filters duplicate messages to latest chain events', async () => {

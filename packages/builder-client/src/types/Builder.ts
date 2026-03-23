@@ -19,4 +19,5 @@ export interface BuilderClientOptions {
   secret?: string;
   httpClient?: BuilderHttpClient;
   formDataFactory?: () => FormData;
+  logger?: Pick<Console, "debug" | "info" | "warn" | "error">;
 }

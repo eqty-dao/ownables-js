@@ -20,6 +20,8 @@ import type {
 import EventChainService from "./EventChain.service";
 import { withProgress } from "../progress";
 
+type LoggerLike = Pick<Console, "debug" | "info" | "warn" | "error">;
+
 export default class OwnableService {
   private readonly SNAPSHOT_INTERVAL = 50;
 
@@ -30,7 +32,8 @@ export default class OwnableService {
     private readonly packages: PackageAssetIO,
     private readonly runtimeSource: RuntimeSourceProvider = {
       getWorkerPrelude: () => "",
-    }
+    },
+    private readonly logger: LoggerLike = console
   ) {}
 
   private readonly _rpc = new Map<string, OwnableRPC>();
@@ -69,7 +72,7 @@ export default class OwnableService {
       delete (rpc as any).handler;
     } catch (e) {
       if ((e as Error)?.name === "Cancelled") return;
-      console.warn("Unexpected error clearing RPC:", e);
+      this.logger.warn("Unexpected error clearing RPC:", e);
     }
     this._rpc.delete(id);
   }
@@ -180,7 +183,7 @@ export default class OwnableService {
         }
       }
     } catch (error) {
-      console.error("Error creating snapshot:", error);
+      this.logger.error("Error creating snapshot:", error);
     }
   }
 
@@ -320,7 +323,7 @@ export default class OwnableService {
           );
           stateDump = result.state;
         } catch (error) {
-          console.error(`Error applying event at index ${globalIndex}:`, error);
+          this.logger.error(`Error applying event at index ${globalIndex}:`, error);
 
           if (globalIndex > startIndex) {
             await this.createSnapshot(partialChain, stateDump, globalIndex - 1);
@@ -396,7 +399,7 @@ export default class OwnableService {
 
       return result === true;
     } catch (error) {
-      console.warn("Error checking canConsume:", error);
+      this.logger.warn("Error checking canConsume:", error);
       return false;
     }
   }
@@ -479,7 +482,7 @@ export default class OwnableService {
       try {
         return await operation();
       } catch (error) {
-        console.warn(`Attempt ${attempt} failed:`, error);
+        this.logger.warn(`Attempt ${attempt} failed:`, error);
 
         if (attempt < maxRetries) {
           await new Promise((resolve) => setTimeout(resolve, delay * attempt));
@@ -535,7 +538,7 @@ export default class OwnableService {
         await this.stateStore.setAll(data);
       } catch (error) {
         // If setAll fails, attempt to clean up
-        console.error("Failed to set data, cleaning up stores...");
+        this.logger.error("Failed to set data, cleaning up stores...");
         await Promise.all(
           stores.map((store) => this.stateStore.deleteStore(store).catch(() => {}))
         );

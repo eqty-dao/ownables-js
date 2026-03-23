@@ -17,6 +17,7 @@ export default class BuilderService {
   private readonly secret: string | undefined;
   private readonly httpClient: BuilderHttpClient;
   private readonly formDataFactory: () => FormData;
+  private readonly logger: Pick<Console, "debug" | "info" | "warn" | "error">;
 
   constructor(
     private chainId: number,
@@ -26,6 +27,7 @@ export default class BuilderService {
     this.secret = options.secret ?? BuilderService.SECRET;
     this.httpClient = options.httpClient ?? axios;
     this.formDataFactory = options.formDataFactory ?? (() => new FormData());
+    this.logger = options.logger ?? console;
   }
 
   public isAvailable(): boolean {
@@ -44,7 +46,7 @@ export default class BuilderService {
       return "T";
     } else {
       // Default to testnet for unknown chain IDs
-      console.warn(
+      this.logger.warn(
         `Unknown chainId ${this.chainId}, defaulting to testnet (T)`
       );
       return "T";
@@ -80,12 +82,12 @@ export default class BuilderService {
 
       return address;
     } catch (error: any) {
-      console.error("Failed to fetch builder address:", error);
+      this.logger.error("Failed to fetch builder address:", error);
       const errorMessage =
         error.response?.data?.error ||
         error.message ||
         "Failed to get server wallet address";
-      console.error("Error details:", errorMessage);
+      this.logger.error("Error details:", errorMessage);
       return null;
     }
   }

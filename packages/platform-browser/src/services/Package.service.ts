@@ -29,6 +29,7 @@ export default class PackageService {
   private readonly calculateCidFn: (files: File[]) => Promise<string>;
   private readonly fetchFn: (input: string, init?: RequestInit) => Promise<Response>;
   private readonly fileReaderFactory: () => FileReader;
+  private readonly logger: Pick<Console, "debug" | "info" | "warn" | "error">;
 
   constructor(
     private idb: IDBService,
@@ -40,6 +41,7 @@ export default class PackageService {
       calculateCidFn?: (files: File[]) => Promise<string>;
       fetchFn?: (input: string, init?: RequestInit) => Promise<Response>;
       fileReaderFactory?: () => FileReader;
+      logger?: Pick<Console, "debug" | "info" | "warn" | "error">;
     } = {}
   ) {
     this.exampleUrl = options.exampleUrl;
@@ -47,6 +49,7 @@ export default class PackageService {
     this.calculateCidFn = options.calculateCidFn ?? calculateCid;
     this.fetchFn = options.fetchFn ?? ((input, init) => fetch(input, init));
     this.fileReaderFactory = options.fileReaderFactory ?? (() => new FileReader());
+    this.logger = options.logger ?? console;
   }
 
   list(): Array<TypedPackage | TypedPackageStub> {
@@ -235,7 +238,7 @@ export default class PackageService {
         await this.verifyStoreExists(storeName, expectedFileCount);
         return; // Success
       } catch (error) {
-        console.warn(`Store verification attempt ${attempt}/${maxRetries} failed:`, error);
+        this.logger.warn(`Store verification attempt ${attempt}/${maxRetries} failed:`, error);
         
         if (attempt < maxRetries) {
           // Wait before retry (exponential backoff)
@@ -349,7 +352,7 @@ export default class PackageService {
     //Check for duplicates
     if (await this.idb.hasStore(`package:${cid}`)) {
       if (isNotLocal && chainJson && !(await this.isCurrentEvent(chainJson))) {
-        console.warn(`Package with CID ${cid} is already current or newer.`);
+        this.logger.warn(`Package with CID ${cid} is already current or newer.`);
         return null;
       }
     }
@@ -409,7 +412,7 @@ export default class PackageService {
       // Retry verification in background (non-blocking)
       this.retryStoreVerification(storeName, files.length, 3, 1000)
         .catch((error) => {
-          console.error(`Background store verification failed after retries:`, error);
+          this.logger.error(`Background store verification failed after retries:`, error);
           // Optionally notify user or log to error tracking service
         });
       
@@ -421,10 +424,10 @@ export default class PackageService {
         await this.verifyStoreExists(storeName, files.length);
       } catch (error) {
         // If verification fails, start background retry
-        console.warn(`Initial store verification failed, retrying in background:`, error);
+        this.logger.warn(`Initial store verification failed, retrying in background:`, error);
         this.retryStoreVerification(storeName, files.length, 3, 1000)
           .catch((retryError) => {
-            console.error(`Background store verification failed after retries:`, retryError);
+            this.logger.error(`Background store verification failed after retries:`, retryError);
           });
       }
     }
@@ -490,7 +493,7 @@ export default class PackageService {
 
             return pkg;
           } catch (err) {
-            console.error("Error processing data:", err);
+            this.logger.error("Error processing data:", err);
             return null;
           }
         })
@@ -502,7 +505,7 @@ export default class PackageService {
       );
       return [packages, triggerRefresh];
     } catch (error) {
-      console.error("Error:", error);
+      this.logger.error("Error:", error);
       return null;
     }
   }

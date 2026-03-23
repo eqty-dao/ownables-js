@@ -4,11 +4,14 @@ import type { StateDump } from "../types/OwnableRuntime";
 import type TypedDict from "../types/TypedDict";
 import type { StoredChainInfo } from "../types/EventChainStore";
 
+type LoggerLike = Pick<Console, "debug" | "info" | "warn" | "error">;
+
 export default class EventChainService {
   constructor(
     private idb: StateStore,
     private eqty: AnchorProvider,
-    private settingsStore?: KVStore
+    private settingsStore?: KVStore,
+    private readonly logger: LoggerLike = console
   ) {}
 
   get anchoring(): boolean {
@@ -49,7 +52,7 @@ export default class EventChainService {
           try {
             return await this.load(id);
           } catch (error) {
-            console.error(`Failed to load chain with id ${id}:`, error);
+            this.logger.error(`Failed to load chain with id ${id}:`, error);
             return null;
           }
         })

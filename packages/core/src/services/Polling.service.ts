@@ -1,6 +1,8 @@
 import type { KVStore } from "../interfaces/core";
 import type { RelayPollingClient } from "../types/Polling";
 
+type LoggerLike = Pick<Console, "debug" | "info" | "warn" | "error">;
+
 /**
  * @deprecated Relay polling is legacy and will be removed in a future major version.
  * Prefer hub-backed notification flows.
@@ -13,7 +15,8 @@ export class PollingService {
 
   constructor(
     private readonly relay: RelayPollingClient,
-    private readonly localStorage: KVStore
+    private readonly localStorage: KVStore,
+    private readonly logger: LoggerLike = console
   ) {}
 
   /**
@@ -76,7 +79,7 @@ export class PollingService {
 
       this.consecutiveFailures = 0;
     } catch (error) {
-      console.error("Error fetching message hashes:", error);
+      this.logger.error("Error fetching message hashes:", error);
 
       this.consecutiveFailures++;
 
@@ -113,7 +116,7 @@ export class PollingService {
         const newCount = await this.checkForNewHashes(address);
         onUpdate(newCount);
       } catch (error) {
-        console.error("Polling error:", error);
+        this.logger.error("Polling error:", error);
       }
     };
 

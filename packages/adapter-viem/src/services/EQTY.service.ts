@@ -28,6 +28,7 @@ export default class EQTYService {
   private anchorClient: AnchorClient<any>;
   private anchorQueue: Array<{ key: Binary; value: Binary }> = [];
   public readonly signer: ViemSigner;
+  private readonly logger: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
   private readonly lockableClientOverride;
 
   private getChain() {
@@ -87,6 +88,7 @@ export default class EQTYService {
     }
 
     this.signer = deps.signer ?? new ViemSigner(this.walletClient);
+    this.logger = deps.logger ?? console;
     this.lockableClientOverride = deps.lockableClient;
   }
 
@@ -215,7 +217,7 @@ export default class EQTYService {
           allVerified = false;
         }
       } catch (error) {
-        console.error(`Failed to verify anchor ${key.hex}:`, error);
+        this.logger.error(`Failed to verify anchor ${key.hex}:`, error);
         txHashes[key.hex] = undefined;
         anchorsMap[key.hex] = value.hex.toLowerCase();
         allVerified = false;

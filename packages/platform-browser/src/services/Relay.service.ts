@@ -27,6 +27,7 @@ export class RelayService {
   private readonly storage: Pick<Storage, "getItem" | "setItem" | "removeItem">;
   private readonly now: () => number;
   private readonly relayUrl: string;
+  private readonly logger: Pick<Console, "debug" | "info" | "warn" | "error">;
   private authToken: string | null = null;
   private authExpiry: number | null = null;
   private readonly storageKey: string;
@@ -39,6 +40,7 @@ export class RelayService {
       siweClient?: SIWEClient;
       storage?: Pick<Storage, "getItem" | "setItem" | "removeItem">;
       now?: () => number;
+      logger?: Pick<Console, "debug" | "info" | "warn" | "error">;
     } = {}
   ) {
     this.relayUrl = options.relayUrl ?? RelayService.URL ?? "";
@@ -46,6 +48,7 @@ export class RelayService {
     this.siweClient = options.siweClient ?? new SIWEClient();
     this.storage = options.storage ?? localStorage;
     this.now = options.now ?? Date.now;
+    this.logger = options.logger ?? console;
 
     // Create unique storage key per wallet
     this.storageKey = `${this.eqty.address}:${this.eqty.chainId}`;
@@ -203,7 +206,7 @@ export class RelayService {
           // Queue message hash; actual submission will include any previously queued event anchors
           await this.eqty.anchor(message.hash);
         } catch (error) {
-          console.warn(
+          this.logger.warn(
             "RelayService: Failed during anchoring before sending:",
             error
           );

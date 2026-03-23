@@ -20,6 +20,7 @@ export interface EthersSignerLike {
 export interface EQTYServiceDeps {
   anchorClient?: EthersAnchorClientLike;
   signer?: EthersSignerLike;
+  logger?: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
   lockableClient?: {
     ownerOf(tokenId: bigint): Promise<string>;
     isLocked(tokenId: bigint): Promise<boolean>;

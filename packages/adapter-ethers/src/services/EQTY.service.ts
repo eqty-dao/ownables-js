@@ -67,6 +67,7 @@ export default class EQTYService {
   private readonly anchorClient: AnchorClient<string>;
   private readonly anchorQueue: Array<{ key: Binary; value: Binary }> = [];
   public readonly signer: EthersSignerLike;
+  private readonly logger: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
   private readonly lockableClientOverride;
 
   public constructor(
@@ -107,6 +108,7 @@ export default class EQTYService {
     }
 
     this.signer = options.deps?.signer ?? new EthersSignerAdapter(this.signerClient as Signer);
+    this.logger = options.deps?.logger ?? console;
     this.lockableClientOverride = options.deps?.lockableClient;
   }
 
@@ -231,7 +233,7 @@ export default class EQTYService {
           verified = false;
         }
       } catch (error) {
-        console.error(`Failed to verify anchor ${key.hex}:`, error);
+        this.logger.error(`Failed to verify anchor ${key.hex}:`, error);
         txMap[key.hex] = undefined;
         valueMap[key.hex] = value.hex.toLowerCase();
         verified = false;

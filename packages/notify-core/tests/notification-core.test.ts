@@ -72,4 +72,50 @@ describe("OwnablesNotificationValidatorService", () => {
     expect(result.errors).toContain("issuerAddress must be a valid EVM address");
     expect(result.errors).toContain("nft payload is required for scope=nft");
   });
+
+  it("rejects invalid payload shapes and assertValid throws", () => {
+    const validator = new OwnablesNotificationValidatorService();
+    const result = validator.validate({
+      ...basePayload,
+      type: "wrong.type" as any,
+      createdAt: "not-a-date",
+      eventId: "",
+      ownableId: "",
+      cid: "",
+      ownerAddress: "bad",
+      accept: { url: "" },
+      scope: "direct",
+      nft: {
+        network: "base",
+        contract: "0x3333333333333333333333333333333333333333",
+        tokenId: "7",
+      },
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("type must be ownables.v1.available");
+    expect(result.errors).toContain("createdAt must be a valid ISO-8601 date string");
+    expect(result.errors).toContain("nft payload must be omitted for scope=direct");
+    expect(() => validator.assertValid({ ...basePayload, ownerAddress: "bad" } as any)).toThrow(
+      "Invalid ownables notification payload"
+    );
+  });
+
+  it("validates nft scope contract and token fields", () => {
+    const validator = new OwnablesNotificationValidatorService();
+    const result = validator.validate({
+      ...basePayload,
+      scope: "nft",
+      nft: {
+        network: "",
+        contract: "bad",
+        tokenId: "",
+      },
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("nft.network is required for scope=nft");
+    expect(result.errors).toContain("nft.contract must be a valid EVM address for scope=nft");
+    expect(result.errors).toContain("nft.tokenId is required for scope=nft");
+  });
 });

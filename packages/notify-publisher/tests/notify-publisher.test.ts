@@ -58,4 +58,29 @@ describe("NotifyPublisherService", () => {
 
     expect(transport.publish).not.toHaveBeenCalled();
   });
+
+  it("returns eventId even when transport does not include transportId", async () => {
+    const transport = {
+      publish: vi.fn().mockResolvedValue({}),
+    };
+
+    const service = new NotifyPublisherService(transport, {
+      idGenerator: () => "evt_123",
+      now: () => new Date("2026-03-18T12:00:00.000Z"),
+    });
+
+    const result = await service.publishOwnableAvailable({
+      topic: "wc:topic:1",
+      ownableId: "owb_1",
+      cid: "bafy123",
+      scope: "direct",
+      issuerAddress: "0x1111111111111111111111111111111111111111",
+      ownerAddress: "0x2222222222222222222222222222222222222222",
+      accept: { url: "https://hub.example.com/api/v1/ownables/owb_1/download" },
+      eventId: "evt_custom",
+      createdAt: "2026-03-18T12:00:00.000Z",
+    });
+
+    expect(result).toEqual({ eventId: "evt_custom" });
+  });
 });

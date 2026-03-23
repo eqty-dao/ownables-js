@@ -46,6 +46,26 @@ describe("NotifyClientService", () => {
     expect(transport.register).toHaveBeenCalledTimes(1);
     expect(transport.subscribe).toHaveBeenCalledWith({ account: "0xabc" });
   });
+
+  it("forwards watch handlers to transport", () => {
+    const unwatch = vi.fn();
+    const transport: NotifyClientTransport = {
+      initialize: vi.fn(),
+      register: vi.fn(),
+      subscribe: vi.fn(),
+      watchNotifications: vi.fn().mockReturnValue(unwatch),
+      watchSubscriptions: vi.fn().mockReturnValue(unwatch),
+    };
+    const service = new NotifyClientService(transport);
+
+    const a = service.watchNotifications(vi.fn());
+    const b = service.watchSubscriptions(vi.fn());
+
+    expect(transport.watchNotifications).toHaveBeenCalledTimes(1);
+    expect(transport.watchSubscriptions).toHaveBeenCalledTimes(1);
+    expect(a).toBe(unwatch);
+    expect(b).toBe(unwatch);
+  });
 });
 
 describe("NotifyInboxService", () => {
@@ -59,6 +79,15 @@ describe("NotifyInboxService", () => {
 
     inbox.markRead("evt_1", "2026-03-18T11:00:00.000Z");
     expect(inbox.list()[0]?.readAt).toBe("2026-03-18T11:00:00.000Z");
+  });
+
+  it("sorts inbox descending and ignores unknown markRead", () => {
+    const inbox = new NotifyInboxService();
+    inbox.ingest(makeMessage("evt_2", "2026-03-18T09:00:00.000Z"));
+    inbox.ingest(makeMessage("evt_1", "2026-03-18T10:00:00.000Z"));
+    inbox.markRead("missing");
+
+    expect(inbox.list().map((i) => i.eventId)).toEqual(["evt_1", "evt_2"]);
   });
 });
 
@@ -77,6 +106,25 @@ describe("NotifyAcceptService", () => {
     expect(fetchFn).toHaveBeenCalledWith(
       "https://hub.example.com/api/v1/ownables/owb_1/download",
       { method: "POST" }
+    );
+  });
+
+  it("defaults accept method to GET", async () => {
+    const fetchFn = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const service = new NotifyAcceptService({ fetchFn });
+    const payload = makeMessage("evt_2", "2026-03-18T10:00:00.000Z").payload;
+    delete (payload as any).accept.method;
+
+    await service.accept({
+      id: "msg_2",
+      eventId: "evt_2",
+      receivedAt: "2026-03-18T10:00:00.000Z",
+      payload,
+    });
+
+    expect(fetchFn).toHaveBeenCalledWith(
+      "https://hub.example.com/api/v1/ownables/owb_1/download",
+      { method: "GET" }
     );
   });
 });

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import JSZip from 'jszip';
 
 import PackageService from '../src/services/Package.service';
 
@@ -339,6 +340,59 @@ describe('PackageService', () => {
       { fileReaderFactory: badFactory as any }
     );
     await expect(badService.getAssetAsText('cid-1', 'a.txt')).rejects.toThrow('Failed to read asset');
+  });
+
+  it('propagates idb read errors from getAsset and zips stored files', async () => {
+    const fileReaderFactory = vi.fn(() => ({
+      onload: null,
+      readAsText: vi.fn(),
+    }));
+    const fileSpy = vi.spyOn(JSZip.prototype as any, 'file').mockReturnThis();
+    const service = new PackageService(
+      {
+        get: vi.fn().mockRejectedValue(new Error('idb read failed')),
+        getAll: vi.fn().mockResolvedValue([
+          { name: 'a.txt', content: 'a' },
+          { name: 'b.txt', content: 'b' },
+        ]),
+      } as any,
+      {} as any,
+      { get: () => [], set: () => undefined } as any,
+      { fileReaderFactory: fileReaderFactory as any }
+    );
+
+    await expect(service.getAssetAsText('cid-1', 'a.txt')).rejects.toThrow('idb read failed');
+
+    await service.zip('cid-1');
+    expect(fileSpy).toHaveBeenCalledWith('a.txt', expect.anything());
+    expect(fileSpy).toHaveBeenCalledWith('b.txt', expect.anything());
+    fileSpy.mockRestore();
+  });
+
+  it('returns false for non-current chains with empty stored event list', async () => {
+    const service = new PackageService(
+      {
+        hasStore: vi.fn().mockResolvedValue(true),
+        get: vi.fn().mockResolvedValue({ events: [] }),
+      } as any,
+      {} as any,
+      { get: () => [], set: () => undefined } as any
+    );
+
+    await expect(service.isCurrentEvent({ id: 'chain-1', events: [1] } as any)).resolves.toBe(false);
+  });
+
+  it('returns null from importFromRelay when all relay entries are invalid', async () => {
+    const relay = {
+      readAll: vi.fn().mockResolvedValue([null, { bad: true }]),
+    };
+    const service = new PackageService(
+      {} as any,
+      relay as any,
+      { get: () => [], set: () => undefined } as any
+    );
+
+    await expect(service.importFromRelay()).resolves.toBeNull();
   });
 
 });

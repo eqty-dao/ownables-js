@@ -124,4 +124,64 @@ describe('EQTYService', () => {
       'Wallet client account is required'
     );
   });
+
+  it('uses readContract paths when no lockable override is provided', async () => {
+    const publicClient = {
+      getBlockNumber: vi.fn().mockResolvedValue(1n),
+      getLogs: vi.fn().mockResolvedValue([]),
+      readContract: vi
+        .fn()
+        .mockResolvedValueOnce('0xowner')
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(123n)
+        .mockResolvedValueOnce(true),
+    };
+    const walletClient = {
+      account: '0xabc',
+      signMessage: vi.fn().mockResolvedValue('0xproof'),
+    };
+    const service = new EQTYService('0xabc', 84532, walletClient as any, publicClient as any, undefined, {
+      anchorClient: { anchor: vi.fn() } as any,
+      signer: {} as any,
+    });
+
+    await expect(service.getOwner('0xdef', '1')).resolves.toBe('0xowner');
+    await expect(service.isLocked('0xdef', '1')).resolves.toBe(true);
+    await expect(service.getUnlockChallenge('0xdef', '1')).resolves.toMatch(/^0x[0-9a-f]{64}$/);
+    await expect(service.isUnlockProofValid('0xdef', '1', '0xproof')).resolves.toBe(true);
+    expect(publicClient.readContract).toHaveBeenCalledTimes(4);
+  });
+
+  it('marks verification false for mismatched and failing log reads', async () => {
+    const key1 = Binary.fromHex(`0x${'a'.repeat(64)}`);
+    const key2 = Binary.fromHex(`0x${'b'.repeat(64)}`);
+    const value = Binary.fromHex(`0x${'c'.repeat(64)}`);
+    const publicClient = {
+      getBlockNumber: vi.fn().mockResolvedValue(5n),
+      getLogs: vi
+        .fn()
+        .mockResolvedValueOnce([
+          {
+            transactionHash: '0xtx1',
+            args: { value: `0x${'d'.repeat(64)}` },
+          },
+        ])
+        .mockRejectedValueOnce(new Error('rpc down')),
+      readContract: vi.fn(),
+    };
+    const service = new EQTYService(
+      '0xabc',
+      84532,
+      { account: '0xabc', signMessage: vi.fn() } as any,
+      publicClient as any,
+      undefined,
+      { anchorClient: { anchor: vi.fn() } as any, signer: {} as any }
+    );
+
+    const result = await service.verifyAnchors({ key: key1, value }, { key: key2, value });
+    expect(result.verified).toBe(false);
+    expect(result.anchors[key1.hex]).toBe('0xtx1');
+    expect(result.anchors[key2.hex]).toBeUndefined();
+    expect(result.map[key1.hex]).toBe(`0x${'d'.repeat(64)}`);
+  });
 });

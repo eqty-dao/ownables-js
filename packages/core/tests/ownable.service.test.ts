@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { EventChain } from 'eqty-core';
+import { Binary, EventChain } from 'eqty-core';
 
 import OwnableService from '../src/services/Ownable.service';
 
@@ -404,6 +404,35 @@ describe('OwnableService', () => {
 
     await expect(service.store(chain, [['k', 'v']] as any)).rejects.toThrow('Operation failed after 3 attempts');
     expect(stateStore.setAll).toHaveBeenCalled();
+  });
+
+  it('queues anchors in store when anchoring is enabled', async () => {
+    const stateStore = createStateStore();
+    const chain = {
+      id: 'chain-anchor',
+      state: { hex: '0xnew-state' },
+      latestHash: { hex: `0x${'f'.repeat(64)}` },
+      events: [{}, {}],
+      toJSON: () => ({ id: 'chain-anchor', events: [{}, {}] }),
+      startingAfter: vi.fn().mockReturnValue({
+        anchorMap: [{ key: Binary.fromHex(`0x${'1'.repeat(64)}`), value: Binary.fromHex(`0x${'0'.repeat(64)}`) }],
+      }),
+    } as any;
+    await stateStore.createStore(`ownable:${chain.id}`);
+    await stateStore.set(`ownable:${chain.id}`, 'latestHash', `0x${'e'.repeat(64)}`);
+    await stateStore.set(`ownable:${chain.id}`, 'state', 'old-state');
+
+    const eqty = { anchor: vi.fn(), address: '0xabc' };
+    const service = new OwnableService(
+      stateStore as any,
+      { anchoring: true } as any,
+      eqty as any,
+      {} as any
+    );
+
+    await service.store(chain, [['k', 'v']] as any);
+    expect(chain.startingAfter).toHaveBeenCalled();
+    expect(eqty.anchor).toHaveBeenCalled();
   });
 
   it('zips ownable chain and rejects empty chains', async () => {

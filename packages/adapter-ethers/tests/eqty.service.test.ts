@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Binary } from 'eqty-core';
+import { Interface } from 'ethers';
 
 import EQTYService from '../src/services/EQTY.service';
 
@@ -150,5 +151,50 @@ describe('Ethers EQTYService', () => {
     await expect(service.getUnlockChallenge('0xdef', '1')).resolves.toMatch(/^0x[0-9a-f]{64}$/);
     await expect(service.signUnlockChallenge('hello')).resolves.toBe('0xproof');
     expect(signer.signMessage).toHaveBeenCalled();
+  });
+
+  it('marks verification false on mismatched values and log errors', async () => {
+    const key = Binary.fromHex(`0x${'c'.repeat(64)}`);
+    const expected = Binary.fromHex(`0x${'d'.repeat(64)}`);
+    const iface = new Interface([
+      'event Anchored(bytes32 indexed key, bytes32 value, address indexed sender, uint64 timestamp)',
+    ]);
+    const encoded = iface.encodeEventLog(iface.getEvent('Anchored')!, [
+      key.hex,
+      `0x${'e'.repeat(64)}`,
+      '0x1111111111111111111111111111111111111111',
+      1n,
+    ]);
+
+    const provider = {
+      getBlockNumber: vi.fn().mockResolvedValue(10),
+      getLogs: vi
+        .fn()
+        .mockResolvedValueOnce([
+          {
+            ...encoded,
+            transactionHash: '0xtx1',
+          },
+        ])
+        .mockRejectedValueOnce(new Error('rpc down')),
+    };
+    const signer = {
+      provider,
+      getAddress: vi.fn().mockResolvedValue('0xabc'),
+      signTypedData: vi.fn().mockResolvedValue('0xsig'),
+      signMessage: vi.fn().mockResolvedValue('0xproof'),
+    };
+    const service = new EQTYService('0xabc', 84532, {
+      signer: signer as any,
+      deps: { anchorClient: { anchor: vi.fn() }, signer: signer as any },
+    });
+
+    const result = await service.verifyAnchors(
+      { key, value: expected },
+      { key: Binary.fromHex(`0x${'f'.repeat(64)}`), value: Binary.fromHex(`0x${'0'.repeat(64)}`) }
+    );
+    expect(result.verified).toBe(false);
+    expect(result.anchors[key.hex]).toBe('0xtx1');
+    expect(result.map[key.hex]).toBe(`0x${'e'.repeat(64)}`);
   });
 });

@@ -123,4 +123,67 @@ describe('PollingService', () => {
 
     await expect(service.checkForNewHashes('0xabc')).resolves.toBe(0);
   });
+
+  it('resets failure counter on non-200/304 responses', async () => {
+    const localStorage = createKVStore({ packages: [] });
+    const relay = {
+      url: 'https://relay.test',
+      isAvailable: vi.fn().mockResolvedValue(true),
+      ensureAuthenticated: vi.fn().mockResolvedValue(true),
+      getAuthHeaders: vi.fn().mockReturnValue({}),
+      relay: { get: vi.fn().mockResolvedValue({ status: 500 }) },
+    };
+    const service = createService(relay as any, localStorage as any);
+    (service as any).consecutiveFailures = 3;
+
+    await expect(service.checkForNewHashes('0xabc')).resolves.toBe(0);
+    expect((service as any).consecutiveFailures).toBe(0);
+  });
+
+  it('returns noop polling stop when relay url is missing', () => {
+    const localStorage = createKVStore({ packages: [] });
+    const relay = {
+      url: '',
+      isAvailable: vi.fn(),
+      ensureAuthenticated: vi.fn(),
+      getAuthHeaders: vi.fn(),
+      relay: { get: vi.fn() },
+    };
+    const service = createService(relay as any, localStorage as any);
+
+    const stop = service.startPolling('0xabc', vi.fn(), 5);
+    expect(typeof stop).toBe('function');
+    expect(relay.isAvailable).not.toHaveBeenCalled();
+  });
+
+  it('logs interval polling errors when checkForNewHashes rejects', async () => {
+    vi.useFakeTimers();
+    const localStorage = createKVStore({ packages: [] });
+    const relay = {
+      url: 'https://relay.test',
+      isAvailable: vi.fn(),
+      ensureAuthenticated: vi.fn(),
+      getAuthHeaders: vi.fn(),
+      relay: { get: vi.fn() },
+    };
+    const service = createService(relay as any, localStorage as any);
+    const checkSpy = vi
+      .spyOn(service, 'checkForNewHashes')
+      .mockResolvedValueOnce(0)
+      .mockRejectedValue(new Error('interval boom'));
+    const onUpdate = vi.fn();
+
+    try {
+      const stop = service.startPolling('0xabc', onUpdate, 5);
+      await vi.advanceTimersByTimeAsync(12);
+      stop();
+      expect(checkSpy).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith(
+        'Polling error:',
+        expect.any(Error)
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -125,4 +125,12 @@ describe('StateStoreRecordStore', () => {
     await expect(store.listByPrevOwner('0x111')).resolves.toEqual([]);
     await expect(store.listByPrevOwner('0x222')).resolves.toHaveLength(1);
   });
+
+  it('returns undefined from getByNft when nft index has no cid', async () => {
+    const store = new StateStoreRecordStore(new InMemoryStateStore());
+
+    await expect(
+      store.getByNft({ network: 'eip155:base', address: '0xaaa', id: '404' })
+    ).resolves.toBeUndefined();
+  });
 });

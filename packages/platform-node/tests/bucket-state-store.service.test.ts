@@ -99,4 +99,18 @@ describe('BucketStateStore', () => {
     expect(keys).toContain('a');
     expect(keys.some((k) => typeof k !== 'string')).toBe(false);
   });
+
+  it('reads all values and ignores entries outside root prefix in listStores', async () => {
+    const bucket = new InMemoryBucket();
+    const store = new BucketStateStore(bucket as any, 'custom-root');
+
+    await store.set('a', 'one', 1);
+    await store.set('a', 'two', 2);
+    await bucket.put('foreign-root/ignored/key.json', '{"x":1}');
+
+    await expect(store.getAll('a')).resolves.toEqual(expect.arrayContaining([1, 2]));
+    const stores = await store.listStores();
+    expect(stores).toContain('a');
+    expect(stores).not.toContain('ignored');
+  });
 });

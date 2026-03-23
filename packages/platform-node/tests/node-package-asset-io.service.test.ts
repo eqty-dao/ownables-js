@@ -40,6 +40,34 @@ describe('NodePackageAssetIO', () => {
     expect(Array.from(new Uint8Array(result as ArrayBuffer))).toEqual([1, 2, 3]);
   });
 
+  it('falls back to arraybuffer read when callback does not read', async () => {
+    const io = new NodePackageAssetIO({
+      infoResolver: () => basePkg as any,
+      assetLoader: async () => Buffer.from([9, 8, 7]),
+    });
+
+    const result = await io.getAsset('cid-1', 'ownable_bg.wasm', () => {
+      // Intentionally no-op: service must fallback to readAsArrayBuffer.
+    });
+
+    expect(result instanceof ArrayBuffer).toBe(true);
+    expect(Array.from(new Uint8Array(result as ArrayBuffer))).toEqual([9, 8, 7]);
+  });
+
+  it('supports data-url reads', async () => {
+    const io = new NodePackageAssetIO({
+      infoResolver: () => basePkg as any,
+      assetLoader: async () => new Uint8Array([1, 2, 3]).buffer,
+    });
+
+    const result = await io.getAsset('cid-1', 'blob.bin', (reader: any, file: any) => {
+      reader.readAsDataURL(file);
+    });
+
+    expect(typeof result).toBe('string');
+    expect(result).toContain('data:application/octet-stream;base64,');
+  });
+
   it('builds zip with assetList and returns zipLoader result when configured', async () => {
     const io = new NodePackageAssetIO({
       infoResolver: () => basePkg as any,
@@ -78,5 +106,31 @@ describe('NodePackageAssetIO', () => {
     });
 
     await expect(io.zip('cid-1')).rejects.toThrow('zipLoader or assetList must be provided');
+  });
+
+  it('rejects when reader produces null result', async () => {
+    const io = new NodePackageAssetIO({
+      infoResolver: () => basePkg as any,
+      assetLoader: async () => 'abc',
+    });
+
+    await expect(
+      io.getAsset('cid-1', 'bad.txt', (reader: any) => {
+        reader.onload?.({ target: { result: null } });
+      })
+    ).rejects.toThrow('Failed to read asset');
+  });
+
+  it('rejects when read callback throws', async () => {
+    const io = new NodePackageAssetIO({
+      infoResolver: () => basePkg as any,
+      assetLoader: async () => 'abc',
+    });
+
+    await expect(
+      io.getAsset('cid-1', 'bad.txt', () => {
+        throw new Error('read failed');
+      })
+    ).rejects.toThrow('read failed');
   });
 });

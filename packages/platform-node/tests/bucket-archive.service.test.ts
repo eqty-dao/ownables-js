@@ -38,6 +38,7 @@ function cidCalculator(files: Map<string, Uint8Array>): string {
 async function makeArchive(chainFileName: 'eventChain.json' | 'chain.json'): Promise<Uint8Array> {
   const zip = new JSZip();
   zip.file('ownable.js', 'console.log("ok")');
+  zip.file('meta/info.json', '{"name":"ownable"}');
   zip.file(chainFileName, JSON.stringify({ events: [{ parsedData: { nft: { network: 'eip155:base', address: '0xabc', id: '1' } } }] }));
   return zip.generateAsync({ type: 'uint8array' });
 }
@@ -51,14 +52,14 @@ describe('BucketArchiveService', () => {
 
     const result = await service.importArchive(await makeArchive('eventChain.json'));
 
-    expect(result.packageFiles).toEqual(['ownable.js']);
+    expect(result.packageFiles).toEqual(['meta/info.json', 'ownable.js']);
     await expect(service.hasPackage(result.cid)).resolves.toBe(true);
     await expect(service.hasChain(result.cid)).resolves.toBe(true);
 
     const packageZip = await service.readPackageZip(result.cid);
     const zip = await new JSZip().loadAsync(packageZip);
 
-    expect(Object.keys(zip.files)).toEqual(['ownable.js']);
+    expect(Object.keys(zip.files).sort()).toEqual(['meta/', 'meta/info.json', 'ownable.js']);
     await expect(service.readChain(result.cid)).resolves.toEqual(result.chainJson);
   });
 
@@ -99,5 +100,25 @@ describe('BucketArchiveService', () => {
     await expect(service.hasPackage('cid-manual')).resolves.toBe(true);
     await expect(service.readChain('missing')).rejects.toThrow('Unknown chain for cid missing');
     await expect(service.readPackageZip('missing')).rejects.toThrow('Unknown package archive for cid missing');
+  });
+
+  it('decodes chains from string bucket payloads', async () => {
+    const chainPath = 'archives/chains/cid-string/eventChain.json';
+    const bucket = {
+      list: async () => [chainPath],
+      get: async (key: string) =>
+        key === chainPath ? '{"events":[{"parsedData":{"ok":true}}]}' : undefined,
+      put: async () => undefined,
+      delete: async () => undefined,
+    };
+
+    const service = new BucketArchiveService({
+      bucket: bucket as any,
+      cidCalculator: { calculate: cidCalculator },
+    });
+
+    await expect(service.readChain('cid-string')).resolves.toEqual({
+      events: [{ parsedData: { ok: true } }],
+    });
   });
 });

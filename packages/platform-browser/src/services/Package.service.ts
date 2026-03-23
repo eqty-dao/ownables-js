@@ -28,11 +28,6 @@ export default class PackageService {
   private readonly examples: TypedPackageStub[];
   private readonly calculateCidFn: (files: File[]) => Promise<string>;
   private readonly fetchFn: (input: string, init?: RequestInit) => Promise<Response>;
-  private readonly fileFactory: (
-    parts: BlobPart[],
-    name: string,
-    options?: FilePropertyBag
-  ) => File;
   private readonly fileReaderFactory: () => FileReader;
 
   constructor(
@@ -44,11 +39,6 @@ export default class PackageService {
       examples?: TypedPackageStub[];
       calculateCidFn?: (files: File[]) => Promise<string>;
       fetchFn?: (input: string, init?: RequestInit) => Promise<Response>;
-      fileFactory?: (
-        parts: BlobPart[],
-        name: string,
-        options?: FilePropertyBag
-      ) => File;
       fileReaderFactory?: () => FileReader;
     } = {}
   ) {
@@ -56,7 +46,6 @@ export default class PackageService {
     this.examples = options.examples ?? [];
     this.calculateCidFn = options.calculateCidFn ?? calculateCid;
     this.fetchFn = options.fetchFn ?? ((input, init) => fetch(input, init));
-    this.fileFactory = options.fileFactory ?? ((parts, name, fileOptions) => new File(parts, name, fileOptions));
     this.fileReaderFactory = options.fileReaderFactory ?? (() => new FileReader());
   }
 
@@ -162,7 +151,7 @@ export default class PackageService {
           .map(async ([filename, file]) => {
             const blob = await file.async("blob");
             const type = getMimeType(filename) || "application/octet-stream";
-            return this.fileFactory([blob], filename, { type });
+            return new File([blob], filename, { type });
           })
       );
     }
@@ -175,7 +164,7 @@ export default class PackageService {
         .map(async ([filename, file]) => {
           const blob = await file.async("blob");
           const type = getMimeType(filename) || "application/octet-stream";
-          return this.fileFactory([blob], filename, { type });
+          return new File([blob], filename, { type });
         })
     );
   }
@@ -557,7 +546,7 @@ export default class PackageService {
         "Failed to download example ownable: invalid content type"
       );
 
-    const zipFile = this.fileFactory([await response.blob()], `${key}.zip`, {
+    const zipFile = new File([await response.blob()], `${key}.zip`, {
       type: "application/zip",
     });
 

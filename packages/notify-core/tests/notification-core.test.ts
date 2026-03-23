@@ -49,6 +49,26 @@ describe("OwnablesNotificationBuilderService", () => {
       "Issued by 0x1111...1111 for NFT #77. Review and accept to download."
     );
   });
+
+  it("keeps short issuer and falls back for blank metadata/nft token", () => {
+    const builder = new OwnablesNotificationBuilderService();
+    const envelope = builder.build({
+      ...basePayload,
+      issuerAddress: "0x1234",
+      scope: "nft",
+      metadata: { name: "   " },
+      nft: {
+        network: "base",
+        contract: "0x3333333333333333333333333333333333333333",
+        tokenId: "",
+      },
+    } as any);
+
+    expect(envelope.title).toBe("New Ownable available");
+    expect(envelope.body).toBe(
+      "Issued by 0x1234 for NFT #. Review and accept to download."
+    );
+  });
 });
 
 describe("OwnablesNotificationValidatorService", () => {

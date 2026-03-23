@@ -36,4 +36,20 @@ describe('SessionStorageService', () => {
     SessionStorageService.remove('a', storage);
     expect(SessionStorageService.get('a', storage)).toBeUndefined();
   });
+
+  it('clears injected storage', () => {
+    const storage = createStorageMock();
+    SessionStorageService.set('a', 1, storage);
+    SessionStorageService.set('b', 2, storage);
+
+    SessionStorageService.clear(storage);
+    expect(storage.length).toBe(0);
+  });
+
+  it('throws on invalid JSON payloads from storage', () => {
+    const storage = createStorageMock();
+    storage.setItem('bad', '{invalid');
+
+    expect(() => SessionStorageService.get('bad', storage)).toThrow();
+  });
 });

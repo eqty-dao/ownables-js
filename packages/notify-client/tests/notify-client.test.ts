@@ -127,4 +127,25 @@ describe("NotifyAcceptService", () => {
       { method: "GET" }
     );
   });
+
+  it("uses global fetch when no fetchFn is injected", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 503 });
+    (globalThis as any).fetch = fetchMock;
+
+    try {
+      const service = new NotifyAcceptService();
+      const result = await service.accept({
+        id: "msg_3",
+        eventId: "evt_3",
+        receivedAt: "2026-03-18T10:00:00.000Z",
+        payload: makeMessage("evt_3", "2026-03-18T10:00:00.000Z").payload,
+      });
+
+      expect(result).toEqual({ ok: false, status: 503 });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      (globalThis as any).fetch = originalFetch;
+    }
+  });
 });

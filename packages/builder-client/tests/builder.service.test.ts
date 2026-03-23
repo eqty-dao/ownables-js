@@ -33,6 +33,19 @@ describe('BuilderService', () => {
     expect(httpClient.get).toHaveBeenCalledTimes(1);
   });
 
+  it('returns null when address for inferred network is missing', async () => {
+    const service = createService(8453, {
+      url: 'https://builder.test',
+      httpClient: {
+        get: vi.fn().mockResolvedValue({ data: { serverLtoWalletAddress_T: 'T-only' } }),
+        post: vi.fn(),
+      },
+    });
+
+    await expect(service.getAddress()).resolves.toBeNull();
+    expect(logger.error).toHaveBeenCalled();
+  });
+
   it('throws when URL is missing for template cost', async () => {
     const service = createService(84532, { url: '' });
     await expect(service.getTemplateCost(1)).rejects.toThrow('Builder service URL not configured');
@@ -84,6 +97,18 @@ describe('BuilderService', () => {
     await expect(failing.getTemplateCost(1)).rejects.toThrow('bad');
   });
 
+  it('throws when template cost payload is missing', async () => {
+    const service = createService(84532, {
+      url: 'https://builder.test',
+      httpClient: {
+        get: vi.fn().mockResolvedValue({ data: {} }),
+        post: vi.fn(),
+      },
+    });
+
+    await expect(service.getTemplateCost(1)).rejects.toThrow('Template cost not found');
+  });
+
   it('uploads zip and maps request id from different shapes', async () => {
     const formData = { append: vi.fn() } as any;
     const httpClient = {
@@ -108,5 +133,31 @@ describe('BuilderService', () => {
       message: 'Request queued',
     });
     expect(formData.append).toHaveBeenCalled();
+  });
+
+  it('bubbles upload API errors and appends optional fields', async () => {
+    const formData = { append: vi.fn() } as any;
+    const service = createService(84532, {
+      url: 'https://builder.test',
+      httpClient: {
+        get: vi.fn(),
+        post: vi.fn().mockRejectedValue({ response: { data: { error: 'upload bad' } } }),
+      },
+      formDataFactory: () => formData,
+    });
+
+    await expect(
+      service.upload(new Uint8Array([1, 2]), {
+        templateId: 1,
+        name: 'Ownable',
+        sender: '0xabc',
+        signedTransaction: '0xsigned',
+      })
+    ).rejects.toThrow('Failed to upload ownable: upload bad');
+
+    expect(formData.append).toHaveBeenCalledWith('templateId', '1');
+    expect(formData.append).toHaveBeenCalledWith('name', 'Ownable');
+    expect(formData.append).toHaveBeenCalledWith('sender', '0xabc');
+    expect(formData.append).toHaveBeenCalledWith('signedTransaction', '0xsigned');
   });
 });

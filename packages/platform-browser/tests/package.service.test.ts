@@ -90,4 +90,21 @@ describe('PackageService', () => {
     expect(fileReaderFactory).toHaveBeenCalledTimes(1);
     expect(idb.get).toHaveBeenCalledWith('package:cid-1', 'asset.txt');
   });
+
+  it('throws from info when package is missing', () => {
+    const service = new PackageService({} as any, {} as any, { get: () => [], set: () => undefined } as any);
+    expect(() => service.info('missing')).toThrow('Package not found');
+  });
+
+  it('getAsset rejects when idb returns no media file', async () => {
+    const fileReaderFactory = vi.fn(() => ({ readAsText: vi.fn() }));
+    const service = new PackageService(
+      { get: vi.fn(async () => undefined) } as any,
+      {} as any,
+      { get: () => [], set: () => undefined } as any,
+      { fileReaderFactory: fileReaderFactory as any }
+    );
+
+    await expect(service.getAssetAsText('cid-1', 'missing.txt')).rejects.toContain('Asset \"missing.txt\" is not in package cid-1');
+  });
 });

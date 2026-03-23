@@ -79,4 +79,116 @@ describe('RelayService', () => {
     const result = await service.list();
     expect(result?.messages).toHaveLength(1);
   });
+
+  it('returns empty auth headers when token is expired', async () => {
+    const key = 'relay_siwe_token:0xabc:84532';
+    const storageApi = {
+      getItem: (storageKey: string) =>
+        storageKey === key ? JSON.stringify({ token: 'old', expiry: 1000 }) : null,
+      setItem: () => undefined,
+      removeItem: vi.fn(),
+    };
+
+    const service = new RelayService(
+      { address: '0xabc', chainId: 84532, signer: {} } as any,
+      {
+        relayUrl: 'https://relay.test',
+        relayClient: { get: vi.fn() } as any,
+        siweClient: { authenticate: vi.fn().mockResolvedValue({ success: false }) } as any,
+        storage: storageApi,
+        now: () => 2000,
+      }
+    );
+
+    expect(service.getAuthHeaders()).toEqual({});
+    expect(storageApi.removeItem).toHaveBeenCalledWith(key);
+  });
+
+  it('returns false from isAvailable when relay throws', async () => {
+    const service = new RelayService(
+      { address: '0xabc', chainId: 84532, signer: {} } as any,
+      {
+        relayUrl: 'https://relay.test',
+        relayClient: { get: vi.fn().mockRejectedValue(new Error('down')) } as any,
+        siweClient: { authenticate: vi.fn() } as any,
+        storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+      }
+    );
+
+    await expect(service.isAvailable()).resolves.toBe(false);
+  });
+
+  it('handles list responses as arrays and defaults', async () => {
+    const relayClient = {
+      get: vi
+        .fn()
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce([{ hash: 'a1' }])
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({}),
+      send: vi.fn(),
+      delete: vi.fn(),
+    };
+    const service = new RelayService(
+      { address: '0xabc', chainId: 84532, signer: {} } as any,
+      {
+        relayUrl: 'https://relay.test',
+        relayClient: relayClient as any,
+        siweClient: { authenticate: vi.fn().mockResolvedValue({ success: true, token: 't' }) } as any,
+        storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+      }
+    );
+
+    const asArray = await service.list();
+    expect(asArray).toEqual({ messages: [{ hash: 'a1' }], total: 1, hasMore: false });
+
+    const defaults = await service.list();
+    expect(defaults).toEqual({ messages: [], total: 0, hasMore: false });
+  });
+
+  it('throws when removing ownable fails', async () => {
+    const service = new RelayService(
+      { address: '0xabc', chainId: 84532, signer: {} } as any,
+      {
+        relayUrl: 'https://relay.test',
+        relayClient: {
+          get: vi.fn().mockResolvedValue({}),
+          delete: vi.fn().mockRejectedValue(new Error('delete failed')),
+        } as any,
+        siweClient: { authenticate: vi.fn().mockResolvedValue({ success: true, token: 't' }) } as any,
+        storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+      }
+    );
+
+    await expect(service.removeOwnable('hash-1')).rejects.toThrow('Failed to remove ownable from Relay');
+  });
+
+  it('filters duplicate messages to latest chain events', async () => {
+    const service = new RelayService(
+      { address: '0xabc', chainId: 84532, signer: {} } as any,
+      {
+        relayUrl: 'https://relay.test',
+        relayClient: { get: vi.fn() } as any,
+        siweClient: { authenticate: vi.fn() } as any,
+        storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+      }
+    );
+
+    vi.spyOn(service as any, 'extractAssets').mockResolvedValue([{ name: 'chain.json', text: async () => '{}' }]);
+    vi.spyOn(service as any, 'getChainJson')
+      .mockResolvedValueOnce({ id: 'c1', events: [1] })
+      .mockResolvedValueOnce({ id: 'c1', events: [1, 2] })
+      .mockResolvedValueOnce({ id: 'c2', events: [1] });
+
+    const messages = [
+      { message: { data: { buffer: new Uint8Array([1]) } }, messageHash: 'h1' },
+      { message: { data: { buffer: new Uint8Array([2]) } }, messageHash: 'h2' },
+      { message: { data: { buffer: new Uint8Array([3]) } }, messageHash: 'h3' },
+      { message: null, messageHash: 'hx' } as any,
+    ];
+
+    const deduped = await service.checkDuplicateMessage(messages as any);
+    expect(deduped).toHaveLength(2);
+    expect(deduped.map((m) => m.messageHash).sort()).toEqual(['h2', 'h3']);
+  });
 });

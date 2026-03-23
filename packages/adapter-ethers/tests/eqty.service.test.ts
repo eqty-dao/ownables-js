@@ -29,6 +29,12 @@ describe('Ethers EQTYService', () => {
     );
   });
 
+  it('throws when ethereumProvider is passed without signer', () => {
+    expect(() =>
+      createService('0xabc', 84532, { ethereumProvider: { request: vi.fn() } as any })
+    ).toThrow('ethers Signer is required');
+  });
+
   it('anchors and submits with injected anchor client', async () => {
     const anchorClient = { anchor: vi.fn().mockResolvedValue('0xtx') };
     const signer = {
@@ -49,6 +55,30 @@ describe('Ethers EQTYService', () => {
     const tx = await service.submitAnchors();
 
     expect(tx).toBe('0xtx');
+    expect(anchorClient.anchor).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns undefined when submitting empty anchor queue and handles key/value anchor input', async () => {
+    const anchorClient = { anchor: vi.fn().mockResolvedValue('0xtx') };
+    const signer = {
+      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      getAddress: vi.fn().mockResolvedValue('0xabc'),
+      signTypedData: vi.fn().mockResolvedValue('0xsig'),
+      signMessage: vi.fn().mockResolvedValue('0xproof'),
+    };
+    const service = createService('0xabc', 84532, {
+      signer: signer as any,
+      deps: { anchorClient, signer: signer as any },
+    });
+
+    await expect(service.anchor()).resolves.toBeUndefined();
+    await expect(service.submitAnchors()).resolves.toBeUndefined();
+
+    await service.anchor({
+      key: Binary.fromHex(`0x${'1'.repeat(64)}`),
+      value: Binary.fromHex(`0x${'2'.repeat(64)}`),
+    } as any);
+    await expect(service.submitAnchors()).resolves.toBe('0xtx');
     expect(anchorClient.anchor).toHaveBeenCalledTimes(1);
   });
 
@@ -85,6 +115,26 @@ describe('Ethers EQTYService', () => {
 
     anchorClient.anchor.mockResolvedValueOnce('0xtx');
     await expect(service.submitAnchors()).resolves.toBe('0xtx');
+  });
+
+  it('delegates sign() to subject.signWith', async () => {
+    const signer = {
+      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      getAddress: vi.fn().mockResolvedValue('0xabc'),
+      signTypedData: vi.fn().mockResolvedValue('0xsig'),
+      signMessage: vi.fn().mockResolvedValue('0xproof'),
+    };
+    const injectedSigner = { getAddress: vi.fn(), signTypedData: vi.fn() };
+    const service = createService('0xabc', 84532, {
+      signer: signer as any,
+      deps: { anchorClient: { anchor: vi.fn() }, signer: injectedSigner as any },
+    });
+    const subjectA = { signWith: vi.fn().mockResolvedValue(undefined) };
+    const subjectB = { signWith: vi.fn().mockResolvedValue(undefined) };
+
+    await service.sign(subjectA as any, subjectB as any);
+    expect(subjectA.signWith).toHaveBeenCalledWith(injectedSigner);
+    expect(subjectB.signWith).toHaveBeenCalledWith(injectedSigner);
   });
 
   it('verifies anchors for empty and log-based responses', async () => {
@@ -208,5 +258,28 @@ describe('Ethers EQTYService', () => {
     expect(result.verified).toBe(false);
     expect(result.anchors[key.hex]).toBe('0xtx1');
     expect(result.map[key.hex]).toBe(`0x${'e'.repeat(64)}`);
+  });
+
+  it('handles sparse log arrays where latest log entry is undefined', async () => {
+    const key = Binary.fromHex(`0x${'9'.repeat(64)}`);
+    const provider = {
+      getBlockNumber: vi.fn().mockResolvedValue(10),
+      getLogs: vi.fn().mockResolvedValue(new Array(1)),
+    };
+    const signer = {
+      provider,
+      getAddress: vi.fn().mockResolvedValue('0xabc'),
+      signTypedData: vi.fn().mockResolvedValue('0xsig'),
+      signMessage: vi.fn().mockResolvedValue('0xproof'),
+    };
+    const service = createService('0xabc', 84532, {
+      signer: signer as any,
+      deps: { anchorClient: { anchor: vi.fn() }, signer: signer as any },
+    });
+
+    const result = await service.verifyAnchors(key);
+    expect(result.verified).toBe(false);
+    expect(result.anchors[key.hex]).toBeUndefined();
+    expect(result.map[key.hex]).toBe(`0x${'0'.repeat(64)}`);
   });
 });

@@ -1,4 +1,5 @@
 export * from './interfaces/core';
+export * from './logger';
 export * from './progress';
 
 export * from './types/TypedCosmWasmMsg';

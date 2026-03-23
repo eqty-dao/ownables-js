@@ -3,8 +3,7 @@ import type { AnchorProvider, KVStore, StateStore } from "../interfaces/core";
 import type { StateDump } from "../types/OwnableRuntime";
 import type TypedDict from "../types/TypedDict";
 import type { StoredChainInfo } from "../types/EventChainStore";
-
-type LoggerLike = Pick<Console, "debug" | "info" | "warn" | "error">;
+import type { LoggerLike } from "../logger";
 
 export default class EventChainService {
   constructor(

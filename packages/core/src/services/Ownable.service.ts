@@ -19,8 +19,7 @@ import type {
 } from "../types/OwnableRuntime";
 import EventChainService from "./EventChain.service";
 import { withProgress } from "../progress";
-
-type LoggerLike = Pick<Console, "debug" | "info" | "warn" | "error">;
+import type { LoggerLike } from "../logger";
 
 export default class OwnableService {
   private readonly SNAPSHOT_INTERVAL = 50;

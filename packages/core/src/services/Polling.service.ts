@@ -1,7 +1,6 @@
 import type { KVStore } from "../interfaces/core";
 import type { RelayPollingClient } from "../types/Polling";
-
-type LoggerLike = Pick<Console, "debug" | "info" | "warn" | "error">;
+import type { LoggerLike } from "../logger";
 
 /**
  * @deprecated Relay polling is legacy and will be removed in a future major version.

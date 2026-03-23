@@ -74,4 +74,29 @@ describe('BucketStateStore', () => {
     expect(await store.hasStore('ownable:2')).toBe(false);
     expect(await store.hasStore('other:1')).toBe(true);
   });
+
+  it('supports non-string key serialization paths', async () => {
+    const store = new BucketStateStore(new InMemoryBucket() as any);
+
+    await store.setAll('bin', new Map<any, any>([
+      [Uint8Array.from([1, 2]), { kind: 'u8' }],
+      [new Uint16Array([3, 4]), { kind: 'u16' }],
+      [new ArrayBuffer(2), { kind: 'ab' }],
+      [[5, 6], { kind: 'arr' }],
+      [{ x: 1 }, { kind: 'obj' }],
+    ]));
+
+    const map = await store.getMap('bin');
+    expect(map.size).toBe(5);
+  });
+
+  it('returns only string keys from keys()', async () => {
+    const store = new BucketStateStore(new InMemoryBucket() as any);
+    await store.set('strings', 'a', 1);
+    await store.setAll('strings', new Map<any, any>([[Uint8Array.from([1]), 2]]));
+
+    const keys = await store.keys('strings');
+    expect(keys).toContain('a');
+    expect(keys.some((k) => typeof k !== 'string')).toBe(false);
+  });
 });

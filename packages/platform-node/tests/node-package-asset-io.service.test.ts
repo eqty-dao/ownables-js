@@ -59,4 +59,24 @@ describe('NodePackageAssetIO', () => {
 
     await expect(withZipLoader.zip('cid-1')).resolves.toEqual({ custom: true });
   });
+
+  it('throws when requested asset is missing', async () => {
+    const io = new NodePackageAssetIO({
+      infoResolver: () => basePkg as any,
+      assetLoader: async () => undefined as any,
+    });
+
+    await expect(
+      io.getAsset('cid-1', 'missing.txt', (reader: any, file: any) => reader.readAsText(file))
+    ).rejects.toThrow('is not in package');
+  });
+
+  it('throws when zip cannot be produced from options', async () => {
+    const io = new NodePackageAssetIO({
+      infoResolver: () => basePkg as any,
+      assetLoader: async () => 'x',
+    });
+
+    await expect(io.zip('cid-1')).rejects.toThrow('zipLoader or assetList must be provided');
+  });
 });

@@ -87,4 +87,17 @@ describe('BucketArchiveService', () => {
       /eventChain\.json' or 'chain\.json/
     );
   });
+
+  it('finds package by prefix fallback and throws for unknown reads', async () => {
+    const bucket = new InMemoryBucket();
+    await bucket.put('archives/packages/cid-manual/file.txt', 'x');
+    const service = new BucketArchiveService({
+      bucket: bucket as any,
+      cidCalculator: { calculate: cidCalculator },
+    });
+
+    await expect(service.hasPackage('cid-manual')).resolves.toBe(true);
+    await expect(service.readChain('missing')).rejects.toThrow('Unknown chain for cid missing');
+    await expect(service.readPackageZip('missing')).rejects.toThrow('Unknown package archive for cid missing');
+  });
 });

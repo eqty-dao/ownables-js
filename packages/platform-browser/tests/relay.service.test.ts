@@ -4,6 +4,15 @@ import JSZip from 'jszip';
 import { RelayService } from '../src/services/Relay.service';
 
 describe('RelayService', () => {
+  const logger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+  const createService = (eqty: any, options: any = {}) =>
+    new RelayService(eqty, { ...options, logger: options.logger ?? logger });
+
   it('clears wallet auth token via static helper', () => {
     const removeItem = vi.fn();
     RelayService.clearWalletAuth('0xabc', 84532, { removeItem } as any);
@@ -44,7 +53,7 @@ describe('RelayService', () => {
       anchor: vi.fn(),
     };
 
-    const service = new RelayService(eqty as any, {
+    const service = createService(eqty as any, {
       relayUrl: 'https://relay.test',
       relayClient: relayClient as any,
       siweClient: siweClient as any,
@@ -60,7 +69,7 @@ describe('RelayService', () => {
   });
 
   it('returns false from ensureAuthenticated when auth fails', async () => {
-    const service = new RelayService(
+    const service = createService(
       { address: '0xabc', chainId: 84532, signer: {} } as any,
       {
         relayUrl: 'https://relay.test',
@@ -83,7 +92,7 @@ describe('RelayService', () => {
       delete: vi.fn(),
     };
 
-    const service = new RelayService(
+    const service = createService(
       { address: '0xabc', chainId: 84532, signer: {} } as any,
       {
         relayUrl: 'https://relay.test',
@@ -110,7 +119,7 @@ describe('RelayService', () => {
       removeItem: vi.fn(),
     };
 
-    const service = new RelayService(
+    const service = createService(
       { address: '0xabc', chainId: 84532, signer: {} } as any,
       {
         relayUrl: 'https://relay.test',
@@ -126,7 +135,7 @@ describe('RelayService', () => {
   });
 
   it('returns false from isAvailable when relay throws', async () => {
-    const service = new RelayService(
+    const service = createService(
       { address: '0xabc', chainId: 84532, signer: {} } as any,
       {
         relayUrl: 'https://relay.test',
@@ -150,7 +159,7 @@ describe('RelayService', () => {
       send: vi.fn(),
       delete: vi.fn(),
     };
-    const service = new RelayService(
+    const service = createService(
       { address: '0xabc', chainId: 84532, signer: {} } as any,
       {
         relayUrl: 'https://relay.test',
@@ -168,7 +177,7 @@ describe('RelayService', () => {
   });
 
   it('throws when removing ownable fails', async () => {
-    const service = new RelayService(
+    const service = createService(
       { address: '0xabc', chainId: 84532, signer: {} } as any,
       {
         relayUrl: 'https://relay.test',
@@ -185,7 +194,7 @@ describe('RelayService', () => {
   });
 
   it('throws when sendOwnable recipient is missing', async () => {
-    const service = new RelayService(
+    const service = createService(
       { address: '0xabc', chainId: 84532, signer: {}, sign: vi.fn(), anchor: vi.fn() } as any,
       {
         relayUrl: 'https://relay.test',
@@ -201,7 +210,7 @@ describe('RelayService', () => {
   });
 
   it('returns null from list when relay is unavailable', async () => {
-    const service = new RelayService(
+    const service = createService(
       { address: '0xabc', chainId: 84532, signer: {} } as any,
       {
         relayUrl: '',
@@ -214,7 +223,7 @@ describe('RelayService', () => {
   });
 
   it('handles readMessage invalid response shapes', async () => {
-    const service = new RelayService(
+    const service = createService(
       { address: '0xabc', chainId: 84532, signer: {} } as any,
       {
         relayUrl: 'https://relay.test',
@@ -231,7 +240,7 @@ describe('RelayService', () => {
   });
 
   it('readAll filters failed message reads', async () => {
-    const service = new RelayService(
+    const service = createService(
       { address: '0xabc', chainId: 84532, signer: {} } as any,
       {
         relayUrl: 'https://relay.test',
@@ -250,7 +259,7 @@ describe('RelayService', () => {
   });
 
   it('returns empty list from readAll when list is null', async () => {
-    const service = new RelayService(
+    const service = createService(
       { address: '0xabc', chainId: 84532, signer: {} } as any,
       {
         relayUrl: 'https://relay.test',
@@ -264,7 +273,7 @@ describe('RelayService', () => {
   });
 
   it('filters duplicate messages to latest chain events', async () => {
-    const service = new RelayService(
+    const service = createService(
       { address: '0xabc', chainId: 84532, signer: {} } as any,
       {
         relayUrl: 'https://relay.test',
@@ -293,7 +302,7 @@ describe('RelayService', () => {
   });
 
   it('extracts assets from JSZip and skips hidden files', async () => {
-    const service = new RelayService(
+    const service = createService(
       { address: '0xabc', chainId: 84532, signer: {} } as any,
       {
         relayUrl: 'https://relay.test',
@@ -311,7 +320,7 @@ describe('RelayService', () => {
   });
 
   it('throws when chain asset is missing while de-duping', async () => {
-    const service = new RelayService(
+    const service = createService(
       { address: '0xabc', chainId: 84532, signer: {} } as any,
       {
         relayUrl: 'https://relay.test',

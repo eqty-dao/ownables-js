@@ -13,6 +13,15 @@ function createKVStore(initial: Record<string, unknown> = {}) {
 }
 
 describe('PollingService', () => {
+  const logger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+  const createService = (...args: any[]) =>
+    new PollingService(args[0], args[1], logger as any);
+
   it('stores messageCount and returns new hashes count', async () => {
     const localStorage = createKVStore({ packages: [{ uniqueMessageHash: 'a' }] });
 
@@ -30,7 +39,7 @@ describe('PollingService', () => {
       },
     };
 
-    const service = new PollingService(relay as any, localStorage as any);
+    const service = createService(relay as any, localStorage as any);
     const count = await service.checkForNewHashes('0xabc');
 
     expect(count).toBe(2);
@@ -53,7 +62,7 @@ describe('PollingService', () => {
       },
     };
 
-    const service = new PollingService(relay as any, localStorage as any);
+    const service = createService(relay as any, localStorage as any);
     await expect(service.checkForNewHashes('0xabc')).resolves.toBe(7);
     expect(relay.relay.get).toHaveBeenCalledWith('messages/0xabc', expect.objectContaining({
       'If-Modified-Since': 'Mon, 01 Jan 2026 00:00:00 GMT',
@@ -70,7 +79,7 @@ describe('PollingService', () => {
       relay: { get: vi.fn() },
     };
 
-    const service = new PollingService(relay as any, localStorage as any);
+    const service = createService(relay as any, localStorage as any);
     await expect(service.checkForNewHashes('0xabc')).resolves.toBe(0);
     expect(relay.ensureAuthenticated).not.toHaveBeenCalled();
   });
@@ -84,7 +93,7 @@ describe('PollingService', () => {
       getAuthHeaders: vi.fn().mockReturnValue({}),
       relay: { get: vi.fn().mockResolvedValue({ status: 200, data: { messages: [] }, headers: {} }) },
     };
-    const service = new PollingService(relay as any, localStorage as any);
+    const service = createService(relay as any, localStorage as any);
     const onUpdate = vi.fn();
 
     const stop = service.startPolling('0xabc', onUpdate, 5);
@@ -106,7 +115,7 @@ describe('PollingService', () => {
       getAuthHeaders: vi.fn().mockReturnValue({}),
       relay: { get: vi.fn().mockRejectedValue(new Error('boom')) },
     };
-    const service = new PollingService(relay as any, localStorage as any);
+    const service = createService(relay as any, localStorage as any);
 
     for (let i = 0; i < 6; i += 1) {
       await service.checkForNewHashes('0xabc');

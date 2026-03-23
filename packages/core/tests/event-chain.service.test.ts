@@ -4,6 +4,15 @@ import { Binary, EventChain } from 'eqty-core';
 import EventChainService from '../src/services/EventChain.service';
 
 describe('EventChainService', () => {
+  const logger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+  const createService = (...args: any[]) =>
+    new EventChainService(args[0], args[1], args[2], logger as any);
+
   const createStateStore = () => {
     const stores = new Map<string, Map<string, any>>();
     const ensure = (store: string) => {
@@ -48,7 +57,7 @@ describe('EventChainService', () => {
       clear: vi.fn(),
     };
 
-    const service = new EventChainService({} as any, {} as any, settings as any);
+    const service = createService({} as any, {} as any, settings as any);
     expect(service.anchoring).toBe(false);
 
     service.setAnchoring(true);
@@ -60,7 +69,7 @@ describe('EventChainService', () => {
       verifyAnchors: vi.fn().mockResolvedValue({ verified: true, anchors: {}, map: {} }),
     };
 
-    const service = new EventChainService({} as any, eqty as any);
+    const service = createService({} as any, eqty as any);
     const result = await service.verify({ anchorMap: [{ key: { hex: '0x1' }, value: { hex: '0x2' } }] } as any);
 
     expect(result.verified).toBe(true);
@@ -70,7 +79,7 @@ describe('EventChainService', () => {
   it('stores chain state and queues anchors when anchoring is enabled', async () => {
     const idb = createStateStore();
     const eqty = { anchor: vi.fn(), verifyAnchors: vi.fn() };
-    const service = new EventChainService(idb as any, eqty as any, {
+    const service = createService(idb as any, eqty as any, {
       get: vi.fn().mockReturnValue(true),
       set: vi.fn(),
     } as any);
@@ -95,7 +104,7 @@ describe('EventChainService', () => {
   it('skips store write when state did not change', async () => {
     const idb = createStateStore();
     const eqty = { anchor: vi.fn(), verifyAnchors: vi.fn() };
-    const service = new EventChainService(idb as any, eqty as any, {
+    const service = createService(idb as any, eqty as any, {
       get: vi.fn().mockReturnValue(false),
       set: vi.fn(),
     } as any);
@@ -142,7 +151,7 @@ describe('EventChainService', () => {
       'junk:store': { foo: 'bar' },
     });
 
-    const service = new EventChainService(idb as any, { verifyAnchors: vi.fn() } as any);
+    const service = createService(idb as any, { verifyAnchors: vi.fn() } as any);
     const list = await service.loadAll();
 
     expect(list).toHaveLength(2);
@@ -161,7 +170,7 @@ describe('EventChainService', () => {
       ]),
     });
 
-    const service = new EventChainService(idb as any, { verifyAnchors: vi.fn() } as any);
+    const service = createService(idb as any, { verifyAnchors: vi.fn() } as any);
     const noMatch = await service.getStateDump(chain.id, Binary.fromHex(`0x${'f'.repeat(64)}`));
     const match = await service.getStateDump(chain.id, chain.state.hex);
 
@@ -174,7 +183,7 @@ describe('EventChainService', () => {
 
   it('deletes single chain and all chains', async () => {
     const idb = createStateStore();
-    const service = new EventChainService(idb as any, { verifyAnchors: vi.fn() } as any);
+    const service = createService(idb as any, { verifyAnchors: vi.fn() } as any);
 
     await service.delete('abc123');
     await service.deleteAll();

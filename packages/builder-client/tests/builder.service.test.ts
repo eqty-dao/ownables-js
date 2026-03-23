@@ -3,6 +3,15 @@ import { describe, expect, it, vi } from 'vitest';
 import BuilderService from '../src/services/Builder.service';
 
 describe('BuilderService', () => {
+  const logger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+  const createService = (chainId: number, options: any = {}) =>
+    new BuilderService(chainId, { ...options, logger: options.logger ?? logger });
+
   it('returns address using injected http client', async () => {
     const httpClient = {
       get: vi.fn().mockResolvedValue({
@@ -14,7 +23,7 @@ describe('BuilderService', () => {
       post: vi.fn(),
     };
 
-    const service = new BuilderService(84532, {
+    const service = createService(84532, {
       url: 'https://builder.test',
       httpClient,
     });
@@ -25,15 +34,15 @@ describe('BuilderService', () => {
   });
 
   it('throws when URL is missing for template cost', async () => {
-    const service = new BuilderService(84532, { url: '' });
+    const service = createService(84532, { url: '' });
     await expect(service.getTemplateCost(1)).rejects.toThrow('Builder service URL not configured');
   });
 
   it('returns null address when service is unavailable or request fails', async () => {
-    const unavailable = new BuilderService(84532, { url: '' });
+    const unavailable = createService(84532, { url: '' });
     await expect(unavailable.getAddress()).resolves.toBeNull();
 
-    const failing = new BuilderService(84532, {
+    const failing = createService(84532, {
       url: 'https://builder.test',
       httpClient: {
         get: vi.fn().mockRejectedValue(new Error('boom')),
@@ -44,13 +53,13 @@ describe('BuilderService', () => {
   });
 
   it('maps chain id to network id with default fallback', () => {
-    expect(new BuilderService(8453, { url: 'x' }).getLtoNetworkId()).toBe('L');
-    expect(new BuilderService(84532, { url: 'x' }).getLtoNetworkId()).toBe('T');
-    expect(new BuilderService(1, { url: 'x' }).getLtoNetworkId()).toBe('T');
+    expect(createService(8453, { url: 'x' }).getLtoNetworkId()).toBe('L');
+    expect(createService(84532, { url: 'x' }).getLtoNetworkId()).toBe('T');
+    expect(createService(1, { url: 'x' }).getLtoNetworkId()).toBe('T');
   });
 
   it('returns template cost and bubbles API errors', async () => {
-    const service = new BuilderService(84532, {
+    const service = createService(84532, {
       url: 'https://builder.test',
       secret: 'secret',
       httpClient: {
@@ -65,7 +74,7 @@ describe('BuilderService', () => {
 
     await expect(service.getTemplateCost(1)).resolves.toEqual({ eth: '0.01', usd: '20' });
 
-    const failing = new BuilderService(84532, {
+    const failing = createService(84532, {
       url: 'https://builder.test',
       httpClient: {
         get: vi.fn().mockRejectedValue({ response: { data: { error: 'bad' } } }),
@@ -84,7 +93,7 @@ describe('BuilderService', () => {
         .mockResolvedValueOnce({ data: { requestId: 'req-1', message: 'queued' } })
         .mockResolvedValueOnce({ data: { requestId: { requestId: 'req-2' } } }),
     };
-    const service = new BuilderService(84532, {
+    const service = createService(84532, {
       url: 'https://builder.test',
       httpClient,
       formDataFactory: () => formData,

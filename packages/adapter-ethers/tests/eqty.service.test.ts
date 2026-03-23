@@ -5,6 +5,18 @@ import { Interface } from 'ethers';
 import EQTYService from '../src/services/EQTY.service';
 
 describe('Ethers EQTYService', () => {
+  const logger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+  const createService = (address: string, chainId: number, options: any = {}) =>
+    new EQTYService(address, chainId, {
+      ...options,
+      deps: { ...(options.deps ?? {}), logger: options.deps?.logger ?? logger },
+    });
+
   it('throws for unsupported chain ids', () => {
     const signer = {
       provider: { getBlockNumber: vi.fn(), getLogs: vi.fn() },
@@ -12,7 +24,7 @@ describe('Ethers EQTYService', () => {
       signTypedData: vi.fn(),
     };
 
-    expect(() => new EQTYService('0xabc', 1, { signer: signer as any })).toThrow(
+    expect(() => createService('0xabc', 1, { signer: signer as any })).toThrow(
       'Unsupported chain ID'
     );
   });
@@ -25,7 +37,7 @@ describe('Ethers EQTYService', () => {
       signTypedData: vi.fn().mockResolvedValue('0xsig'),
     };
 
-    const service = new EQTYService('0xabc', 84532, {
+    const service = createService('0xabc', 84532, {
       signer: signer as any,
       deps: {
         anchorClient,
@@ -41,7 +53,7 @@ describe('Ethers EQTYService', () => {
   });
 
   it('throws when signer is missing or provider is unavailable', () => {
-    expect(() => new EQTYService('0xabc', 84532, {} as any)).toThrow('No Ethereum signer found');
+    expect(() => createService('0xabc', 84532, {} as any)).toThrow('No Ethereum signer found');
 
     const signer = {
       provider: null,
@@ -49,7 +61,7 @@ describe('Ethers EQTYService', () => {
       signTypedData: vi.fn(),
       signMessage: vi.fn(),
     };
-    expect(() => new EQTYService('0xabc', 84532, { signer: signer as any })).toThrow(
+    expect(() => createService('0xabc', 84532, { signer: signer as any })).toThrow(
       'No Ethereum provider found'
     );
   });
@@ -62,7 +74,7 @@ describe('Ethers EQTYService', () => {
       signTypedData: vi.fn().mockResolvedValue('0xsig'),
       signMessage: vi.fn().mockResolvedValue('0xproof'),
     };
-    const service = new EQTYService('0xabc', 84532, {
+    const service = createService('0xabc', 84532, {
       signer: signer as any,
       deps: { anchorClient, signer: signer as any },
     });
@@ -86,7 +98,7 @@ describe('Ethers EQTYService', () => {
       signTypedData: vi.fn().mockResolvedValue('0xsig'),
       signMessage: vi.fn().mockResolvedValue('0xproof'),
     };
-    const service = new EQTYService('0xabc', 84532, {
+    const service = createService('0xabc', 84532, {
       signer: signer as any,
       deps: { anchorClient: { anchor: vi.fn() }, signer: signer as any },
     });
@@ -118,7 +130,7 @@ describe('Ethers EQTYService', () => {
       isUnlockProofValid: vi.fn().mockResolvedValue(true),
     };
 
-    const service = new EQTYService('0xabc', 84532, {
+    const service = createService('0xabc', 84532, {
       signer: signer as any,
       deps: { lockableClient, signer: signer as any, anchorClient: { anchor: vi.fn() } },
     });
@@ -143,7 +155,7 @@ describe('Ethers EQTYService', () => {
       unlockChallenge: vi.fn().mockResolvedValue(123n),
       isUnlockProofValid: vi.fn().mockResolvedValue(true),
     };
-    const service = new EQTYService('0xabc', 84532, {
+    const service = createService('0xabc', 84532, {
       signer: signer as any,
       deps: { lockableClient, signer: signer as any, anchorClient: { anchor: vi.fn() } },
     });
@@ -184,7 +196,7 @@ describe('Ethers EQTYService', () => {
       signTypedData: vi.fn().mockResolvedValue('0xsig'),
       signMessage: vi.fn().mockResolvedValue('0xproof'),
     };
-    const service = new EQTYService('0xabc', 84532, {
+    const service = createService('0xabc', 84532, {
       signer: signer as any,
       deps: { anchorClient: { anchor: vi.fn() }, signer: signer as any },
     });

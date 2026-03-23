@@ -4,6 +4,15 @@ import JSZip from 'jszip';
 import PackageService from '../src/services/Package.service';
 
 describe('PackageService', () => {
+  const logger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+  const createService = (idb: any, relay: any, localStorage: any, options: any = {}) =>
+    new PackageService(idb, relay, localStorage, { ...options, logger: options.logger ?? logger });
+
   const capabilities = {
     isDynamic: false,
     hasMetadata: false,
@@ -35,7 +44,7 @@ describe('PackageService', () => {
       set: () => undefined,
     };
 
-    const service = new PackageService({} as any, {} as any, localStorage as any, {
+    const service = createService({} as any, {} as any, localStorage as any, {
       examples: [{ title: 'Example', name: 'example', stub: true }],
     });
 
@@ -44,7 +53,7 @@ describe('PackageService', () => {
   });
 
   it('throws when downloading example without URL', async () => {
-    const service = new PackageService({} as any, {} as any, { get: () => [], set: () => undefined } as any, {
+    const service = createService({} as any, {} as any, { get: () => [], set: () => undefined } as any, {
       exampleUrl: '',
     });
 
@@ -60,7 +69,7 @@ describe('PackageService', () => {
     }));
     const expected = { cid: 'cid-123' } as any;
 
-    const service = new PackageService({} as any, {} as any, { get: () => [], set: () => undefined } as any, {
+    const service = createService({} as any, {} as any, { get: () => [], set: () => undefined } as any, {
       exampleUrl: 'https://examples.test',
       fetchFn: fetchFn as any,
     });
@@ -86,7 +95,7 @@ describe('PackageService', () => {
       get: vi.fn(async () => ({ fakeBlob: true })),
     };
 
-    const service = new PackageService(idb as any, {} as any, { get: () => [], set: () => undefined } as any, {
+    const service = createService(idb as any, {} as any, { get: () => [], set: () => undefined } as any, {
       fileReaderFactory: fileReaderFactory as any,
     });
 
@@ -96,13 +105,13 @@ describe('PackageService', () => {
   });
 
   it('throws from info when package is missing', () => {
-    const service = new PackageService({} as any, {} as any, { get: () => [], set: () => undefined } as any);
+    const service = createService({} as any, {} as any, { get: () => [], set: () => undefined } as any);
     expect(() => service.info('missing')).toThrow('Package not found');
   });
 
   it('getAsset rejects when idb returns no media file', async () => {
     const fileReaderFactory = vi.fn(() => ({ readAsText: vi.fn() }));
-    const service = new PackageService(
+    const service = createService(
       { get: vi.fn(async () => undefined) } as any,
       {} as any,
       { get: () => [], set: () => undefined } as any,
@@ -126,7 +135,7 @@ describe('PackageService', () => {
       setAll: vi.fn(),
       keys: vi.fn().mockResolvedValue(['package.json']),
     };
-    const service = new PackageService(idb as any, {} as any, localStorage as any, {
+    const service = createService(idb as any, {} as any, localStorage as any, {
       calculateCidFn: vi.fn().mockResolvedValue('cid-1'),
     });
     vi.spyOn(service as any, 'getPackageJson').mockResolvedValue({
@@ -143,7 +152,7 @@ describe('PackageService', () => {
   });
 
   it('throws from import when processPackage returns null', async () => {
-    const service = new PackageService(
+    const service = createService(
       { hasStore: vi.fn().mockResolvedValue(false) } as any,
       {} as any,
       { get: () => [], set: () => undefined } as any
@@ -157,7 +166,7 @@ describe('PackageService', () => {
   });
 
   it('returns null for duplicate relay package when chain is not current', async () => {
-    const service = new PackageService(
+    const service = createService(
       {
         hasStore: vi.fn().mockResolvedValue(true),
       } as any,
@@ -181,7 +190,7 @@ describe('PackageService', () => {
       ]),
       checkDuplicateMessage: vi.fn().mockImplementation(async (items) => items),
     };
-    const service = new PackageService(
+    const service = createService(
       { hasStore: vi.fn().mockResolvedValue(false) } as any,
       relay as any,
       { get: () => [], set: () => undefined } as any
@@ -195,14 +204,14 @@ describe('PackageService', () => {
   });
 
   it('returns null when importFromRelay has no messages or errors', async () => {
-    const serviceEmpty = new PackageService(
+    const serviceEmpty = createService(
       {} as any,
       { readAll: vi.fn().mockResolvedValue([]) } as any,
       { get: () => [], set: () => undefined } as any
     );
     await expect(serviceEmpty.importFromRelay()).resolves.toBeNull();
 
-    const serviceErr = new PackageService(
+    const serviceErr = createService(
       {} as any,
       { readAll: vi.fn().mockRejectedValue(new Error('relay error')) } as any,
       { get: () => [], set: () => undefined } as any
@@ -225,7 +234,7 @@ describe('PackageService', () => {
         headers: { get: () => 'application/zip' },
         blob: async () => new Blob(['x']),
       });
-    const service = new PackageService(
+    const service = createService(
       {} as any,
       {} as any,
       { get: () => [], set: () => undefined } as any,
@@ -237,7 +246,7 @@ describe('PackageService', () => {
   });
 
   it('parses chain json and decodes base64 event payloads', async () => {
-    const service = new PackageService({} as any, {} as any, { get: () => [], set: () => undefined } as any);
+    const service = createService({} as any, {} as any, { get: () => [], set: () => undefined } as any);
     const chainJson = {
       events: [
         {
@@ -258,14 +267,14 @@ describe('PackageService', () => {
       hasStore: vi.fn().mockResolvedValue(true),
       get: vi.fn().mockResolvedValue({ events: [1, 2] }),
     };
-    const service = new PackageService(idb as any, {} as any, { get: () => [], set: () => undefined } as any);
+    const service = createService(idb as any, {} as any, { get: () => [], set: () => undefined } as any);
 
     await expect(service.isCurrentEvent({ id: 'chain-1', events: [1, 2, 3] } as any)).resolves.toBe(true);
     await expect(service.isCurrentEvent({ id: 'chain-1', events: [1] } as any)).resolves.toBeUndefined();
   });
 
   it('computes capabilities for static and dynamic packages', async () => {
-    const service = new PackageService({} as any, {} as any, { get: () => [], set: () => undefined } as any);
+    const service = createService({} as any, {} as any, { get: () => [], set: () => undefined } as any);
     const staticCaps = await (service as any).getCapabilities([
       new File(['{}'], 'package.json', { type: 'application/json' }),
     ]);
@@ -291,7 +300,7 @@ describe('PackageService', () => {
   });
 
   it('throws when package.json is missing or query schema lacks get_info', async () => {
-    const service = new PackageService({} as any, {} as any, { get: () => [], set: () => undefined } as any);
+    const service = createService({} as any, {} as any, { get: () => [], set: () => undefined } as any);
 
     await expect((service as any).getCapabilities([new File(['x'], 'foo.txt')])).rejects.toThrow(
       'missing package.json'
@@ -318,7 +327,7 @@ describe('PackageService', () => {
       };
       return reader;
     });
-    const service = new PackageService(
+    const service = createService(
       { get: vi.fn().mockResolvedValue(new File(['A'], 'a.txt')) } as any,
       {} as any,
       { get: () => [], set: () => undefined } as any,
@@ -333,7 +342,7 @@ describe('PackageService', () => {
       };
       return reader;
     });
-    const badService = new PackageService(
+    const badService = createService(
       { get: vi.fn().mockResolvedValue(new File(['A'], 'a.txt')) } as any,
       {} as any,
       { get: () => [], set: () => undefined } as any,
@@ -348,7 +357,7 @@ describe('PackageService', () => {
       readAsText: vi.fn(),
     }));
     const fileSpy = vi.spyOn(JSZip.prototype as any, 'file').mockReturnThis();
-    const service = new PackageService(
+    const service = createService(
       {
         get: vi.fn().mockRejectedValue(new Error('idb read failed')),
         getAll: vi.fn().mockResolvedValue([
@@ -370,7 +379,7 @@ describe('PackageService', () => {
   });
 
   it('returns false for non-current chains with empty stored event list', async () => {
-    const service = new PackageService(
+    const service = createService(
       {
         hasStore: vi.fn().mockResolvedValue(true),
         get: vi.fn().mockResolvedValue({ events: [] }),
@@ -386,7 +395,7 @@ describe('PackageService', () => {
     const relay = {
       readAll: vi.fn().mockResolvedValue([null, { bad: true }]),
     };
-    const service = new PackageService(
+    const service = createService(
       {} as any,
       relay as any,
       { get: () => [], set: () => undefined } as any
@@ -402,7 +411,7 @@ describe('PackageService', () => {
       ]),
       checkDuplicateMessage: vi.fn().mockImplementation(async (items: any[]) => items),
     };
-    const service = new PackageService(
+    const service = createService(
       { hasStore: vi.fn().mockResolvedValue(true) } as any,
       relay as any,
       { get: () => [], set: () => undefined } as any
@@ -420,7 +429,7 @@ describe('PackageService', () => {
       ]),
       checkDuplicateMessage: vi.fn().mockImplementation(async (items: any[]) => items),
     };
-    const service = new PackageService(
+    const service = createService(
       { hasStore: vi.fn().mockResolvedValue(false) } as any,
       relay as any,
       { get: () => [], set: () => undefined } as any
@@ -432,7 +441,7 @@ describe('PackageService', () => {
   });
 
   it('treats missing stored chain as current event', async () => {
-    const service = new PackageService(
+    const service = createService(
       {
         hasStore: vi.fn().mockResolvedValue(true),
         get: vi.fn().mockResolvedValue(undefined),

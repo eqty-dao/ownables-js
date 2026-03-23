@@ -4,10 +4,29 @@ import { Binary } from 'eqty-core';
 import EQTYService from '../src/services/EQTY.service';
 
 describe('EQTYService', () => {
+  const logger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+  const createService = (
+    address: string,
+    chainId: number,
+    walletClient?: any,
+    publicClient?: any,
+    ethereumProvider?: any,
+    deps: any = {}
+  ) =>
+    new EQTYService(address, chainId, walletClient, publicClient, ethereumProvider, {
+      ...deps,
+      logger: deps.logger ?? logger,
+    });
+
   it('throws for unsupported chain ids', () => {
     expect(
       () =>
-        new EQTYService('0xabc', 1, {} as any, {} as any, undefined, {
+        createService('0xabc', 1, {} as any, {} as any, undefined, {
           anchorClient: { anchor: vi.fn() },
           signer: {} as any,
         })
@@ -18,7 +37,7 @@ describe('EQTYService', () => {
     const anchorClient = { anchor: vi.fn().mockResolvedValue('0xtx') };
     const signer = {} as any;
 
-    const service = new EQTYService('0xabc', 84532, {} as any, {
+    const service = createService('0xabc', 84532, {} as any, {
       getBlockNumber: vi.fn(),
       getLogs: vi.fn(),
     } as any, undefined, {
@@ -34,7 +53,7 @@ describe('EQTYService', () => {
   });
 
   it('throws when provider inputs are missing and no ethereum provider is supplied', () => {
-    expect(() => new EQTYService('0xabc', 84532, undefined, undefined, undefined, {} as any)).toThrow(
+    expect(() => createService('0xabc', 84532, undefined, undefined, undefined, {} as any)).toThrow(
       'No Ethereum provider found'
     );
   });
@@ -43,7 +62,7 @@ describe('EQTYService', () => {
     const anchorClient = { anchor: vi.fn().mockRejectedValue(new Error('anchor failed')) };
     const walletClient = { account: '0xabc', signMessage: vi.fn() };
     const publicClient = { getBlockNumber: vi.fn().mockResolvedValue(1n), getLogs: vi.fn().mockResolvedValue([]) };
-    const service = new EQTYService('0xabc', 84532, walletClient as any, publicClient as any, undefined, {
+    const service = createService('0xabc', 84532, walletClient as any, publicClient as any, undefined, {
       anchorClient,
       signer: {} as any,
     });
@@ -59,7 +78,7 @@ describe('EQTYService', () => {
   it('verifies anchors for empty and no-log responses', async () => {
     const walletClient = { account: '0xabc', signMessage: vi.fn() };
     const publicClient = { getBlockNumber: vi.fn().mockResolvedValue(3n), getLogs: vi.fn().mockResolvedValue([]) };
-    const service = new EQTYService('0xabc', 84532, walletClient as any, publicClient as any, undefined, {
+    const service = createService('0xabc', 84532, walletClient as any, publicClient as any, undefined, {
       anchorClient: { anchor: vi.fn() },
       signer: {} as any,
     });
@@ -89,7 +108,7 @@ describe('EQTYService', () => {
       signMessage: vi.fn().mockResolvedValue('0xproof'),
     };
 
-    const service = new EQTYService('0xabc', 84532, walletClient as any, {
+    const service = createService('0xabc', 84532, walletClient as any, {
       getBlockNumber: vi.fn(),
       getLogs: vi.fn(),
     } as any, undefined, {
@@ -106,7 +125,7 @@ describe('EQTYService', () => {
   });
 
   it('requires wallet account to sign unlock challenge', async () => {
-    const service = new EQTYService('0xabc', 84532, {} as any, {
+    const service = createService('0xabc', 84532, {} as any, {
       getBlockNumber: vi.fn(),
       getLogs: vi.fn(),
     } as any, undefined, {
@@ -140,7 +159,7 @@ describe('EQTYService', () => {
       account: '0xabc',
       signMessage: vi.fn().mockResolvedValue('0xproof'),
     };
-    const service = new EQTYService('0xabc', 84532, walletClient as any, publicClient as any, undefined, {
+    const service = createService('0xabc', 84532, walletClient as any, publicClient as any, undefined, {
       anchorClient: { anchor: vi.fn() } as any,
       signer: {} as any,
     });
@@ -169,7 +188,7 @@ describe('EQTYService', () => {
         .mockRejectedValueOnce(new Error('rpc down')),
       readContract: vi.fn(),
     };
-    const service = new EQTYService(
+    const service = createService(
       '0xabc',
       84532,
       { account: '0xabc', signMessage: vi.fn() } as any,

@@ -17,6 +17,15 @@ const basePkg = {
 };
 
 describe('OwnableService', () => {
+  const logger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+  const createService = (...args: any[]) =>
+    new OwnableService(args[0], args[1], args[2], args[3], args[4], args[5] ?? (logger as any));
+
   const createStateStore = () => {
     const stores = new Map<string, Map<string, any>>();
     const ensure = (store: string) => {
@@ -61,7 +70,7 @@ describe('OwnableService', () => {
   };
 
   it('tracks rpc readiness and throws when missing rpc', () => {
-    const service = new OwnableService({} as any, { anchoring: false } as any, {} as any, {} as any);
+    const service = createService({} as any, { anchoring: false } as any, {} as any, {} as any);
 
     expect(service.isReady('id-1')).toBe(false);
     expect(() => service.rpc('id-1')).toThrow('No RPC for ownable id-1');
@@ -75,7 +84,7 @@ describe('OwnableService', () => {
       anchor: vi.fn(),
       submitAnchors: vi.fn(),
     };
-    const service = new OwnableService(
+    const service = createService(
       {} as any,
       { anchoring: false, loadAll: vi.fn().mockResolvedValue([]) } as any,
       eqty as any,
@@ -90,7 +99,7 @@ describe('OwnableService', () => {
   });
 
   it('handles Cancelled-like errors when clearing rpc', () => {
-    const service = new OwnableService({} as any, { anchoring: false } as any, {} as any, {} as any);
+    const service = createService({} as any, { anchoring: false } as any, {} as any, {} as any);
 
     const rpc = {} as Record<string, unknown>;
     Object.defineProperty(rpc, 'handler', {
@@ -110,7 +119,7 @@ describe('OwnableService', () => {
   });
 
   it('returns undefined from submitAnchors when anchoring is disabled', async () => {
-    const service = new OwnableService(
+    const service = createService(
       {} as any,
       { anchoring: false } as any,
       { submitAnchors: vi.fn() } as any,
@@ -122,7 +131,7 @@ describe('OwnableService', () => {
 
   it('submits anchors when anchoring is enabled', async () => {
     const eqty = { submitAnchors: vi.fn().mockResolvedValue('0xtx') };
-    const service = new OwnableService(
+    const service = createService(
       {} as any,
       { anchoring: true } as any,
       eqty as any,
@@ -134,7 +143,7 @@ describe('OwnableService', () => {
   });
 
   it('returns false from canConsume when package is not consumer', async () => {
-    const service = new OwnableService(
+    const service = createService(
       {} as any,
       {} as any,
       {} as any,
@@ -147,7 +156,7 @@ describe('OwnableService', () => {
   });
 
   it('returns false from canConsume when state dump is unavailable', async () => {
-    const service = new OwnableService(
+    const service = createService(
       {} as any,
       { getStateDump: vi.fn().mockResolvedValue(null) } as any,
       {} as any,
@@ -163,7 +172,7 @@ describe('OwnableService', () => {
     const eventChains = {
       getStateDump: vi.fn().mockResolvedValue([['k', 'v']]),
     };
-    const service = new OwnableService(
+    const service = createService(
       {} as any,
       eventChains as any,
       {} as any,
@@ -184,7 +193,7 @@ describe('OwnableService', () => {
     const eventChains = {
       getStateDump: vi.fn().mockResolvedValue([['k', 'v']]),
     };
-    const service = new OwnableService(
+    const service = createService(
       {} as any,
       eventChains as any,
       {} as any,
@@ -211,7 +220,7 @@ describe('OwnableService', () => {
       }
     });
     const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
-    const service = new OwnableService(
+    const service = createService(
       stateStore as any,
       {} as any,
       {} as any,
@@ -232,7 +241,7 @@ describe('OwnableService', () => {
 
   it('executes rpc message, signs event, and stores resulting state', async () => {
     const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
-    const service = new OwnableService(
+    const service = createService(
       {} as any,
       {} as any,
       { address: '0xabc', sign: vi.fn() } as any,
@@ -253,7 +262,7 @@ describe('OwnableService', () => {
   });
 
   it('applies event chain and handles instantiate/execute/external contexts', async () => {
-    const service = new OwnableService(
+    const service = createService(
       {
         hasStore: vi.fn().mockResolvedValue(false),
         keys: vi.fn().mockResolvedValue([]),
@@ -289,7 +298,7 @@ describe('OwnableService', () => {
   });
 
   it('throws on unknown event context during apply', async () => {
-    const service = new OwnableService(
+    const service = createService(
       { hasStore: vi.fn().mockResolvedValue(false), keys: vi.fn().mockResolvedValue([]) } as any,
       {} as any,
       { address: '0xabc' } as any,
@@ -315,7 +324,7 @@ describe('OwnableService', () => {
       getStateDump: vi.fn().mockResolvedValue([['state', 1]]),
     };
     const eqty = { address: '0xabc', sign: vi.fn(), submitAnchors: vi.fn().mockResolvedValue('0xtx') };
-    const service = new OwnableService({} as any, eventChains as any, eqty as any, {} as any);
+    const service = createService({} as any, eventChains as any, eqty as any, {} as any);
     const rpcConsumer = {
       externalEvent: vi.fn().mockResolvedValue({ state: [['consumer', 1]] }),
     };
@@ -338,7 +347,7 @@ describe('OwnableService', () => {
   });
 
   it('initializes rpc with package assets and persists initial store', async () => {
-    const service = new OwnableService(
+    const service = createService(
       {} as any,
       {} as any,
       {} as any,
@@ -361,7 +370,7 @@ describe('OwnableService', () => {
   });
 
   it('throws when consume state is mismatched', async () => {
-    const service = new OwnableService(
+    const service = createService(
       {} as any,
       { getStateDump: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce([]) } as any,
       { address: '0xabc' } as any,
@@ -379,7 +388,7 @@ describe('OwnableService', () => {
       deleteAll: vi.fn().mockResolvedValue(undefined),
       anchoring: false,
     };
-    const service = new OwnableService({} as any, eventChains as any, {} as any, {} as any);
+    const service = createService({} as any, eventChains as any, {} as any, {} as any);
 
     await expect(service.loadAll()).resolves.toEqual([{ id: '1' }]);
     await service.delete('id-1');
@@ -395,7 +404,7 @@ describe('OwnableService', () => {
       get: vi.fn().mockImplementation(async (_store: string, key: string) => (key === 'state' ? 'different' : undefined)),
       setAll: vi.fn().mockResolvedValue(undefined),
     };
-    const service = new OwnableService(
+    const service = createService(
       stateStore as any,
       { anchoring: false } as any,
       { anchor: vi.fn() } as any,
@@ -423,7 +432,7 @@ describe('OwnableService', () => {
     await stateStore.set(`ownable:${chain.id}`, 'state', 'old-state');
 
     const eqty = { anchor: vi.fn(), address: '0xabc' };
-    const service = new OwnableService(
+    const service = createService(
       stateStore as any,
       { anchoring: true } as any,
       eqty as any,
@@ -439,7 +448,7 @@ describe('OwnableService', () => {
     const stateStore = createStateStore();
     const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
     await stateStore.createStore(`ownable:${chain.id}`);
-    const service = new OwnableService(
+    const service = createService(
       stateStore as any,
       {} as any,
       {} as any,
@@ -454,7 +463,7 @@ describe('OwnableService', () => {
     const stateStore = createStateStore();
     stateStore.getAll.mockResolvedValue([]);
     const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
-    const service = new OwnableService(
+    const service = createService(
       stateStore as any,
       {} as any,
       {} as any,
@@ -466,7 +475,7 @@ describe('OwnableService', () => {
 
   it('zips ownable chain and rejects empty chains', async () => {
     const zip = { file: vi.fn() };
-    const service = new OwnableService(
+    const service = createService(
       {} as any,
       {} as any,
       {} as any,

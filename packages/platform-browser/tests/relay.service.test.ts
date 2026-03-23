@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import JSZip from 'jszip';
 
 import { RelayService } from '../src/services/Relay.service';
 
@@ -248,6 +249,20 @@ describe('RelayService', () => {
     expect(result).toEqual([{ message: { ok: true }, hash: 'h2' }]);
   });
 
+  it('returns empty list from readAll when list is null', async () => {
+    const service = new RelayService(
+      { address: '0xabc', chainId: 84532, signer: {} } as any,
+      {
+        relayUrl: 'https://relay.test',
+        relayClient: { get: vi.fn() } as any,
+        siweClient: { authenticate: vi.fn() } as any,
+        storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+      }
+    );
+    vi.spyOn(service, 'list').mockResolvedValue(null);
+    await expect(service.readAll()).resolves.toEqual([]);
+  });
+
   it('filters duplicate messages to latest chain events', async () => {
     const service = new RelayService(
       { address: '0xabc', chainId: 84532, signer: {} } as any,
@@ -275,5 +290,40 @@ describe('RelayService', () => {
     const deduped = await service.checkDuplicateMessage(messages as any);
     expect(deduped).toHaveLength(2);
     expect(deduped.map((m) => m.messageHash).sort()).toEqual(['h2', 'h3']);
+  });
+
+  it('extracts assets from JSZip and skips hidden files', async () => {
+    const service = new RelayService(
+      { address: '0xabc', chainId: 84532, signer: {} } as any,
+      {
+        relayUrl: 'https://relay.test',
+        relayClient: { get: vi.fn() } as any,
+        siweClient: { authenticate: vi.fn() } as any,
+        storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+      }
+    );
+    const zip = new JSZip();
+    zip.file('chain.json', JSON.stringify({ id: 'c1', events: [] }));
+    zip.file('.hidden', 'x');
+
+    const files = await service.extractAssets(zip);
+    expect(files.map((f) => f.name)).toEqual(['chain.json']);
+  });
+
+  it('throws when chain asset is missing while de-duping', async () => {
+    const service = new RelayService(
+      { address: '0xabc', chainId: 84532, signer: {} } as any,
+      {
+        relayUrl: 'https://relay.test',
+        relayClient: { get: vi.fn() } as any,
+        siweClient: { authenticate: vi.fn() } as any,
+        storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+      }
+    );
+    vi.spyOn(service as any, 'extractAssets').mockResolvedValue([]);
+
+    await expect(
+      service.checkDuplicateMessage([{ message: { data: { buffer: new Uint8Array([1]) } }, messageHash: 'h1' }] as any)
+    ).rejects.toThrow('Invalid package: missing chain.json');
   });
 });

@@ -159,6 +159,48 @@ describe('OwnableService', () => {
     expect(ok).toBe(false);
   });
 
+  it('returns true from canConsume when query confirms consumer relationship', async () => {
+    const eventChains = {
+      getStateDump: vi.fn().mockResolvedValue([['k', 'v']]),
+    };
+    const service = new OwnableService(
+      {} as any,
+      eventChains as any,
+      {} as any,
+      { info: vi.fn().mockReturnValue({ isConsumer: true }) } as any
+    );
+    (service as any)._rpc.set('c1', {
+      query: vi.fn().mockResolvedValue(true),
+    });
+
+    const ok = await service.canConsume(
+      { chain: { id: 'c1', state: { hex: '0x1' } }, package: 'pkg-1' } as any,
+      { ownable_type: 'x', issuer: 'y' } as any
+    );
+    expect(ok).toBe(true);
+  });
+
+  it('returns false from canConsume when rpc query throws', async () => {
+    const eventChains = {
+      getStateDump: vi.fn().mockResolvedValue([['k', 'v']]),
+    };
+    const service = new OwnableService(
+      {} as any,
+      eventChains as any,
+      {} as any,
+      { info: vi.fn().mockReturnValue({ isConsumer: true }) } as any
+    );
+    (service as any)._rpc.set('c1', {
+      query: vi.fn().mockRejectedValue(new Error('query failed')),
+    });
+
+    const ok = await service.canConsume(
+      { chain: { id: 'c1', state: { hex: '0x1' } }, package: 'pkg-1' } as any,
+      { ownable_type: 'x', issuer: 'y' } as any
+    );
+    expect(ok).toBe(false);
+  });
+
   it('stores chain state via initStore and retries transient write failures', async () => {
     const stateStore = createStateStore();
     let failOnce = true;
@@ -328,6 +370,40 @@ describe('OwnableService', () => {
     const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
 
     await expect(service.consume(chain, chain)).rejects.toThrow('State mismatch for consume');
+  });
+
+  it('delegates loadAll/delete/deleteAll to event chain service', async () => {
+    const eventChains = {
+      loadAll: vi.fn().mockResolvedValue([{ id: '1' }]),
+      delete: vi.fn().mockResolvedValue(undefined),
+      deleteAll: vi.fn().mockResolvedValue(undefined),
+      anchoring: false,
+    };
+    const service = new OwnableService({} as any, eventChains as any, {} as any, {} as any);
+
+    await expect(service.loadAll()).resolves.toEqual([{ id: '1' }]);
+    await service.delete('id-1');
+    await service.deleteAll();
+
+    expect(eventChains.delete).toHaveBeenCalledWith('id-1');
+    expect(eventChains.deleteAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries store writes and throws after repeated verification mismatch', async () => {
+    const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
+    const stateStore = {
+      get: vi.fn().mockImplementation(async (_store: string, key: string) => (key === 'state' ? 'different' : undefined)),
+      setAll: vi.fn().mockResolvedValue(undefined),
+    };
+    const service = new OwnableService(
+      stateStore as any,
+      { anchoring: false } as any,
+      { anchor: vi.fn() } as any,
+      {} as any
+    );
+
+    await expect(service.store(chain, [['k', 'v']] as any)).rejects.toThrow('Operation failed after 3 attempts');
+    expect(stateStore.setAll).toHaveBeenCalled();
   });
 
   it('zips ownable chain and rejects empty chains', async () => {

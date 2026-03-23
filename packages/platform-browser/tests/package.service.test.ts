@@ -289,4 +289,56 @@ describe('PackageService', () => {
     });
   });
 
+  it('throws when package.json is missing or query schema lacks get_info', async () => {
+    const service = new PackageService({} as any, {} as any, { get: () => [], set: () => undefined } as any);
+
+    await expect((service as any).getCapabilities([new File(['x'], 'foo.txt')])).rejects.toThrow(
+      'missing package.json'
+    );
+
+    vi.spyOn(service as any, 'getPackageJson')
+      .mockResolvedValueOnce({ oneOf: [{ required: ['get_metadata'] }] })
+      .mockResolvedValueOnce({ oneOf: [{ required: [] }] });
+    await expect(
+      (service as any).getCapabilities([
+        new File(['{}'], 'package.json'),
+        new File(['wasm'], 'ownable_bg.wasm'),
+        new File(['{}'], 'query_msg.json'),
+        new File(['{}'], 'execute_msg.json'),
+      ])
+    ).rejects.toThrow('missing `get_info` query method');
+  });
+
+  it('reads assets as data URI and propagates read errors', async () => {
+    const okFactory = vi.fn(() => {
+      const reader: any = {
+        onload: null,
+        readAsDataURL: () => reader.onload?.({ target: { result: 'data:text/plain;base64,QQ==' } }),
+      };
+      return reader;
+    });
+    const service = new PackageService(
+      { get: vi.fn().mockResolvedValue(new File(['A'], 'a.txt')) } as any,
+      {} as any,
+      { get: () => [], set: () => undefined } as any,
+      { fileReaderFactory: okFactory as any }
+    );
+    await expect(service.getAssetAsDataUri('cid-1', 'a.txt')).resolves.toBe('data:text/plain;base64,QQ==');
+
+    const badFactory = vi.fn(() => {
+      const reader: any = {
+        onload: null,
+        readAsText: () => reader.onload?.({ target: { result: null } }),
+      };
+      return reader;
+    });
+    const badService = new PackageService(
+      { get: vi.fn().mockResolvedValue(new File(['A'], 'a.txt')) } as any,
+      {} as any,
+      { get: () => [], set: () => undefined } as any,
+      { fileReaderFactory: badFactory as any }
+    );
+    await expect(badService.getAssetAsText('cid-1', 'a.txt')).rejects.toThrow('Failed to read asset');
+  });
+
 });

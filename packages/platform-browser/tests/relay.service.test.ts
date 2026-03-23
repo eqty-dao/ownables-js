@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import JSZip from 'jszip';
+import { Message } from 'eqty-core';
 
 import { RelayService } from '../src/services/Relay.service';
 
@@ -312,11 +313,193 @@ describe('RelayService', () => {
       }
     );
     const zip = new JSZip();
-    zip.file('chain.json', JSON.stringify({ id: 'c1', events: [] }));
+    zip.file('chain.json', JSON.stringify({ id: 'c1', events: [{}] }));
     zip.file('.hidden', 'x');
 
     const files = await service.extractAssets(zip);
     expect(files.map((f) => f.name)).toEqual(['chain.json']);
+  });
+
+  it('loads unexpired token from storage and parses hour/minute expiry', async () => {
+    const key = 'relay_siwe_token:0xabc:84532';
+    const storage = new Map<string, string>([[key, JSON.stringify({ token: 'stored', expiry: 10_000 })]]);
+    const storageApi = {
+      getItem: (k: string) => storage.get(k) ?? null,
+      setItem: (k: string, v: string) => storage.set(k, v),
+      removeItem: (k: string) => storage.delete(k),
+    };
+
+    const serviceFromStorage = createService(
+      { address: '0xabc', chainId: 84532, signer: {} } as any,
+      {
+        relayUrl: 'https://relay.test',
+        relayClient: { get: vi.fn() } as any,
+        siweClient: { authenticate: vi.fn() } as any,
+        storage: storageApi,
+        now: () => 1_000,
+      }
+    );
+    expect(serviceFromStorage.getAuthHeaders()).toEqual({ Authorization: 'Bearer stored' });
+
+    const storageHours = new Map<string, string>();
+    const serviceHours = createService(
+      { address: '0xabc', chainId: 84532, signer: {} } as any,
+      {
+        relayUrl: 'https://relay.test',
+        relayClient: { get: vi.fn() } as any,
+        siweClient: { authenticate: vi.fn().mockResolvedValue({ success: true, token: 'h', expiresIn: '2h' }) } as any,
+        storage: {
+          getItem: () => null,
+          setItem: (k: string, v: string) => storageHours.set(k, v),
+          removeItem: () => undefined,
+        },
+        now: () => 5_000,
+      }
+    );
+    await serviceHours.authenticate();
+    expect(storageHours.get(key)).toContain('"expiry":7205000');
+
+    const storageMins = new Map<string, string>();
+    const serviceMins = createService(
+      { address: '0xabc', chainId: 84532, signer: {} } as any,
+      {
+        relayUrl: 'https://relay.test',
+        relayClient: { get: vi.fn() } as any,
+        siweClient: { authenticate: vi.fn().mockResolvedValue({ success: true, token: 'm', expiresIn: '30m' }) } as any,
+        storage: {
+          getItem: () => null,
+          setItem: (k: string, v: string) => storageMins.set(k, v),
+          removeItem: () => undefined,
+        },
+        now: () => 9_000,
+      }
+    );
+    await serviceMins.authenticate();
+    expect(storageMins.get(key)).toContain('"expiry":1809000');
+  });
+
+  it('returns auth failure object when authenticate throws', async () => {
+    const service = createService(
+      { address: '0xabc', chainId: 84532, signer: {} } as any,
+      {
+        relayUrl: 'https://relay.test',
+        relayClient: { get: vi.fn() } as any,
+        siweClient: { authenticate: vi.fn().mockRejectedValue(new Error('siwe boom')) } as any,
+        storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+      }
+    );
+
+    await expect(service.authenticate()).resolves.toEqual(
+      expect.objectContaining({ success: false, error: expect.stringContaining('siwe boom') })
+    );
+  });
+
+  it('sends ownable, tolerates anchor error, and rethrows send failures', async () => {
+    const relayClient = {
+      get: vi.fn().mockResolvedValue({}),
+      send: vi.fn().mockResolvedValue(undefined),
+      delete: vi.fn(),
+    };
+    const eqty = {
+      address: '0xabc',
+      chainId: 84532,
+      signer: {},
+      sign: vi.fn().mockResolvedValue(undefined),
+      anchor: vi.fn().mockRejectedValue(new Error('anchor boom')),
+    };
+    const service = createService(eqty as any, {
+      relayUrl: 'https://relay.test',
+      relayClient: relayClient as any,
+      siweClient: { authenticate: vi.fn().mockResolvedValue({ success: true, token: 't' }) } as any,
+      storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+    });
+
+    const hash = await service.sendOwnable('0xdef', new Uint8Array([1, 2]), {}, true);
+    expect(hash).toBeTruthy();
+    expect(eqty.sign).toHaveBeenCalled();
+    expect(eqty.anchor).toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      'RelayService: Failed during anchoring before sending:',
+      expect.any(Error)
+    );
+    expect(relayClient.send).toHaveBeenCalled();
+
+    relayClient.send.mockRejectedValueOnce(new Error('send boom'));
+    await expect(service.sendOwnable('0xdef', new Uint8Array([1]), {})).rejects.toThrow(
+      'send boom'
+    );
+  });
+
+  it('handles readMessage message wrapper and missing message data', async () => {
+    const fromSpy = vi.spyOn(Message, 'from').mockReturnValue({ ok: true } as any);
+    const service = createService(
+      { address: '0xabc', chainId: 84532, signer: {} } as any,
+      {
+        relayUrl: 'https://relay.test',
+        relayClient: {
+          get: vi
+            .fn()
+            .mockResolvedValueOnce({ message: { any: 'shape' } })
+            .mockResolvedValueOnce({ message: null }),
+        } as any,
+        siweClient: { authenticate: vi.fn().mockResolvedValue({ success: true, token: 't' }) } as any,
+        storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+      }
+    );
+
+    await expect(service.readMessage('h1')).resolves.toEqual({ message: { ok: true }, hash: 'h1' });
+    await expect(service.readMessage('h2')).rejects.toThrow('No message data found in response');
+    fromSpy.mockRestore();
+  });
+
+  it('returns null from list when listing fails after availability check', async () => {
+    const relayClient = {
+      get: vi.fn().mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('list boom')),
+    };
+    const service = createService(
+      { address: '0xabc', chainId: 84532, signer: {} } as any,
+      {
+        relayUrl: 'https://relay.test',
+        relayClient: relayClient as any,
+        siweClient: { authenticate: vi.fn().mockResolvedValue({ success: true, token: 't' }) } as any,
+        storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+      }
+    );
+
+    await expect(service.list()).resolves.toBeNull();
+  });
+
+  it('extracts assets from file input and skips messages with empty data', async () => {
+    const service = createService(
+      { address: '0xabc', chainId: 84532, signer: {} } as any,
+      {
+        relayUrl: 'https://relay.test',
+        relayClient: { get: vi.fn() } as any,
+        siweClient: { authenticate: vi.fn() } as any,
+        storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+      }
+    );
+
+    const zip = new JSZip();
+    zip.file('chain.json', JSON.stringify({ id: 'c1', events: [{}] }));
+    const zipBytes = await zip.generateAsync({ type: 'uint8array' });
+    const files = await service.extractAssets(zipBytes as any);
+    expect(files.map((f) => f.name)).toEqual(['chain.json']);
+
+    await expect((service as any).getChainJson('chain.json', files)).resolves.toEqual({
+      id: 'c1',
+      events: [{}],
+    });
+    await expect((service as any).getChainJson('missing.json', files)).rejects.toThrow(
+      'Invalid package: missing missing.json'
+    );
+
+    vi.spyOn(service as any, 'extractAssets').mockResolvedValue(files as any);
+    const deduped = await service.checkDuplicateMessage([
+      { message: { data: null }, messageHash: 'h0' },
+      { message: { data: { buffer: new Uint8Array([1]) } }, messageHash: 'h1' },
+    ] as any);
+    expect(deduped.length).toBe(1);
   });
 
   it('throws when chain asset is missing while de-duping', async () => {

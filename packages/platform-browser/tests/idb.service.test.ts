@@ -236,4 +236,182 @@ describe('IDBService', () => {
     expect(deletedDbs).toContain('ownables:user-1');
     expect(deletedDbs).not.toContain('other-db');
   });
+
+  it('propagates open() errors from indexedDB', async () => {
+    const api = {
+      open: () => {
+        const req: FakeRequest = {};
+        queueMicrotask(() => {
+          const event = { target: { error: new Error('open failed') } } as unknown as Event;
+          req.onerror?.(event);
+        });
+        return req as unknown as IDBOpenDBRequest;
+      },
+    } as unknown as IDBFactory;
+
+    await expect(IDBService.open('bad', api)).rejects.toThrow('open failed');
+  });
+
+  it('handles request-level errors including unknown error fallback', async () => {
+    const mkReq = (error?: Error, withError = true): FakeRequest => {
+      const req: FakeRequest = {};
+      queueMicrotask(() => {
+        if (withError) {
+          req.error = error ?? new Error('request failed');
+        }
+        req.onerror?.({ target: req } as unknown as Event);
+      });
+      return req;
+    };
+    const db = {
+      version: 1,
+      objectStoreNames: new NameList(['items']),
+      close: () => undefined,
+      transaction: () =>
+        ({
+          objectStore: () => ({
+            get: () => mkReq(undefined, false),
+            getAll: () => mkReq(new Error('getAll failed')),
+            openCursor: () => mkReq(new Error('cursor failed')),
+            getAllKeys: () => mkReq(new Error('keys failed')),
+            put: () => mkReq(new Error('put failed')),
+            clear: () => mkReq(new Error('clear failed')),
+            delete: () => mkReq(new Error('delete failed')),
+          }),
+          abort: () => undefined,
+        }) as any,
+    } as unknown as IDBDatabase;
+
+    const service = new IDBService(db, 'ownables:test', {} as any);
+    await expect(service.get('items', 'a')).rejects.toThrow('Unknown error');
+    await expect(service.getAll('items')).rejects.toThrow('getAll failed');
+    await expect(service.getMap('items')).rejects.toThrow('cursor failed');
+    await expect(service.keys('items')).rejects.toThrow('keys failed');
+    await expect(service.set('items', 'k', 1)).rejects.toThrow('put failed');
+    await expect(service.clear('items')).rejects.toThrow('clear failed');
+    await expect(service.delete('items', 'k')).rejects.toThrow('delete failed');
+  });
+
+  it('handles setAll transaction abort and write errors', async () => {
+    const db = {
+      version: 1,
+      objectStoreNames: new NameList(['s1']),
+      close: () => undefined,
+      transaction: () => {
+        const tx: FakeTx = {
+          objectStore: () => ({
+            put: () => {
+              throw new Error('put exploded');
+            },
+          }),
+          abort: () => {
+            tx.onabort?.();
+          },
+        };
+        return tx as any;
+      },
+    } as unknown as IDBDatabase;
+    const service = new IDBService(db, 'ownables:setall', {} as any);
+    await expect(service.setAll('s1', { a: 1 })).rejects.toThrow();
+
+    const dbTxError = {
+      version: 1,
+      objectStoreNames: new NameList(['s1']),
+      close: () => undefined,
+      transaction: () => {
+        const tx: FakeTx = {
+          objectStore: () => ({
+            put: () => undefined,
+          }),
+          abort: () => undefined,
+        };
+        queueMicrotask(() => tx.onerror?.({ target: { error: new Error('tx failed') } } as any));
+        return tx as any;
+      },
+    } as unknown as IDBDatabase;
+    const serviceTx = new IDBService(dbTxError, 'ownables:setall2', {} as any);
+    await expect(serviceTx.setAll('s1', { a: 1 })).rejects.toThrow('tx failed');
+  });
+
+  it('handles upgrade/create verification and delete database failures', async () => {
+    const baseDb = {
+      version: 1,
+      objectStoreNames: new NameList(['exists']),
+      close: () => undefined,
+      createObjectStore: () => undefined,
+      deleteObjectStore: () => undefined,
+      transaction: () => ({ objectStore: () => ({}), abort: () => undefined }) as any,
+    } as unknown as IDBDatabase;
+
+    const apiUpgradeError = {
+      open: () => {
+        const req: FakeRequest = {};
+        queueMicrotask(() => req.onerror?.({ target: { error: new Error('upgrade open failed') } } as any));
+        return req as any;
+      },
+      deleteDatabase: () => ({}) as any,
+      databases: async () => [],
+    } as unknown as IDBFactory;
+    const serviceUpgrade = new IDBService(baseDb, 'ownables:up', apiUpgradeError);
+    await expect(serviceUpgrade.createStore('x')).rejects.toBeDefined();
+
+    const apiVerifyFail = {
+      open: () => {
+        const req: FakeRequest = {};
+        queueMicrotask(() => {
+          req.result = {
+            ...baseDb,
+            objectStoreNames: new NameList([]),
+          };
+          req.onupgradeneeded?.();
+          req.onsuccess?.({ target: req } as any);
+        });
+        return req as any;
+      },
+      deleteDatabase: () => ({}) as any,
+      databases: async () => [],
+    } as unknown as IDBFactory;
+    const serviceVerify = new IDBService(baseDb, 'ownables:verify', apiVerifyFail);
+    await expect(serviceVerify.createStore('missing')).rejects.toThrow('Failed to create store');
+
+    await expect(serviceVerify.deleteStore('does-not-exist')).resolves.toBeUndefined();
+
+    const apiDeleteError = {
+      ...apiVerifyFail,
+      deleteDatabase: () => {
+        const req: FakeRequest = {};
+        queueMicrotask(() => req.onerror?.({ target: { error: new Error('delete db failed') } } as any));
+        return req as any;
+      },
+    } as unknown as IDBFactory;
+    const serviceDeleteError = new IDBService(baseDb, 'ownables:delete', apiDeleteError);
+    await expect(serviceDeleteError.deleteDatabase()).rejects.toThrow('delete db failed');
+  });
+
+  it('handles deleteAllDatabases blocked and error outcomes', async () => {
+    const db = {
+      version: 1,
+      objectStoreNames: new NameList([]),
+      close: () => undefined,
+      transaction: () => ({ objectStore: () => ({}), abort: () => undefined }) as any,
+    } as unknown as IDBDatabase;
+    const api = {
+      open: () => ({}) as any,
+      databases: async () => [{ name: 'ownables' }, { name: 'ownables:user-1' }],
+      deleteDatabase: (name: string) => {
+        const req: FakeRequest = {};
+        queueMicrotask(() => {
+          if (name === 'ownables') {
+            req.onblocked?.();
+          } else {
+            req.onerror?.({ target: { error: new Error('delete all failed') } } as any);
+          }
+        });
+        return req as any;
+      },
+    } as unknown as IDBFactory;
+    const service = new IDBService(db, 'ownables:any', api);
+
+    await expect(service.deleteAllDatabases()).rejects.toBeDefined();
+  });
 });

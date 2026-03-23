@@ -194,4 +194,157 @@ describe('AuthorityService', () => {
       authority.getOwnableCidFromNFT({ network: 'eip155:base', address: '0xdef', id: '2' })
     ).rejects.toThrow('No CID available');
   });
+
+  it('supports parsedData string/base64 and explicit signerAddress override', async () => {
+    const store = new InMemoryRecordStore();
+    const archive = {
+      importArchive: async () => ({
+        cid: 'cid-str',
+        chainJson: {
+          events: [
+            {
+              parsedData: JSON.stringify({
+                nft: { network: 'eip155:base', address: '0xabc', id: '1' },
+              }),
+            },
+            {},
+          ],
+        },
+      }),
+      hasPackage: async () => true,
+    };
+    const lockable = {
+      getUnlockChallenge: async () => `0x${'1'.repeat(64)}`,
+      signUnlockChallenge: async () => '0xproof',
+      isLocked: async () => true,
+      getOwner: async () => '0xowner',
+      isUnlockProofValid: async () => true,
+    };
+    const authority = new AuthorityService(
+      store as any,
+      archive as any,
+      lockable as any,
+      { now: () => new Date('2026-03-18T12:00:00.000Z') }
+    );
+
+    const bridged = await authority.bridgeOwnableArchive(Uint8Array.from([1]), '0xSigner');
+    expect(bridged.prevOwner).toBe('0xSigner');
+
+    const archiveB64 = {
+      importArchive: async () => ({
+        cid: 'cid-b64',
+        chainJson: {
+          events: [
+            {
+              parsedData: Buffer.from(
+                JSON.stringify({
+                  nft: { network: 'eip155:base', address: '0xdef', id: '2' },
+                }),
+                'utf8'
+              ).toString('base64'),
+            },
+            { signer: '0xprev' },
+          ],
+        },
+      }),
+      hasPackage: async () => true,
+    };
+    const authorityB64 = new AuthorityService(
+      store as any,
+      archiveB64 as any,
+      lockable as any
+    );
+    await expect(authorityB64.bridgeOwnableArchive(Uint8Array.from([2]))).resolves.toEqual(
+      expect.objectContaining({ cid: 'cid-b64' })
+    );
+  });
+
+  it('throws for missing nft fields and invalid previous owner derivation', async () => {
+    const authority = new AuthorityService(
+      new InMemoryRecordStore() as any,
+      {
+        importArchive: async () => ({
+          cid: 'cid-1',
+          chainJson: { events: [{ parsedData: { nft: { network: 'x', address: '0xabc' } } }] },
+        }),
+      } as any,
+      {} as any
+    );
+    await expect(authority.bridgeOwnableArchive(Uint8Array.from([1]))).rejects.toThrow(
+      'Unable to find nft info'
+    );
+
+    const authorityNoEvents = new AuthorityService(
+      new InMemoryRecordStore() as any,
+      {
+        importArchive: async () => ({
+          cid: 'cid-2',
+          chainJson: {
+            events: [
+              { parsedData: { nft: { network: 'x', address: '0xabc', id: '1' } } },
+            ],
+          },
+        }),
+      } as any,
+      {} as any
+    );
+    await expect(authorityNoEvents.bridgeOwnableArchive(Uint8Array.from([1]))).rejects.toThrow(
+      'Cannot derive previous owner'
+    );
+  });
+
+  it('throws when event chain has no events', async () => {
+    const authority = new AuthorityService(
+      new InMemoryRecordStore() as any,
+      {
+        importArchive: async () => ({
+          cid: 'cid-empty',
+          chainJson: { events: [] },
+        }),
+      } as any,
+      {} as any
+    );
+
+    await expect(authority.bridgeOwnableArchive(Uint8Array.from([1]))).rejects.toThrow(
+      'Unable to find nft info'
+    );
+  });
+
+  it('handles malformed parsedData payloads gracefully', async () => {
+    const authority = new AuthorityService(
+      new InMemoryRecordStore() as any,
+      {
+        importArchive: async () => ({
+          cid: 'cid-bad',
+          chainJson: { events: [{ parsedData: '%%%NOT_JSON%%%' }] },
+        }),
+      } as any,
+      {} as any
+    );
+
+    await expect(authority.bridgeOwnableArchive(Uint8Array.from([1]))).rejects.toThrow(
+      'Unable to find nft info'
+    );
+  });
+
+  it('throws NFT_NOT_LOCKED when getUnlockProof checks unlocked nft', async () => {
+    const store = new InMemoryRecordStore();
+    await store.put({
+      cid: 'cid-unlocked',
+      prevOwner: '0xprev',
+      nft: { network: 'eip155:base', address: '0xabc', id: '1' },
+      createdAt: new Date().toISOString(),
+    });
+    const authority = new AuthorityService(
+      store as any,
+      { hasPackage: async () => true } as any,
+      {
+        isLocked: async () => false,
+      } as any
+    );
+
+    await expect(authority.getUnlockProof('cid-unlocked')).rejects.toThrow(
+      'is not locked on'
+    );
+  });
 });

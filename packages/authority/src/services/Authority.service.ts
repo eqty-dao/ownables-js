@@ -53,6 +53,7 @@ function extractPrevOwner(chainJson: Record<string, unknown>, signerAddress?: st
 
   const events = getEvents(chainJson);
   const lastEvent = events[events.length - 1];
+  /* v8 ignore next -- unreachable from public API because bridge flow requires a genesis event for nft extraction */
   if (!lastEvent) {
     throw new AuthorityError('INVALID_CHAIN', 'Event chain has no events');
   }

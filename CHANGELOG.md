@@ -1,3 +1,10 @@
+# [0.3.0](https://github.com/eqty-dao/ownables-js/compare/v0.2.0...v0.3.0) (2026-03-24)
+
+
+### Features
+
+* **core:** add consola logger adapter utility ([c860a5d](https://github.com/eqty-dao/ownables-js/commit/c860a5d6f9c830ff35e219f90a5f161ace4a6c62))
+
 # [0.2.0](https://github.com/eqty-dao/ownables-js/compare/v0.1.0...v0.2.0) (2026-03-19)
 
 

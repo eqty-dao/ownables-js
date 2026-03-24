@@ -133,4 +133,38 @@ describe('StateStoreRecordStore', () => {
       store.getByNft({ network: 'eip155:base', address: '0xaaa', id: '404' })
     ).resolves.toBeUndefined();
   });
+
+  it('handles idempotent updates without duplicating owner index entries', async () => {
+    const state = new InMemoryStateStore();
+    const store = new StateStoreRecordStore(state);
+    const record = {
+      cid: 'cid-1',
+      prevOwner: '0xabc',
+      nft: { network: 'eip155:base', address: '0xdef', id: '1' },
+      createdAt: new Date().toISOString(),
+    };
+
+    await store.put(record);
+    await store.put(record);
+
+    await expect(store.getByNft(record.nft)).resolves.toEqual(record);
+    await expect(store.listByPrevOwner('0xabc')).resolves.toHaveLength(1);
+  });
+
+  it('filters missing records when owner index contains stale cids', async () => {
+    const state = new InMemoryStateStore();
+    const store = new StateStoreRecordStore(state);
+    await state.set('records:index:owner', '0xabc', ['missing-cid']);
+    await state.set('records:by-cid', 'cid-live', {
+      cid: 'cid-live',
+      prevOwner: '0xabc',
+      nft: { network: 'eip155:base', address: '0xdef', id: '2' },
+      createdAt: new Date().toISOString(),
+    });
+    await state.set('records:index:owner', '0xabc', ['missing-cid', 'cid-live']);
+
+    const result = await store.listByPrevOwner('0xabc');
+    expect(result).toHaveLength(1);
+    expect(result[0]?.cid).toBe('cid-live');
+  });
 });

@@ -148,4 +148,37 @@ describe('NodeSandboxOwnableRPC', () => {
       rpcInvalid.instantiate({ ownable_id: 'o', package: 'c', network_id: 1 }, { sender: 'alice', funds: [] })
     ).rejects.toThrow('Invalid ownable runtime response');
   });
+
+  it('supports __wbg_init path, mem object fallback, and empty event arrays', async () => {
+    const rpc = new NodeSandboxOwnableRPC();
+    const js = `
+      export async function __wbg_init() { return true; }
+      export async function instantiate_contract() {
+        return new Map([
+          ['state', JSON.stringify({ attributes: [] })],
+          ['mem', { state_dump: [[[9], [9]]] }],
+        ]);
+      }
+      export async function execute_contract(_msg, _info, mem) {
+        return new Map([
+          ['state', JSON.stringify({ attributes: [], data: 'ok' })],
+          ['mem', JSON.stringify({ state_dump: mem.state_dump })],
+        ]);
+      }
+    `;
+
+    await rpc.init('ownable-wbg', js, Uint8Array.from([0, 97, 115, 109]));
+    const instantiated = await rpc.instantiate(
+      { ownable_id: 'o', package: 'c', network_id: 1 },
+      { sender: 'alice', funds: [] }
+    );
+    expect(instantiated.state).toEqual([]);
+
+    const executed = await rpc.execute(
+      { ping: {} },
+      { sender: 'alice', funds: [] },
+      instantiated.state
+    );
+    expect(executed.events).toEqual([]);
+  });
 });

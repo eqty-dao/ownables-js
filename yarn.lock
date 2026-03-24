@@ -965,6 +965,14 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@ownables/builder@workspace:packages/builder":
+  version: 0.0.0-use.local
+  resolution: "@ownables/builder@workspace:packages/builder"
+  dependencies:
+    "@ownables/core": "workspace:*"
+  languageName: unknown
+  linkType: soft
+
 "@ownables/core@workspace:*, @ownables/core@workspace:packages/core":
   version: 0.0.0-use.local
   resolution: "@ownables/core@workspace:packages/core"

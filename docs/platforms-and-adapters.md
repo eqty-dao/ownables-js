@@ -54,19 +54,24 @@ Use:
 - `EQTYService` with real chain/provider integrations.
 - `MockEQTYService` for tests/dev flows that do not require chain calls.
 
-## Builder client (`@ownables/builder-client`)
+## Browser builder (`@ownables/builder`)
+
+Main export:
+
+- `prepareOwnable(input)`
+- `buildInstantiateMsg(input, packageCid, networkId, nft?)`
+- `deploy(adapter, params)`
+- `estimateCost(...)`
+
+`@ownables/builder` replaces obuilder upload-first flows with browser-first packaging + direct deploy orchestration.
+
+## Builder client (`@ownables/builder-client`, deprecated)
 
 Main export:
 
 - `BuilderService`
 
-`BuilderService` supports:
-
-- `getAddress()`
-- `getTemplateCost(templateId?)`
-- `upload(zipFile, options?)`
-
-It infers LTO network ID from chain ID (Base mainnet/testnet mappings).
+This package remains for temporary compatibility. New integrations should migrate to `@ownables/builder`.
 
 ## Integration direction
 

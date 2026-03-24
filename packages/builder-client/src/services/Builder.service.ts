@@ -8,6 +8,7 @@ import type {
 export default class BuilderService {
   public static URL: string = import.meta.env?.VITE_OBUILDER ?? "";
   public static SECRET?: string = import.meta.env?.VITE_OBUILDER_API_SECRET_KEY;
+  private static hasWarnedDeprecation = false;
 
   // Base mainnet = 8453, Base Sepolia = 84532
   private static readonly BASE_MAINNET_CHAIN_ID = 8453;
@@ -23,6 +24,13 @@ export default class BuilderService {
     private chainId: number,
     options: BuilderClientOptions = {}
   ) {
+    if (!BuilderService.hasWarnedDeprecation) {
+      (options.logger ?? console).warn(
+        "[@ownables/builder-client] Deprecated: migrate to @ownables/builder for browser-first deploy flow."
+      );
+      BuilderService.hasWarnedDeprecation = true;
+    }
+
     this.url = options.url ?? BuilderService.URL;
     this.secret = options.secret ?? BuilderService.SECRET;
     this.httpClient = options.httpClient ?? axios;

@@ -167,4 +167,26 @@ describe('StateStoreRecordStore', () => {
     expect(result).toHaveLength(1);
     expect(result[0]?.cid).toBe('cid-live');
   });
+
+  it('handles missing previous owner index and unknown owner lookups', async () => {
+    const state = new InMemoryStateStore();
+    const store = new StateStoreRecordStore(state);
+
+    await store.put({
+      cid: 'cid-1',
+      prevOwner: '0x111',
+      nft: { network: 'eip155:base', address: '0xaaa', id: '1' },
+      createdAt: new Date().toISOString(),
+    });
+    await state.delete('records:index:owner', '0x111');
+
+    await store.put({
+      cid: 'cid-1',
+      prevOwner: '0x222',
+      nft: { network: 'eip155:base', address: '0xbbb', id: '2' },
+      createdAt: new Date().toISOString(),
+    });
+
+    await expect(store.listByPrevOwner('0xnope')).resolves.toEqual([]);
+  });
 });

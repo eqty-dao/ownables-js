@@ -69,6 +69,22 @@ describe("OwnablesNotificationBuilderService", () => {
       "Issued by 0x1234 for NFT #. Review and accept to download."
     );
   });
+
+  it("falls back to '?' when nft tokenId is missing", () => {
+    const builder = new OwnablesNotificationBuilderService();
+    const envelope = builder.build({
+      ...basePayload,
+      scope: "nft",
+      nft: {
+        network: "base",
+        contract: "0x3333333333333333333333333333333333333333",
+      } as any,
+    });
+
+    expect(envelope.body).toBe(
+      "Issued by 0x1111...1111 for NFT #?. Review and accept to download."
+    );
+  });
 });
 
 describe("OwnablesNotificationValidatorService", () => {

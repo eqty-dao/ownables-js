@@ -502,6 +502,45 @@ describe('RelayService', () => {
     expect(deduped.length).toBe(1);
   });
 
+  it('clears expired in-memory auth state and emits progress hash metadata', async () => {
+    const storageRemove = vi.fn();
+    const eqty = {
+      address: '0xabc',
+      chainId: 84532,
+      signer: {},
+      sign: vi.fn().mockResolvedValue(undefined),
+      anchor: vi.fn(),
+    };
+    const relayClient = {
+      get: vi.fn().mockResolvedValue({}),
+      send: vi.fn().mockResolvedValue(undefined),
+      delete: vi.fn(),
+    };
+    const service = createService(eqty as any, {
+      relayUrl: 'https://relay.test',
+      relayClient: relayClient as any,
+      siweClient: { authenticate: vi.fn() } as any,
+      storage: {
+        getItem: () => null,
+        setItem: () => undefined,
+        removeItem: storageRemove,
+      },
+      now: () => 10_000,
+    });
+
+    (service as any).authToken = 'expired-token';
+    (service as any).authExpiry = 1_000;
+    expect(service.getAuthHeaders()).toEqual({});
+    expect(storageRemove).toHaveBeenCalledWith('relay_siwe_token:0xabc:84532');
+
+    const onProgress = vi.fn();
+    await service.sendOwnable('0xdef', new Uint8Array([1, 2, 3]), {}, false, onProgress);
+    expect(onProgress).toHaveBeenCalledWith(
+      'signMessage',
+      expect.objectContaining({ hash: expect.any(String) })
+    );
+  });
+
   it('throws when chain asset is missing while de-duping', async () => {
     const service = createService(
       { address: '0xabc', chainId: 84532, signer: {} } as any,

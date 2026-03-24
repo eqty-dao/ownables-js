@@ -191,4 +191,29 @@ describe('EventChainService', () => {
     expect(idb.deleteStore).toHaveBeenNthCalledWith(1, /^ownable:abc123(\..+)?$/);
     expect(idb.deleteStore).toHaveBeenNthCalledWith(2, /^ownable:.+/);
   });
+
+  it('continues loadAll when a chain fails to load and logs the error', async () => {
+    const idb = createStateStore();
+    await idb.setAll({
+      'ownable:ok': { chain: {}, package: 'cid-ok', created: new Date(), keywords: [] },
+      'ownable:bad': { chain: {}, package: 'cid-bad', created: new Date(), keywords: [] },
+    });
+    const service = createService(idb as any, { verifyAnchors: vi.fn() } as any);
+    vi.spyOn(service, 'load')
+      .mockRejectedValueOnce(new Error('load failed'))
+      .mockResolvedValueOnce({
+        chain: EventChain.create('0x1111111111111111111111111111111111111111', 84532),
+        package: 'cid-ok',
+        created: new Date('2026-01-01T00:00:00.000Z'),
+        keywords: [],
+        uniqueMessageHash: 'm1',
+      } as any);
+
+    const result = await service.loadAll();
+    expect(result).toHaveLength(1);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to load chain with id'),
+      expect.any(Error)
+    );
+  });
 });

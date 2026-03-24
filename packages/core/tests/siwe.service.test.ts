@@ -80,4 +80,44 @@ describe('SIWEClient', () => {
     });
     await expect(failClient.getNonce('https://relay.test')).rejects.toThrow('Failed to get nonce');
   });
+
+  it('uses fallback auth/nonce error paths and empty optional SIWE fields', async () => {
+    const signer = {
+      getAddress: vi.fn().mockResolvedValue('0xabc'),
+      signTypedData: vi.fn().mockResolvedValue('0xsig'),
+    };
+    const nonOkWithoutError = new SIWEClient('relay.test', {
+      fetchFn: vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }),
+    });
+    await expect(
+      nonOkWithoutError.authenticate(signer as any, 'https://relay.test', 84532)
+    ).resolves.toEqual(expect.objectContaining({ success: false, error: 'Authentication failed' }));
+
+    const thrownNonError = new SIWEClient('relay.test', {
+      fetchFn: vi.fn().mockRejectedValue('boom-string'),
+    });
+    await expect(
+      thrownNonError.authenticate(signer as any, 'https://relay.test', 84532)
+    ).resolves.toEqual(expect.objectContaining({ success: false, error: 'Authentication failed: boom-string' }));
+
+    const nonceThrowNonError = new SIWEClient('relay.test', {
+      fetchFn: vi.fn().mockRejectedValue('nonce-down'),
+    });
+    await expect(nonceThrowNonError.getNonce('https://relay.test')).rejects.toThrow(
+      'Failed to get nonce: nonce-down'
+    );
+
+    const msg = thrownNonError.createMessage('0xabc', 'https://relay.test/auth/verify', 84532);
+    delete (msg as any).statement;
+    delete (msg as any).resources;
+    await thrownNonError.signMessage(msg as any, signer as any);
+    expect(signer.signTypedData).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        statement: '',
+        resources: [],
+      })
+    );
+  });
 });

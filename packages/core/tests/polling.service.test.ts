@@ -186,4 +186,29 @@ describe('PollingService', () => {
       vi.useRealTimers();
     }
   });
+
+  it('handles package-less state and alternate relay message shape', async () => {
+    const localStorage = createKVStore({ messageCount: 0 });
+    const relay = {
+      url: 'https://relay.test',
+      isAvailable: vi.fn().mockResolvedValue(true),
+      ensureAuthenticated: vi.fn().mockResolvedValue(true),
+      getAuthHeaders: vi.fn().mockReturnValue({}),
+      relay: {
+        get: vi
+          .fn()
+          .mockResolvedValueOnce({ status: 304 })
+          .mockResolvedValueOnce({
+            status: 200,
+            messages: [{ hash: 'h1' }],
+            headers: {},
+          }),
+      },
+    };
+    const service = createService(relay as any, localStorage as any);
+
+    await expect(service.checkForNewHashes('0xabc')).resolves.toBe(0);
+    await expect(service.checkForNewHashes('0xabc')).resolves.toBe(1);
+    expect(localStorage.get('messageCount')).toBe(1);
+  });
 });

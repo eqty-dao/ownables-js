@@ -601,6 +601,21 @@ describe('PackageService', () => {
     );
   });
 
+  it('fails verification when stored file count is below expected', async () => {
+    const service = createService(
+      {
+        hasStore: vi.fn().mockResolvedValue(true),
+        keys: vi.fn().mockResolvedValue(['a.txt']),
+      } as any,
+      {} as any,
+      { get: () => [], set: () => undefined } as any
+    );
+
+    await expect((service as any).verifyStoreExists('store', 2)).rejects.toThrow(
+      'expected 2 files, found 1'
+    );
+  });
+
   it('throws for missing json files and missing package/chain in processPackage', async () => {
     const service = createService(
       { hasStore: vi.fn().mockResolvedValue(false) } as any,

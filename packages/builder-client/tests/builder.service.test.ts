@@ -46,6 +46,19 @@ describe('BuilderService', () => {
     expect(logger.error).toHaveBeenCalled();
   });
 
+  it('returns null when builder address response has no data payload', async () => {
+    const service = createService(84532, {
+      url: 'https://builder.test',
+      httpClient: {
+        get: vi.fn().mockResolvedValue({ data: undefined }),
+        post: vi.fn(),
+      },
+    });
+
+    await expect(service.getAddress()).resolves.toBeNull();
+    expect(logger.error).toHaveBeenCalled();
+  });
+
   it('throws when URL is missing for template cost', async () => {
     const service = createService(84532, { url: '' });
     await expect(service.getTemplateCost(1)).rejects.toThrow('Builder service URL not configured');
@@ -159,5 +172,12 @@ describe('BuilderService', () => {
     expect(formData.append).toHaveBeenCalledWith('name', 'Ownable');
     expect(formData.append).toHaveBeenCalledWith('sender', '0xabc');
     expect(formData.append).toHaveBeenCalledWith('signedTransaction', '0xsigned');
+  });
+
+  it('throws when upload is called without builder URL', async () => {
+    const service = createService(84532, { url: '' });
+    await expect(service.upload(new Uint8Array([1]))).rejects.toThrow(
+      'Builder service URL not configured'
+    );
   });
 });

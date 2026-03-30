@@ -1,4 +1,4 @@
-# ownable-static contract
+# dossier contract
 
 Shared static ownable contract for browser-first builder flows.
 

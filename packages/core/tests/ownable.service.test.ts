@@ -24,7 +24,15 @@ describe('OwnableService', () => {
     error: vi.fn(),
   };
   const createService = (...args: any[]) =>
-    new OwnableService(args[0], args[1], args[2], args[3], args[4], args[5] ?? (logger as any));
+    new OwnableService(
+      args[0],
+      args[1],
+      args[2],
+      args[3],
+      args[4],
+      args[5] ?? (logger as any),
+      args[6]
+    );
 
   const createStateStore = () => {
     const stores = new Map<string, Map<string, any>>();
@@ -98,24 +106,13 @@ describe('OwnableService', () => {
     expect(eqty.anchor).not.toHaveBeenCalled();
   });
 
-  it('handles Cancelled-like errors when clearing rpc', () => {
+  it('terminates rpc when clearing', () => {
     const service = createService({} as any, { anchoring: false } as any, {} as any, {} as any);
-
-    const rpc = {} as Record<string, unknown>;
-    Object.defineProperty(rpc, 'handler', {
-      configurable: true,
-      get() {
-        return true;
-      },
-      set() {
-        const err = new Error('cancelled');
-        err.name = 'Cancelled';
-        throw err;
-      },
-    });
+    const rpc = { terminate: vi.fn() } as any;
 
     (service as any)._rpc.set('id-1', rpc);
-    expect(() => service.clearRpc('id-1')).not.toThrow();
+    service.clearRpc('id-1');
+    expect(rpc.terminate).toHaveBeenCalledTimes(1);
   });
 
   it('returns undefined from submitAnchors when anchoring is disabled', async () => {
@@ -347,24 +344,31 @@ describe('OwnableService', () => {
   });
 
   it('initializes rpc with package assets and persists initial store', async () => {
+    const rpc = {
+      initialize: vi.fn().mockResolvedValue(undefined),
+      terminate: vi.fn(),
+      setWidgetWindow: vi.fn(),
+    };
+    const runtimeRpc = { create: vi.fn().mockReturnValue(rpc) };
     const service = createService(
       {} as any,
       {} as any,
       {} as any,
       {
-        getAssetAsText: vi.fn().mockResolvedValue('module.exports = {}'),
         getAsset: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
       } as any,
-      { getWorkerPrelude: () => '/*prelude*/' }
+      { getWorkerSource: () => '/*worker*/' } as any,
+      undefined as any,
+      runtimeRpc as any
     );
     const chain = { id: 'chain-init', events: [] } as any;
-    const rpc = { init: vi.fn().mockResolvedValue(undefined) } as any;
     const applySpy = vi.spyOn(service, 'apply').mockResolvedValue([['k', 'v']] as any);
     const initStoreSpy = vi.spyOn(service, 'initStore').mockResolvedValue(undefined as any);
 
-    await service.init(chain, 'cid-1', rpc, 'msg-1');
+    await service.init(chain, 'cid-1', 'msg-1');
 
-    expect(rpc.init).toHaveBeenCalledTimes(1);
+    expect(runtimeRpc.create).toHaveBeenCalledWith('chain-init');
+    expect(rpc.initialize).toHaveBeenCalledTimes(1);
     expect(applySpy).toHaveBeenCalledWith(chain, []);
     expect(initStoreSpy).toHaveBeenCalledWith(chain, 'cid-1', 'msg-1', [['k', 'v']]);
   });
@@ -493,7 +497,7 @@ describe('OwnableService', () => {
     expect(zip.file).toHaveBeenCalledWith('chain.json', JSON.stringify(chain.toJSON()));
   });
 
-  it('covers default runtime source and clearRpc warning/noop branches', () => {
+  it('covers default runtime source and clearRpc noop branch', () => {
     const localLogger = {
       debug: vi.fn(),
       info: vi.fn(),
@@ -509,21 +513,8 @@ describe('OwnableService', () => {
       localLogger as any
     );
 
-    expect((service as any).runtimeSource.getWorkerPrelude()).toBe('');
+    expect((service as any).runtimeSource.getWorkerSource()).toContain('WASM instantiated successfully');
     expect(() => service.clearRpc('missing')).not.toThrow();
-
-    const rpc = {} as Record<string, unknown>;
-    Object.defineProperty(rpc, 'handler', {
-      configurable: false,
-      value: true,
-      writable: false,
-    });
-    (service as any)._rpc.set('id-warn', rpc);
-    service.clearRpc('id-warn');
-    expect(localLogger.warn).toHaveBeenCalledWith(
-      'Unexpected error clearing RPC:',
-      expect.any(Error)
-    );
   });
 
   it('creates with anchoring and returns tx hash when anchors are submitted', async () => {
@@ -558,12 +549,12 @@ describe('OwnableService', () => {
   });
 
   it('initializes with existing rpc and exercises file reader callback path', async () => {
+    const runtimeRpc = { create: vi.fn() };
     const service = createService(
       createStateStore() as any,
       {} as any,
       {} as any,
       {
-        getAssetAsText: vi.fn().mockResolvedValue('module.exports = {}'),
         getAsset: vi.fn().mockImplementation(async (_cid: string, _name: string, read: any) => {
           const reader: any = {
             result: null,
@@ -574,16 +565,21 @@ describe('OwnableService', () => {
           read(reader, Uint8Array.from([1, 2, 3]));
           return reader.result;
         }),
-      } as any
+      } as any,
+      undefined as any,
+      undefined as any,
+      runtimeRpc as any
     );
     const chain = { id: 'chain-init-2', events: [] } as any;
-    const rpc = { init: vi.fn().mockResolvedValue(undefined) } as any;
-    (service as any)._rpc.set(chain.id, {} as any);
+    (service as any)._rpc.set(chain.id, {
+      terminate: vi.fn(),
+      setWidgetWindow: vi.fn(),
+    } as any);
     vi.spyOn(service, 'apply').mockResolvedValue([] as any);
     vi.spyOn(service, 'initStore').mockResolvedValue(undefined as any);
 
-    await service.init(chain, 'cid-1', rpc);
-    expect(rpc.init).toHaveBeenCalledTimes(1);
+    await service.init(chain, 'cid-1');
+    expect(runtimeRpc.create).not.toHaveBeenCalled();
   });
 
   it('manages snapshots: create, read latest, list, and delete', async () => {

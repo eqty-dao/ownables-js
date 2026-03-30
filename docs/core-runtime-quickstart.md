@@ -15,8 +15,8 @@ From `@ownables/core/interfaces/core`:
 
 - `AnchorProvider`: wallet/signer + anchoring methods.
 - `StateStore`: persistent key-value store for Ownable chain state.
-- `PackageAssetIO`: package metadata + asset loading (`ownable.js`, `ownable_bg.wasm`, etc.).
-- `RuntimeSourceProvider` (optional): worker prelude injection.
+- `PackageAssetIO`: package metadata + asset loading (`ownable_bg.wasm`, package manifest/schema assets, etc.).
+- `RuntimeSourceProvider` (optional): runtime-owned worker source provider.
 
 ## Minimal wiring example
 

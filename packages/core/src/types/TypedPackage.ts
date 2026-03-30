@@ -11,6 +11,9 @@ export interface TypedPackage extends TypedPackageCapabilities {
   title: string;
   detail?: unknown;
   name: string;
+  version?: string;
+  ownablesAbi?: string;
+  wireFormat?: string;
   description?: string;
   cid: string;
   chain?: unknown;

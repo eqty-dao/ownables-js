@@ -8,6 +8,7 @@
     "dist"
   ],
   "dependencies": {
+    "cbor-x": "^1.6.0",
     "eqty-core": "^1.0.2",
     "jszip": "^3.10.1"
   },

@@ -1,159 +1,195 @@
-import vm from 'node:vm';
-import { transformSync } from '@babel/core';
-// @ts-expect-error - package has no shipped types
-import removeImportExport from 'babel-plugin-remove-import-export';
+import { decode, encode } from 'cbor-x';
 import type { CosmWasmEvent, CosmWasmMessageInfo, OwnableRPC, StateDump } from '@ownables/core';
 import type TypedDict from '@ownables/core/types/TypedDict';
-import transformImportMetaUrl from '../babel/transformImportMetaUrl';
-import type { NodeSandboxOptions } from '../types/PlatformNode';
 
-type SandboxResult = Map<string, unknown>;
-
-type SandboxDict = {
-  [key: string]: unknown;
-  mem: { state_dump: StateDump };
-  result?: unknown;
+type AbiExports = WebAssembly.Exports & {
+  memory: WebAssembly.Memory;
+  ownable_alloc: (len: number) => number;
+  ownable_free: (ptr: number, len: number) => void;
+  ownable_instantiate: (ptr: number, len: number) => bigint | number;
+  ownable_execute: (ptr: number, len: number) => bigint | number;
+  ownable_query: (ptr: number, len: number) => bigint | number;
+  ownable_external_event: (ptr: number, len: number) => bigint | number;
 };
 
-function attributesToDict(attributes: Array<{ key: string; value: unknown }>): TypedDict {
-  return Object.fromEntries(attributes.map(({ key, value }) => [key, value]));
+interface HostAbiEnvelope {
+  success: boolean;
+  payload?: Uint8Array;
+  error_code?: string;
+  error_message?: string;
 }
 
-function eventsToDict(
-  events: Array<{ type: string; attributes: Array<{ key: string; value: unknown }> }>
-): CosmWasmEvent[] {
-  return events.map(({ type, attributes }) => ({
-    type,
-    attributes: attributesToDict(attributes),
-  }));
+interface WorkerPayload {
+  result: Uint8Array;
+  mem?: { state_dump: StateDump };
 }
 
-function decodeBase64Json(encoded: string): unknown {
-  const json = Buffer.from(encoded, 'base64').toString('utf8');
-  return JSON.parse(json);
+interface AbiResponse {
+  attributes: Array<{ key: string; value: string }>;
+  events?: Array<{ type: string; attributes: Array<{ key: string; value: string }> }>;
+  data?: string;
 }
 
 export default class NodeSandboxOwnableRPC implements OwnableRPC {
   private ownableId = '';
-  private sandbox?: vm.Context;
-  private stateDump: StateDump = [];
-  private readonly filename: string;
+  private exportsRef: AbiExports | null = null;
+  private memory: WebAssembly.Memory | null = null;
+  private widgetWindow: unknown | null = null;
+  private _queue: Promise<any> = Promise.resolve();
 
-  constructor(options: NodeSandboxOptions = {}) {
-    this.filename = options.filename ?? '/ownable.js';
+  constructor(id = '') {
+    this.ownableId = id;
   }
 
-  private ensureSandbox(): vm.Context {
-    if (!this.sandbox) {
+  private unpackPtrLen(packed: bigint | number): { ptr: number; len: number } {
+    const value = typeof packed === 'bigint' ? packed : BigInt(packed);
+    const ptr = Number(value & 0xffffffffn);
+    const len = Number((value >> 32n) & 0xffffffffn);
+    return { ptr, len };
+  }
+
+  private ensureInitialized(): AbiExports {
+    if (!this.exportsRef || !this.memory) {
       throw new Error('Ownable runtime not initialized');
     }
-    return this.sandbox;
+    return this.exportsRef;
   }
 
-  private runInSandbox(call: string, context: Record<string, unknown>): unknown {
-    const sandbox = this.ensureSandbox() as SandboxDict;
+  async initialize(_js: string, wasm: Uint8Array): Promise<void> {
+    const instance = (await WebAssembly.instantiate(wasm, {})) as WebAssembly.Instance;
+    const exportsRef = instance.exports as AbiExports;
 
-    for (const [key, value] of Object.entries(context)) {
-      sandbox[key] = value;
+    if (
+      !exportsRef.memory ||
+      typeof exportsRef.ownable_alloc !== 'function' ||
+      typeof exportsRef.ownable_free !== 'function' ||
+      typeof exportsRef.ownable_instantiate !== 'function' ||
+      typeof exportsRef.ownable_execute !== 'function' ||
+      typeof exportsRef.ownable_query !== 'function' ||
+      typeof exportsRef.ownable_external_event !== 'function'
+    ) {
+      throw new Error('Invalid ownable runtime exports');
     }
 
+    this.exportsRef = exportsRef;
+    this.memory = exportsRef.memory;
+  }
+
+  setWidgetWindow(win: unknown | null): void {
+    this.widgetWindow = win;
+  }
+
+  terminate(): void {
+    this.exportsRef = null;
+    this.memory = null;
+    this.widgetWindow = null;
+  }
+
+  private invoke(type: string, inputBytes: Uint8Array): Uint8Array {
+    const exportsRef = this.ensureInitialized();
+    const memory = this.memory as WebAssembly.Memory;
+
+    const len = inputBytes.length >>> 0;
+    const inPtr = exportsRef.ownable_alloc(len);
+    if (len > 0) new Uint8Array(memory.buffer, inPtr, len).set(inputBytes);
+
+    let packed: bigint | number;
     try {
-      vm.runInContext(`result = ${call}`, sandbox);
-      return sandbox.result;
-    } finally {
-      for (const key of Object.keys(context)) {
-        delete sandbox[key];
+      switch (type) {
+        case 'instantiate':
+          packed = exportsRef.ownable_instantiate(inPtr, len);
+          break;
+        case 'execute':
+          packed = exportsRef.ownable_execute(inPtr, len);
+          break;
+        case 'query':
+          packed = exportsRef.ownable_query(inPtr, len);
+          break;
+        case 'external_event':
+          packed = exportsRef.ownable_external_event(inPtr, len);
+          break;
+        default:
+          throw new Error(`unknown message type ${type}`);
       }
-      delete sandbox.result;
-    }
-  }
-
-  private normalizeModule(js: string): string {
-    const output = transformSync(js, {
-      filename: this.filename,
-      babelrc: false,
-      configFile: false,
-      plugins: [removeImportExport, transformImportMetaUrl],
-    });
-
-    if (!output?.code) {
-      throw new Error('Unable to transform ownable module source');
+    } finally {
+      exportsRef.ownable_free(inPtr, len);
     }
 
-    return output.code;
+    const { ptr: outPtr, len: outLen } = this.unpackPtrLen(packed);
+    const output =
+      outLen > 0
+        ? new Uint8Array(new Uint8Array(memory.buffer, outPtr, outLen))
+        : new Uint8Array();
+
+    if (outLen > 0) exportsRef.ownable_free(outPtr, outLen);
+    return output;
   }
 
-  private syncState(result: SandboxResult): StateDump {
-    const memJson = result.get('mem');
-    const mem = typeof memJson === 'string' ? JSON.parse(memJson) : { state_dump: this.stateDump };
-    this.stateDump = mem.state_dump;
-    return this.stateDump;
-  }
+  private decodeEnvelope(output: Uint8Array): WorkerPayload {
+    const envelope = decode(output) as HostAbiEnvelope;
 
-  private parseStateResult(result: SandboxResult): unknown {
-    const responseJson = result.has('state') ? result.get('state') : result.get('result');
-    if (typeof responseJson !== 'string') {
-      throw new Error('Invalid ownable runtime response');
+    if (!envelope.success) {
+      throw new Error(
+        `Ownable ABI call failed: ${envelope.error_code || 'UNKNOWN'} ${envelope.error_message || ''}`.trim()
+      );
     }
-    return JSON.parse(responseJson);
+
+    const payload = envelope.payload ?? new Uint8Array();
+    return decode(payload) as WorkerPayload;
   }
 
-  async init(id: string, js: string, wasm: Uint8Array): Promise<unknown> {
-    this.ownableId = id;
-    this.stateDump = [];
-
-    const sandboxObject: SandboxDict = {
-      TextEncoder,
-      TextDecoder,
-      WebAssembly,
-      Buffer,
-      console,
-      setTimeout,
-      clearTimeout,
-      URL,
-      __filename: this.filename,
-      mem: { state_dump: [] },
+  private workerCall(
+    type: string,
+    request: TypedDict,
+    state?: StateDump
+  ): Promise<{ response: Uint8Array; state: StateDump }> {
+    const call = async () => {
+      const input = encode(request) as Uint8Array;
+      const output = this.invoke(type, input);
+      const decoded = this.decodeEnvelope(output);
+      return {
+        response: decoded.result,
+        state: decoded.mem?.state_dump ?? state ?? [],
+      };
     };
 
-    this.sandbox = vm.createContext(sandboxObject);
-    const normalized = this.normalizeModule(js);
-    vm.runInContext(normalized, this.sandbox);
+    const next = this._queue.then(call, call);
+    this._queue = next.catch(() => {});
+    return next;
+  }
 
-    const initFn = this.runInSandbox(
-      '(typeof __wbg_init !== "undefined" ? __wbg_init : (typeof init !== "undefined" ? init : undefined))',
-      {}
-    );
-
-    if (typeof initFn !== 'function') {
-      throw new Error('Unable to locate wasm init function in ownable module');
-    }
-
-    return await (initFn as (bytes: Uint8Array) => Promise<unknown>)(wasm);
+  private attributesToDict(attributes: Array<{ key: string; value: string }>): TypedDict<string> {
+    return Object.fromEntries(attributes.map((a) => [a.key, a.value]));
   }
 
   async instantiate(
     msg: TypedDict,
     info: CosmWasmMessageInfo
   ): Promise<{ attributes: TypedDict<string>; state: StateDump }> {
-    const payload: TypedDict = { ...msg };
-    if (!('nft' in payload)) payload.nft = undefined;
-    if (!('ownable_type' in payload)) payload.ownable_type = undefined;
-    if (typeof payload.network_id === 'string') {
-      payload.network_id = payload.network_id.charCodeAt(0);
-    }
-
-    const result = (await this.runInSandbox('instantiate_contract(msg, info)', {
-      msg: payload,
-      info,
-    })) as SandboxResult;
-
-    const response = this.parseStateResult(result) as {
-      attributes: Array<{ key: string; value: unknown }>;
-    };
-    const state = this.syncState(result);
-
+    const { response, state } = await this.workerCall('instantiate', { msg, info });
+    const parsed = decode(response) as AbiResponse;
     return {
-      attributes: attributesToDict(response.attributes),
+      attributes: this.attributesToDict(parsed.attributes),
+      state,
+    };
+  }
+
+  private toExecuteResult(
+    response: AbiResponse,
+    state: StateDump
+  ): {
+    attributes: TypedDict<string>;
+    events: Array<CosmWasmEvent>;
+    data: string;
+    state: StateDump;
+  } {
+    return {
+      attributes: this.attributesToDict(response.attributes),
+      events: (response.events || []).map((e) => ({
+        type: e.type,
+        attributes: this.attributesToDict(e.attributes),
+      })),
+      data: response.data ?? '',
       state,
     };
   }
@@ -168,25 +204,12 @@ export default class NodeSandboxOwnableRPC implements OwnableRPC {
     data: string;
     state: StateDump;
   }> {
-    const result = (await this.runInSandbox('execute_contract(msg, info, mem)', {
-      msg,
-      info,
-      mem: { state_dump: state },
-    })) as SandboxResult;
-
-    const response = this.parseStateResult(result) as {
-      attributes: Array<{ key: string; value: unknown }>;
-      events?: Array<{ type: string; attributes: Array<{ key: string; value: unknown }> }>;
-      data: string;
-    };
-    const nextState = this.syncState(result);
-
-    return {
-      attributes: attributesToDict(response.attributes),
-      events: eventsToDict(response.events || []),
-      data: response.data,
-      state: nextState,
-    };
+    const { response, state: newState } = await this.workerCall(
+      'execute',
+      { msg, info, mem: { state_dump: state } },
+      state
+    );
+    return this.toExecuteResult(decode(response) as AbiResponse, newState);
   }
 
   async externalEvent(
@@ -199,47 +222,25 @@ export default class NodeSandboxOwnableRPC implements OwnableRPC {
     data: string;
     state: StateDump;
   }> {
-    const result = (await this.runInSandbox(
-      'register_external_event(msg.msg, info, ownable_id, mem)',
+    const { response, state: newState } = await this.workerCall(
+      'external_event',
       {
-        msg,
+        msg: msg.msg,
         info,
         ownable_id: this.ownableId,
         mem: { state_dump: state },
-      }
-    )) as SandboxResult;
-
-    const response = this.parseStateResult(result) as {
-      attributes: Array<{ key: string; value: unknown }>;
-      events?: Array<{ type: string; attributes: Array<{ key: string; value: unknown }> }>;
-      data: string;
-    };
-    const nextState = this.syncState(result);
-
-    return {
-      attributes: attributesToDict(response.attributes),
-      events: eventsToDict(response.events || []),
-      data: response.data,
-      state: nextState,
-    };
-  }
-
-  private async queryRaw(msg: TypedDict, state: StateDump): Promise<string> {
-    const result = (await this.runInSandbox('query_contract_state(msg, mem)', {
-      msg,
-      mem: { state_dump: state },
-    })) as SandboxResult;
-
-    const parsed = this.parseStateResult(result) as string;
-    return parsed;
+      },
+      state
+    );
+    return this.toExecuteResult(decode(response) as AbiResponse, newState);
   }
 
   async query(msg: TypedDict, state: StateDump): Promise<unknown> {
-    const encoded = await this.queryRaw(msg, state);
-    return decodeBase64Json(encoded);
+    const { response } = await this.workerCall('query', { msg, mem: { state_dump: state } }, state);
+    return JSON.parse(Buffer.from(response).toString('utf8'));
   }
 
   async refresh(_state: StateDump): Promise<void> {
-    // Node runtime has no iframe/widget to refresh.
+    // Node runtime has no widget window refresh target.
   }
 }

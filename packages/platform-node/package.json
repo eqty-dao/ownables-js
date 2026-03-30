@@ -12,6 +12,7 @@
     "@ownables/core": "workspace:*",
     "any-bucket": "^0.1.6",
     "babel-plugin-remove-import-export": "^1.1.1",
+    "cbor-x": "^1.6.0",
     "jszip": "^3.10.1"
   },
   "scripts": {

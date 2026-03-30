@@ -1,5 +1,6 @@
 import type { Event, Message } from 'eqty-core';
 import type { TypedPackage } from '../types/TypedPackage';
+import type { OwnableRPC } from '../types/OwnableRuntime';
 
 export type LogProgress = (step: string, meta?: Record<string, unknown>) => void;
 
@@ -59,5 +60,9 @@ export interface PackageAssetIO {
 }
 
 export interface RuntimeSourceProvider {
-  getWorkerPrelude(): string;
+  getWorkerSource(): string;
+}
+
+export interface RuntimeRPCProvider {
+  create(id: string): OwnableRPC;
 }

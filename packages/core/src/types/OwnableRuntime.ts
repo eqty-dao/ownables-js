@@ -13,7 +13,7 @@ export interface CosmWasmEvent {
 }
 
 export interface OwnableRPC {
-  init: (id: string, js: string, wasm: Uint8Array) => Promise<any>;
+  initialize: (js: string, wasm: Uint8Array) => Promise<void>;
   instantiate: (
     msg: TypedDict,
     info: CosmWasmMessageInfo
@@ -40,6 +40,8 @@ export interface OwnableRPC {
   }>;
   query: (msg: TypedDict, state: StateDump) => Promise<any>;
   refresh: (state: StateDump) => Promise<void>;
+  terminate: () => void;
+  setWidgetWindow: (win: unknown | null) => void;
 }
 
 export interface StateSnapshot {

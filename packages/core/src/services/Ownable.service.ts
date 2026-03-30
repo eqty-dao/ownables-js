@@ -3,6 +3,7 @@ import type TypedDict from "../types/TypedDict";
 import type {
   AnchorProvider,
   PackageAssetIO,
+  RuntimeRPCProvider,
   RuntimeSourceProvider,
   StateStore,
   LogProgress,
@@ -20,6 +21,8 @@ import type {
 import EventChainService from "./EventChain.service";
 import { withProgress } from "../progress";
 import type { LoggerLike } from "../logger";
+import WorkerRPC from "./WorkerRPC.service";
+import { DEFAULT_WORKER_SOURCE } from "./workerSource";
 
 export default class OwnableService {
   private readonly SNAPSHOT_INTERVAL = 50;
@@ -30,9 +33,12 @@ export default class OwnableService {
     private readonly eqty: AnchorProvider,
     private readonly packages: PackageAssetIO,
     private readonly runtimeSource: RuntimeSourceProvider = {
-      getWorkerPrelude: () => "",
+      getWorkerSource: () => DEFAULT_WORKER_SOURCE,
     },
-    private readonly logger: LoggerLike = console
+    private readonly logger: LoggerLike = console,
+    private readonly runtimeRpc: RuntimeRPCProvider = {
+      create: (id: string) => new WorkerRPC(id),
+    }
   ) {}
 
   private readonly _rpc = new Map<string, OwnableRPC>();
@@ -66,14 +72,28 @@ export default class OwnableService {
   clearRpc(id: string) {
     const rpc = this._rpc.get(id);
     if (!rpc) return;
-
-    try {
-      delete (rpc as any).handler;
-    } catch (e) {
-      if ((e as Error)?.name === "Cancelled") return;
-      this.logger.warn("Unexpected error clearing RPC:", e);
-    }
+    rpc.terminate();
     this._rpc.delete(id);
+  }
+
+  setWidgetWindow(id: string, win: unknown | null): void {
+    const rpc = this._rpc.get(id);
+    if (rpc) rpc.setWidgetWindow(win);
+  }
+
+  async initWorker(id: string, cid: string): Promise<void> {
+    if (this._rpc.has(id)) return;
+
+    const js = this.runtimeSource.getWorkerSource();
+    const wasm = (await this.packages.getAsset(
+      cid,
+      "ownable_bg.wasm",
+      (fr, file) => (fr as FileReader).readAsArrayBuffer(file as Blob | File)
+    )) as ArrayBuffer;
+
+    const rpc = this.runtimeRpc.create(id);
+    await rpc.initialize(js, new Uint8Array(wasm));
+    this._rpc.set(id, rpc);
   }
 
   async create(
@@ -119,24 +139,11 @@ export default class OwnableService {
   async init(
     chain: any,
     cid: string,
-    rpc: OwnableRPC,
     uniqueMessageHash?: string
   ): Promise<void> {
-    if (this._rpc.has(chain.id)) {
-      this.clearRpc(chain.id);
+    if (!this._rpc.has(chain.id)) {
+      await this.initWorker(chain.id, cid);
     }
-
-    this._rpc.set(chain.id, rpc);
-    const moduleJs = await this.packages.getAssetAsText(cid, "ownable.js");
-    const js = this.runtimeSource.getWorkerPrelude() + moduleJs;
-
-    const wasm = (await this.packages.getAsset(
-      cid,
-      "ownable_bg.wasm",
-      (fr, file) =>
-        (fr as FileReader).readAsArrayBuffer(file as Blob | File)
-    )) as ArrayBuffer;
-    await rpc.init(chain.id, js, new Uint8Array(wasm));
 
     const stateDump = await this.apply(chain, []);
     await this.initStore(chain, cid, uniqueMessageHash, stateDump);

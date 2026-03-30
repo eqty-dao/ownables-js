@@ -307,6 +307,13 @@ describe('PackageService', () => {
       'missing package.json'
     );
 
+    expect(() =>
+      (service as any).validatePackageFormat(
+        { ownablesAbi: undefined, wireFormat: undefined },
+        [new File(['wasm'], 'ownable_bg.wasm')]
+      )
+    ).toThrow('expected package.json ownablesAbi to be "1"');
+
     vi.spyOn(service as any, 'getPackageJson')
       .mockResolvedValueOnce({ oneOf: [{ required: ['get_metadata'] }] })
       .mockResolvedValueOnce({ oneOf: [{ required: [] }] });
@@ -504,6 +511,9 @@ describe('PackageService', () => {
     const updated = (service as any).storePackageInfo(
       'Pkg',
       'pkg',
+      '1.0.0',
+      '1',
+      'cbor',
       'desc',
       'cid-1',
       ['new'],

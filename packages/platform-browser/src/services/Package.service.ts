@@ -87,6 +87,9 @@ export default class PackageService {
   private storePackageInfo(
     title: string,
     name: string,
+    version: string | undefined,
+    ownablesAbi: string | undefined,
+    wireFormat: string | undefined,
     description: string | undefined,
     cid: string,
     keywords: string[],
@@ -106,7 +109,7 @@ export default class PackageService {
     );
 
     if (!pkg) {
-      const version = uniqueMessageHash
+      const versionEntry = uniqueMessageHash
         ? { date: new Date(), cid, uniqueMessageHash }
         : { date: new Date(), cid };
       // Create new package entry if not found
@@ -116,10 +119,13 @@ export default class PackageService {
         cid,
         keywords,
         ...capabilities,
+        ...(version ? { version } : {}),
+        ...(ownablesAbi ? { ownablesAbi } : {}),
+        ...(wireFormat ? { wireFormat } : {}),
         ...(description ? { description } : {}),
         ...(isNotLocal ? { isNotLocal } : {}),
         ...(uniqueMessageHash ? { uniqueMessageHash } : {}),
-        versions: [version],
+        versions: [versionEntry],
       };
       pkg = createdPkg;
       packages.push(createdPkg);
@@ -127,14 +133,17 @@ export default class PackageService {
       // Update package and add new version info if it's an update
       Object.assign(pkg, {
         keywords,
+        ...(version ? { version } : {}),
+        ...(ownablesAbi ? { ownablesAbi } : {}),
+        ...(wireFormat ? { wireFormat } : {}),
         ...(description ? { description } : {}),
         ...(uniqueMessageHash ? { uniqueMessageHash } : {}),
         ...capabilities,
       });
-      const version = uniqueMessageHash
+      const versionEntry = uniqueMessageHash
         ? { date: new Date(), cid, uniqueMessageHash }
         : { date: new Date(), cid };
-      pkg.versions.push(version);
+      pkg.versions.push(versionEntry);
     }
 
     // Save all packages back to LocalStorage under the single "packages" key
@@ -319,6 +328,26 @@ export default class PackageService {
     };
   }
 
+  private validatePackageFormat(packageJson: TypedDict, files: File[]): void {
+    const hasWasm = files.some((file) => file.name === "ownable_bg.wasm");
+    if (!hasWasm) return;
+
+    const ownablesAbi = packageJson.ownablesAbi;
+    const wireFormat = packageJson.wireFormat;
+
+    if (ownablesAbi !== "1") {
+      throw new Error(
+        `Invalid package: expected package.json ownablesAbi to be \"1\", got \"${String(ownablesAbi)}\"`
+      );
+    }
+
+    if (wireFormat !== "cbor") {
+      throw new Error(
+        `Invalid package: expected package.json wireFormat to be \"cbor\", got \"${String(wireFormat)}\"`
+      );
+    }
+  }
+
   async processPackage(
     message: any,
     uniqueMessageHash?: string,
@@ -364,7 +393,11 @@ export default class PackageService {
       .replace(/[-_]+/, " ")
       .replace(/\b\w/, (c: string) => c.toUpperCase());
     const description = packageJson.description;
+    const version = packageJson.version;
+    const ownablesAbi = packageJson.ownablesAbi;
+    const wireFormat = packageJson.wireFormat;
     const keywords: string[] = packageJson.keywords || [];
+    this.validatePackageFormat(packageJson, files);
     const capabilities = await this.getCapabilities(files);
 
     //Store assets
@@ -374,6 +407,9 @@ export default class PackageService {
     const pkg = this.storePackageInfo(
       title,
       name,
+      version,
+      ownablesAbi,
+      wireFormat,
       description,
       cid,
       keywords,

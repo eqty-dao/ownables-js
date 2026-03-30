@@ -986,11 +986,11 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@ownables/notify-client@workspace:packages/notify-client"
   dependencies:
-    "@ownables/notify-core": "npm:0.2.0"
+    "@ownables/notify-core": "npm:0.3.0"
   languageName: unknown
   linkType: soft
 
-"@ownables/notify-core@npm:0.2.0, @ownables/notify-core@workspace:packages/notify-core":
+"@ownables/notify-core@npm:0.3.0, @ownables/notify-core@workspace:packages/notify-core":
   version: 0.0.0-use.local
   resolution: "@ownables/notify-core@workspace:packages/notify-core"
   languageName: unknown
@@ -1000,7 +1000,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@ownables/notify-publisher@workspace:packages/notify-publisher"
   dependencies:
-    "@ownables/notify-core": "npm:0.2.0"
+    "@ownables/notify-core": "npm:0.3.0"
   languageName: unknown
   linkType: soft
 

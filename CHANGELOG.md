@@ -1,3 +1,10 @@
+# [0.4.0](https://github.com/eqty-dao/ownables-js/compare/v0.3.0...v0.4.0) (2026-03-30)
+
+
+### Features
+
+* add browser builder package and rebase ownable-static contract ([993b1e1](https://github.com/eqty-dao/ownables-js/commit/993b1e12ccde727702377cfc69859f80b376b084))
+
 # [0.3.0](https://github.com/eqty-dao/ownables-js/compare/v0.2.0...v0.3.0) (2026-03-24)
 
 

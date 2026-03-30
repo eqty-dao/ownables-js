@@ -14,6 +14,9 @@ export default defineConfig({
       '@ownables/adapter-ethers': fileURLToPath(
         new URL('./packages/adapter-ethers/src/index.ts', import.meta.url)
       ),
+      '@ownables/builder': fileURLToPath(
+        new URL('./packages/builder/src/index.ts', import.meta.url)
+      ),
       '@ownables/builder-client': fileURLToPath(
         new URL('./packages/builder-client/src/index.ts', import.meta.url)
       ),

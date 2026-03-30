@@ -8,3 +8,8 @@ node_modules
 dist
 coverage
 .DS_Store
+
+# Generated contract build artifacts
+contracts/ownable-static/target/
+contracts/ownable-static/schema/
+contracts/ownable-static/artifacts/*.wasm

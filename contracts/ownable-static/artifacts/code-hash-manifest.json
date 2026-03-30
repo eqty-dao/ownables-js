@@ -1,0 +1,7 @@
+{
+  "contractName": "ownable-static",
+  "artifact": "ownable-static.wasm",
+  "algorithm": "sha256",
+  "codeHash": "0x90b20cd27bdd04a455773339358a9aafca4bc72864ce79d96c651a1cc0f731d1",
+  "generatedAt": "2026-03-24T13:36:47.447Z"
+}

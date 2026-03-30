@@ -10,6 +10,10 @@ coverage
 .DS_Store
 
 # Generated contract build artifacts
+ownables/*.zip
+ownables/Cargo.lock
+ownables/target/
 ownables/*/target/
+ownables/*/pkg/
 ownables/*/schema/
 ownables/*/artifacts/*.wasm

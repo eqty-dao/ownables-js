@@ -18,15 +18,14 @@ const getMimeType = (filename: string): string | null | undefined =>
  * Prefer hub upload/download with WalletConnect Notify packages.
  */
 export class RelayService {
-  public static readonly URL =
-    import.meta.env?.VITE_RELAY || import.meta.env?.VITE_LOCAL;
   private static readonly STORAGE_PREFIX = "relay_siwe_token:";
+  private static didWarnDeprecated = false;
 
+  public readonly url: string;
   public readonly relay: Relay;
   private readonly siweClient: SIWEClient;
   private readonly storage: Pick<Storage, "getItem" | "setItem" | "removeItem">;
   private readonly now: () => number;
-  private readonly relayUrl: string;
   private readonly logger: Pick<Console, "debug" | "info" | "warn" | "error">;
   private authToken: string | null = null;
   private authExpiry: number | null = null;
@@ -43,8 +42,15 @@ export class RelayService {
       logger?: Pick<Console, "debug" | "info" | "warn" | "error">;
     } = {}
   ) {
-    this.relayUrl = options.relayUrl ?? RelayService.URL ?? "";
-    this.relay = options.relayClient ?? new Relay(`${this.relayUrl}`);
+    if (!RelayService.didWarnDeprecated) {
+      RelayService.didWarnDeprecated = true;
+      (options.logger ?? console).warn(
+        "[@ownables/platform-browser] RelayService is deprecated and will be removed in a future major version. Prefer hub + notify flows."
+      );
+    }
+
+    this.url = options.relayUrl ?? "";
+    this.relay = options.relayClient ?? new Relay(`${this.url}`);
     this.siweClient = options.siweClient ?? new SIWEClient();
     this.storage = options.storage ?? localStorage;
     this.now = options.now ?? Date.now;
@@ -90,10 +96,17 @@ export class RelayService {
   }
 
   async authenticate(): Promise<SIWEAuthResult> {
+    if (!this.url) {
+      return {
+        success: false,
+        error: "Relay URL is not configured",
+      };
+    }
+
     try {
       const result = await this.siweClient.authenticate(
         this.eqty.signer,
-        this.relayUrl || "http://localhost:8000",
+        this.url,
         this.eqty.chainId
       );
 
@@ -280,7 +293,7 @@ export class RelayService {
   }
 
   async isAvailable(): Promise<boolean> {
-    if (!this.relayUrl) return false;
+    if (!this.url) return false;
 
     try {
       await this.relay.get("");

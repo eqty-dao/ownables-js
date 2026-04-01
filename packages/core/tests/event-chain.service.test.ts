@@ -135,6 +135,7 @@ describe('EventChainService', () => {
       [`ownable:${chainA.id}`]: {
         chain: chainA.toJSON(),
         package: 'cid-a',
+        isConsumed: true,
         created: new Date('2026-01-01T00:00:00.000Z'),
         keywords: ['a'],
         latestHash: chainA.latestHash.hex,
@@ -156,6 +157,7 @@ describe('EventChainService', () => {
 
     expect(list).toHaveLength(2);
     expect(list[0]?.package).toBe('cid-a');
+    expect(list[0]?.isConsumed).toBe(true);
     expect(list[1]?.package).toBe('cid-b');
   });
 

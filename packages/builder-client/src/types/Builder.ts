@@ -16,7 +16,14 @@ export interface BuilderHttpClient {
 
 export interface BuilderClientOptions {
   url?: string;
+  apiKey?: string;
+  /**
+   * @deprecated use apiKey
+   */
   secret?: string;
+  serverWalletsEndpoint?: string;
+  uploadEndpoint?: string;
+  uploadNetworkQueryKey?: string;
   httpClient?: BuilderHttpClient;
   formDataFactory?: () => FormData;
   logger?: Pick<Console, "debug" | "info" | "warn" | "error">;

@@ -78,16 +78,16 @@ describe('BuilderService', () => {
     await expect(failing.getAddress()).resolves.toBeNull();
   });
 
-  it('maps chain id to network id with default fallback', () => {
-    expect(createService(8453, { url: 'x' }).getLtoNetworkId()).toBe('L');
-    expect(createService(84532, { url: 'x' }).getLtoNetworkId()).toBe('T');
-    expect(createService(1, { url: 'x' }).getLtoNetworkId()).toBe('T');
+  it('maps chain id to network code with default fallback', () => {
+    expect(createService(8453, { url: 'x' }).getNetworkCode()).toBe('L');
+    expect(createService(84532, { url: 'x' }).getNetworkCode()).toBe('T');
+    expect(createService(1, { url: 'x' }).getNetworkCode()).toBe('T');
   });
 
   it('returns template cost and bubbles API errors', async () => {
     const service = createService(84532, {
       url: 'https://builder.test',
-      secret: 'secret',
+      apiKey: 'secret',
       httpClient: {
         get: vi.fn().mockResolvedValue({
           data: {
@@ -172,6 +172,38 @@ describe('BuilderService', () => {
     expect(formData.append).toHaveBeenCalledWith('name', 'Ownable');
     expect(formData.append).toHaveBeenCalledWith('sender', '0xabc');
     expect(formData.append).toHaveBeenCalledWith('signedTransaction', '0xsigned');
+  });
+
+  it('supports configurable endpoints and upload query key', async () => {
+    const httpClient = {
+      get: vi.fn().mockResolvedValue({
+        data: {
+          serverWalletAddress_T: 'T-address',
+        },
+      }),
+      post: vi.fn().mockResolvedValue({
+        data: { requestId: 'req-99', message: 'queued' },
+      }),
+    };
+    const service = createService(84532, {
+      url: 'https://builder.test',
+      httpClient,
+      serverWalletsEndpoint: '/custom/wallets',
+      uploadEndpoint: '/custom/upload',
+      uploadNetworkQueryKey: 'networkId',
+    });
+
+    await expect(service.getAddress()).resolves.toBe('T-address');
+    await service.upload(new Blob(['a']));
+
+    expect(httpClient.get).toHaveBeenCalledWith('https://builder.test/custom/wallets');
+    expect(httpClient.post).toHaveBeenCalledWith(
+      'https://builder.test/custom/upload?networkId=T',
+      expect.anything(),
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'Content-Type': 'multipart/form-data' }),
+      })
+    );
   });
 
   it('throws when upload is called without builder URL', async () => {

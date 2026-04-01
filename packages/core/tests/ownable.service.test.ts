@@ -321,7 +321,12 @@ describe('OwnableService', () => {
       getStateDump: vi.fn().mockResolvedValue([['state', 1]]),
     };
     const eqty = { address: '0xabc', sign: vi.fn(), submitAnchors: vi.fn().mockResolvedValue('0xtx') };
-    const service = createService({} as any, eventChains as any, eqty as any, {} as any);
+    const service = createService(
+      { set: vi.fn().mockResolvedValue(undefined) } as any,
+      eventChains as any,
+      eqty as any,
+      {} as any
+    );
     const rpcConsumer = {
       externalEvent: vi.fn().mockResolvedValue({ state: [['consumer', 1]] }),
     };

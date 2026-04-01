@@ -25,6 +25,7 @@ export default class EventChainService {
     Array<{
       chain: EventChain;
       package: string;
+      isConsumed?: boolean;
       created: Date;
       keywords: string[];
       latestHash?: string;
@@ -73,6 +74,7 @@ export default class EventChainService {
   async load(id: string): Promise<{
     chain: EventChain;
     package: string;
+    isConsumed?: boolean;
     created: Date;
     keywords: string[];
     uniqueMessageHash: string;
@@ -85,6 +87,7 @@ export default class EventChainService {
     const {
       chain: chainJson,
       package: packageCid,
+      isConsumed,
       latestHash,
       created,
       keywords,
@@ -94,6 +97,7 @@ export default class EventChainService {
     return {
       chain: EventChain.from(chainJson),
       package: packageCid,
+      ...(isConsumed !== undefined ? { isConsumed } : {}),
       latestHash,
       created,
       keywords,

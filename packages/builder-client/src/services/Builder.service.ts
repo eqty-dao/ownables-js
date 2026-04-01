@@ -6,16 +6,21 @@ import type {
 } from "../types/Builder";
 
 export default class BuilderService {
-  public static URL: string = import.meta.env?.VITE_OBUILDER ?? "";
-  public static SECRET?: string = import.meta.env?.VITE_OBUILDER_API_SECRET_KEY;
   private static hasWarnedDeprecation = false;
+  private static readonly DEFAULT_SERVER_WALLETS_ENDPOINT =
+    "/api/v1/ServerWalletAddresses";
+  private static readonly DEFAULT_UPLOAD_ENDPOINT = "/api/v1/upload";
+  private static readonly DEFAULT_UPLOAD_NETWORK_QUERY_KEY = "networkId";
 
   // Base mainnet = 8453, Base Sepolia = 84532
   private static readonly BASE_MAINNET_CHAIN_ID = 8453;
   private static readonly BASE_SEPOLIA_CHAIN_ID = 84532;
 
   private readonly url: string;
-  private readonly secret: string | undefined;
+  private readonly apiKey: string | undefined;
+  private readonly serverWalletsEndpoint: string;
+  private readonly uploadEndpoint: string;
+  private readonly uploadNetworkQueryKey: string;
   private readonly httpClient: BuilderHttpClient;
   private readonly formDataFactory: () => FormData;
   private readonly logger: Pick<Console, "debug" | "info" | "warn" | "error">;
@@ -23,7 +28,7 @@ export default class BuilderService {
   constructor(
     private chainId: number,
     options: BuilderClientOptions = {}
-  ) {
+    ) {
     if (!BuilderService.hasWarnedDeprecation) {
       (options.logger ?? console).warn(
         "[@ownables/builder-client] Deprecated: migrate to @ownables/builder for browser-first deploy flow."
@@ -31,8 +36,16 @@ export default class BuilderService {
       BuilderService.hasWarnedDeprecation = true;
     }
 
-    this.url = options.url ?? BuilderService.URL;
-    this.secret = options.secret ?? BuilderService.SECRET;
+    this.url = options.url ?? "";
+    this.apiKey = options.apiKey ?? options.secret;
+    this.serverWalletsEndpoint =
+      options.serverWalletsEndpoint ??
+      BuilderService.DEFAULT_SERVER_WALLETS_ENDPOINT;
+    this.uploadEndpoint =
+      options.uploadEndpoint ?? BuilderService.DEFAULT_UPLOAD_ENDPOINT;
+    this.uploadNetworkQueryKey =
+      options.uploadNetworkQueryKey ??
+      BuilderService.DEFAULT_UPLOAD_NETWORK_QUERY_KEY;
     this.httpClient = options.httpClient ?? axios;
     this.formDataFactory = options.formDataFactory ?? (() => new FormData());
     this.logger = options.logger ?? console;
@@ -43,11 +56,11 @@ export default class BuilderService {
   }
 
   /**
-   * Infers LTO network ID from chainId
+   * Infers network code from chainId
    * Base mainnet (8453) = 'L' (mainnet)
    * Base Sepolia (84532) = 'T' (testnet)
    */
-  public getLtoNetworkId(): "L" | "T" {
+  public getNetworkCode(): "L" | "T" {
     if (this.chainId === BuilderService.BASE_MAINNET_CHAIN_ID) {
       return "L";
     } else if (this.chainId === BuilderService.BASE_SEPOLIA_CHAIN_ID) {
@@ -67,24 +80,25 @@ export default class BuilderService {
     }
 
     try {
-      // Use the same endpoint as eqty-ownable-builder - no chainId, no API key
       const response = await this.httpClient.get(
-        `${this.url}/api/v1/ServerLtoWalletAddresses`
+        `${this.url}${this.serverWalletsEndpoint}`
       );
 
       if (!response.data) {
         throw new Error("No data returned from server");
       }
 
-      const ltoNetworkId = this.getLtoNetworkId();
+      const networkCode = this.getNetworkCode();
       const address =
-        ltoNetworkId === "L"
-          ? response.data.serverLtoWalletAddress_L
-          : response.data.serverLtoWalletAddress_T;
+        networkCode === "L"
+          ? response.data.serverWalletAddress_L ??
+            response.data.serverLtoWalletAddress_L
+          : response.data.serverWalletAddress_T ??
+            response.data.serverLtoWalletAddress_T;
 
       if (!address) {
         throw new Error(
-          `Server wallet address not found for network ${ltoNetworkId}`
+          `Server wallet address not found for network ${networkCode}`
         );
       }
 
@@ -113,17 +127,15 @@ export default class BuilderService {
     }
 
     try {
-      const ltoNetworkId = this.getLtoNetworkId();
+      const networkCode = this.getNetworkCode();
       const response = await this.httpClient.get(
         `${this.url}/api/v1/templateCost?templateId=${templateId}`,
         {
-          headers: {
-            "X-API-Key": this.secret,
-          },
+          headers: this.apiKey ? { "X-API-Key": this.apiKey } : {},
         }
       );
 
-      const costData = response.data[ltoNetworkId]?.base;
+      const costData = response.data[networkCode]?.base;
       if (!costData) {
         throw new Error("Template cost not found");
       }
@@ -155,7 +167,7 @@ export default class BuilderService {
       throw new Error("Builder service URL not configured");
     }
 
-    const ltoNetworkId = this.getLtoNetworkId();
+    const networkCode = this.getNetworkCode();
     const formData = this.formDataFactory();
 
     // Convert Uint8Array to Blob if needed
@@ -188,11 +200,11 @@ export default class BuilderService {
 
     try {
       const response = await this.httpClient.post(
-        `${this.url}/api/v1/upload?ltoNetworkId=${ltoNetworkId}`,
+        `${this.url}${this.uploadEndpoint}?${this.uploadNetworkQueryKey}=${networkCode}`,
         formData,
         {
           headers: {
-            "X-API-Key": this.secret,
+            ...(this.apiKey ? { "X-API-Key": this.apiKey } : {}),
             "Content-Type": "multipart/form-data",
           },
         }

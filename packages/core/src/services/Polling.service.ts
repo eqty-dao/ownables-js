@@ -104,7 +104,7 @@ export class PollingService {
     onUpdate: (count: number) => void,
     interval = 15000
   ): () => void {
-    if (this.intervalId || !this.relay.url) {
+    if (this.intervalId) {
       return () => {};
     }
 

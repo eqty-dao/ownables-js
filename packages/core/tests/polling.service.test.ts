@@ -140,11 +140,11 @@ describe('PollingService', () => {
     expect((service as any).consecutiveFailures).toBe(0);
   });
 
-  it('returns noop polling stop when relay url is missing', () => {
+  it('starts polling even when relay url is missing and relies on isAvailable', async () => {
     const localStorage = createKVStore({ packages: [] });
     const relay = {
       url: '',
-      isAvailable: vi.fn(),
+      isAvailable: vi.fn().mockResolvedValue(false),
       ensureAuthenticated: vi.fn(),
       getAuthHeaders: vi.fn(),
       relay: { get: vi.fn() },
@@ -152,8 +152,11 @@ describe('PollingService', () => {
     const service = createService(relay as any, localStorage as any);
 
     const stop = service.startPolling('0xabc', vi.fn(), 5);
+    await Promise.resolve();
     expect(typeof stop).toBe('function');
-    expect(relay.isAvailable).not.toHaveBeenCalled();
+    expect(relay.isAvailable).toHaveBeenCalled();
+    expect(relay.ensureAuthenticated).not.toHaveBeenCalled();
+    stop();
   });
 
   it('logs interval polling errors when checkForNewHashes rejects', async () => {

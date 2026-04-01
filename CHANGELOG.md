@@ -1,3 +1,10 @@
+# [0.5.0](https://github.com/eqty-dao/ownables-js/compare/v0.4.0...v0.5.0) (2026-04-01)
+
+
+### Features
+
+* make builder and relay configuration explicit ([38f7ade](https://github.com/eqty-dao/ownables-js/commit/38f7ade10aa079ae0d7a873bfea2778790c40232))
+
 # [0.4.0](https://github.com/eqty-dao/ownables-js/compare/v0.3.0...v0.4.0) (2026-03-30)
 
 

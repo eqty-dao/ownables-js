@@ -5,14 +5,16 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "ownable_bg.wasm"
   ],
   "dependencies": {
     "@ownables/core": "workspace:*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "clean": "rm -rf dist",
+    "clean": "rm -rf dist ownable_bg.wasm",
+    "prepack": "bash ./bin/ensure-wasm.sh",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "publishConfig": {

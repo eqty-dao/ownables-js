@@ -16,4 +16,5 @@ ownables/target/
 ownables/*/target/
 ownables/*/pkg/
 ownables/*/schema/
-ownables/*/artifacts/*.wasm
+*.wasm
+

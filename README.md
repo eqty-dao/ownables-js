@@ -18,7 +18,7 @@ Use these packages to validate, execute, and interact with Ownables in both brow
 - `@ownables/platform-node`: node adapters (sandbox RPC, state store, package IO).
 - `@ownables/adapter-viem`: viem/EVM adapter services.
 - `@ownables/adapter-ethers`: ethers/EVM adapter services.
-- `@ownables/builder`: browser-first ownable build/deploy orchestration.
+- `@ownables/builder`: ownable build/deploy orchestration for browser and Node.
 - `@ownables/builder-client`: deprecated obuilder API client (compatibility only).
 - `@ownables/notify-core`: shared Ownables notification types, validation, and message building.
 - `@ownables/notify-client`: DI services for notification subscribe/inbox/accept flows.

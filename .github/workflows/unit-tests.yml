@@ -16,6 +16,7 @@ jobs:
           - platform-browser
           - adapter-viem
           - adapter-ethers
+          - builder
           - builder-client
           - platform-node
     steps:

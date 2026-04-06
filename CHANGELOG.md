@@ -1,3 +1,11 @@
+## [0.5.1](https://github.com/eqty-dao/ownables-js/compare/v0.5.0...v0.5.1) (2026-04-06)
+
+
+### Bug Fixes
+
+* release ([aa9b6b8](https://github.com/eqty-dao/ownables-js/commit/aa9b6b8a6adc779089e4f7c2f4c92890b3dc25c2))
+* **release:** fix rust schema generation step ([17b8a74](https://github.com/eqty-dao/ownables-js/commit/17b8a74886daf8208fd224195bef1e8efa3dca5e))
+
 # [0.5.0](https://github.com/eqty-dao/ownables-js/compare/v0.4.0...v0.5.0) (2026-04-01)
 
 

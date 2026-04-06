@@ -99,7 +99,7 @@ build_package() {
         wireFormat: $wireFormat
       }' > "$dir/pkg/package.json"
 
-    (cd "$dir" && cargo schema)
+    (cd "$dir" && cargo run --example schema)
     zip -r -j "./ownables/$name.zip" "$dir/assets/" "$dir/pkg/ownable_bg.wasm" "$dir/pkg/package.json" "$dir/schema/"*.json
   else
     zip -r -j "./ownables/$name.zip" "$dir/"*

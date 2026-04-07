@@ -20,6 +20,8 @@
       "@ownables/builder-client/*": ["packages/builder-client/src/*"],
       "@ownables/platform-node": ["packages/platform-node/src/index.ts"],
       "@ownables/platform-node/*": ["packages/platform-node/src/*"],
+      "@ownables/platform-react-native": ["packages/platform-react-native/src/index.ts"],
+      "@ownables/platform-react-native/*": ["packages/platform-react-native/src/*"],
       "@ownables/notify-core": ["packages/notify-core/src/index.ts"],
       "@ownables/notify-core/*": ["packages/notify-core/src/*"],
       "@ownables/notify-client": ["packages/notify-client/src/index.ts"],

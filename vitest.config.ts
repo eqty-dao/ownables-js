@@ -23,6 +23,9 @@ export default defineConfig({
       '@ownables/platform-node': fileURLToPath(
         new URL('./packages/platform-node/src/index.ts', import.meta.url)
       ),
+      '@ownables/platform-react-native': fileURLToPath(
+        new URL('./packages/platform-react-native/src/index.ts', import.meta.url)
+      ),
       '@ownables/notify-core': fileURLToPath(
         new URL('./packages/notify-core/src/index.ts', import.meta.url)
       ),

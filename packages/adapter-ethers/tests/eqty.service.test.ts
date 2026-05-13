@@ -37,6 +37,11 @@ describe('Ethers EQTYService', () => {
 
   it('anchors and submits with injected anchor client', async () => {
     const anchorClient = { anchor: vi.fn().mockResolvedValue('0xtx') };
+    const feeContract = {
+      quoteEqtyCost: vi.fn().mockResolvedValue(0n),
+      quoteEthCost: vi.fn(),
+      eqtyToken: vi.fn(),
+    };
     const signer = {
       provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
       getAddress: vi.fn().mockResolvedValue('0xabc'),
@@ -47,6 +52,7 @@ describe('Ethers EQTYService', () => {
       signer: signer as any,
       deps: {
         anchorClient,
+        feeContract,
         signer: signer as any,
       },
     });
@@ -56,10 +62,16 @@ describe('Ethers EQTYService', () => {
 
     expect(tx).toBe('0xtx');
     expect(anchorClient.anchor).toHaveBeenCalledTimes(1);
+    expect(anchorClient.anchor).toHaveBeenCalledWith(expect.any(Array), { value: 0n });
   });
 
   it('returns undefined when submitting empty anchor queue and handles key/value anchor input', async () => {
     const anchorClient = { anchor: vi.fn().mockResolvedValue('0xtx') };
+    const feeContract = {
+      quoteEqtyCost: vi.fn().mockResolvedValue(0n),
+      quoteEthCost: vi.fn(),
+      eqtyToken: vi.fn(),
+    };
     const signer = {
       provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
       getAddress: vi.fn().mockResolvedValue('0xabc'),
@@ -68,7 +80,7 @@ describe('Ethers EQTYService', () => {
     };
     const service = createService('0xabc', 84532, {
       signer: signer as any,
-      deps: { anchorClient, signer: signer as any },
+      deps: { anchorClient, feeContract, signer: signer as any },
     });
 
     await expect(service.anchor()).resolves.toBeUndefined();
@@ -80,6 +92,7 @@ describe('Ethers EQTYService', () => {
     } as any);
     await expect(service.submitAnchors()).resolves.toBe('0xtx');
     expect(anchorClient.anchor).toHaveBeenCalledTimes(1);
+    expect(anchorClient.anchor).toHaveBeenCalledWith(expect.any(Array), { value: 0n });
   });
 
   it('throws when signer is missing or provider is unavailable', () => {
@@ -98,6 +111,11 @@ describe('Ethers EQTYService', () => {
 
   it('restores queued anchors when submit fails', async () => {
     const anchorClient = { anchor: vi.fn().mockRejectedValue(new Error('anchor failed')) };
+    const feeContract = {
+      quoteEqtyCost: vi.fn().mockResolvedValue(0n),
+      quoteEthCost: vi.fn(),
+      eqtyToken: vi.fn(),
+    };
     const signer = {
       provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
       getAddress: vi.fn().mockResolvedValue('0xabc'),
@@ -106,7 +124,7 @@ describe('Ethers EQTYService', () => {
     };
     const service = createService('0xabc', 84532, {
       signer: signer as any,
-      deps: { anchorClient, signer: signer as any },
+      deps: { anchorClient, feeContract, signer: signer as any },
     });
 
     const hash = Binary.fromHex(`0x${'a'.repeat(64)}`);
@@ -115,6 +133,85 @@ describe('Ethers EQTYService', () => {
 
     anchorClient.anchor.mockResolvedValueOnce('0xtx');
     await expect(service.submitAnchors()).resolves.toBe('0xtx');
+  });
+
+  it('uses EQTY payment when allowance covers the quoted fee', async () => {
+    const anchorClient = { anchor: vi.fn().mockResolvedValue('0xtx') };
+    const feeContract = {
+      quoteEqtyCost: vi.fn().mockResolvedValue(12n),
+      quoteEthCost: vi.fn().mockResolvedValue(34n),
+      eqtyToken: vi.fn().mockResolvedValue('0x1111111111111111111111111111111111111111'),
+    };
+    const eqtyToken = {
+      allowance: vi.fn().mockResolvedValue(12n),
+    };
+    const signer = {
+      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      getAddress: vi.fn().mockResolvedValue('0xabc'),
+      signTypedData: vi.fn().mockResolvedValue('0xsig'),
+    };
+    const service = createService('0xabc', 84532, {
+      signer: signer as any,
+      deps: { anchorClient, feeContract, eqtyToken, signer: signer as any },
+    });
+
+    await service.anchor(Binary.fromHex(`0x${'1'.repeat(64)}`));
+    await expect(service.submitAnchors()).resolves.toBe('0xtx');
+
+    expect(feeContract.quoteEqtyCost).toHaveBeenCalledWith(1n);
+    expect(eqtyToken.allowance).toHaveBeenCalled();
+    expect(anchorClient.anchor).toHaveBeenCalledWith(expect.any(Array), { value: 0n });
+    expect(feeContract.quoteEthCost).not.toHaveBeenCalled();
+  });
+
+  it('falls back to ETH payment when allowance is insufficient', async () => {
+    const anchorClient = { anchor: vi.fn().mockResolvedValue('0xtx') };
+    const feeContract = {
+      quoteEqtyCost: vi.fn().mockResolvedValue(12n),
+      quoteEthCost: vi.fn().mockResolvedValue(34n),
+      eqtyToken: vi.fn().mockResolvedValue('0x1111111111111111111111111111111111111111'),
+    };
+    const eqtyToken = {
+      allowance: vi.fn().mockResolvedValue(11n),
+    };
+    const signer = {
+      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      getAddress: vi.fn().mockResolvedValue('0xabc'),
+      signTypedData: vi.fn().mockResolvedValue('0xsig'),
+    };
+    const service = createService('0xabc', 84532, {
+      signer: signer as any,
+      deps: { anchorClient, feeContract, eqtyToken, signer: signer as any },
+    });
+
+    await service.anchor(Binary.fromHex(`0x${'1'.repeat(64)}`));
+    await expect(service.submitAnchors()).resolves.toBe('0xtx');
+
+    expect(anchorClient.anchor).toHaveBeenCalledWith(expect.any(Array), { value: 34n });
+  });
+
+  it('lets explicit submit tx options override automatic fee selection', async () => {
+    const anchorClient = { anchor: vi.fn().mockResolvedValue('0xtx') };
+    const feeContract = {
+      quoteEqtyCost: vi.fn(),
+      quoteEthCost: vi.fn(),
+      eqtyToken: vi.fn(),
+    };
+    const signer = {
+      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      getAddress: vi.fn().mockResolvedValue('0xabc'),
+      signTypedData: vi.fn().mockResolvedValue('0xsig'),
+    };
+    const service = createService('0xabc', 84532, {
+      signer: signer as any,
+      deps: { anchorClient, feeContract, signer: signer as any },
+    });
+
+    await service.anchor(Binary.fromHex(`0x${'1'.repeat(64)}`));
+    await expect(service.submitAnchors({ value: 99n })).resolves.toBe('0xtx');
+
+    expect(anchorClient.anchor).toHaveBeenCalledWith(expect.any(Array), { value: 99n });
+    expect(feeContract.quoteEqtyCost).not.toHaveBeenCalled();
   });
 
   it('delegates sign() to subject.signWith', async () => {

@@ -36,6 +36,7 @@ const ownables = new OwnableService(stateStore, chains, anchorProvider, packageA
 ## Notes
 
 - `PackageAssetIO` is responsible for loading package assets such as `ownable_bg.wasm`.
+- Anchor providers may accept optional anchor tx options on `submitAnchors()`, including EVM `value`.
 - `PollingService`/Relay flows are still available but legacy.
 
 ## Development
@@ -44,4 +45,3 @@ const ownables = new OwnableService(stateStore, chains, anchorProvider, packageA
 yarn workspace @ownables/core run build
 yarn workspace @ownables/core run typecheck
 ```
-

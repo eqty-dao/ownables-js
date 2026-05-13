@@ -54,7 +54,7 @@ export default class MockEQTYService {
     }
   }
 
-  async submitAnchors(): Promise<string | undefined> {
+  async submitAnchors(_txOptions?: { value?: bigint }): Promise<string | undefined> {
     if (this.anchorQueue.length === 0) return undefined;
     this.anchorQueue.length = 0;
     return `0x${'a'.repeat(64)}`;

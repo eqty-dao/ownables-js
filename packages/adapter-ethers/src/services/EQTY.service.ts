@@ -1,5 +1,6 @@
 import { AnchorClient, Binary, Event, Message } from 'eqty-core';
 import {
+  ZeroAddress,
   Contract,
   Interface,
   getAddress,
@@ -8,7 +9,10 @@ import {
   type TypedDataDomain,
 } from 'ethers';
 import type {
+  EthersAnchorClientLike,
   EthersAnchorContractLike,
+  EthersAnchorFeeContractLike,
+  EthersEqtyTokenLike,
   EthersServiceOptions,
   EthersSignerLike,
   TypedDataField,
@@ -47,8 +51,11 @@ class EthersAnchorContract implements EthersAnchorContractLike {
     ) as unknown as EthersAnchorContractLike;
   }
 
-  async anchor(anchors: Array<{ key: `0x${string}`; value: `0x${string}` }>): Promise<string> {
-    const tx = await this.contract.anchor(anchors);
+  async anchor(
+    anchors: Array<{ key: `0x${string}`; value: `0x${string}` }>,
+    txOptions?: { value?: bigint }
+  ): Promise<string> {
+    const tx = await this.contract.anchor(anchors, txOptions);
 
     if (typeof tx === 'string') return tx;
     if (tx && typeof tx === 'object' && 'hash' in tx && typeof tx.hash === 'string') {
@@ -62,16 +69,63 @@ class EthersAnchorContract implements EthersAnchorContractLike {
     return this.contract.maxAnchors();
   }
 }
+
+class EthersAnchorFeeContract implements EthersAnchorFeeContractLike {
+  private readonly contract: EthersAnchorFeeContractLike;
+
+  constructor(signer: Signer, address: `0x${string}`) {
+    this.contract = new Contract(
+      address,
+      [
+        'function quoteEqtyCost(uint256 count) view returns (uint256)',
+        'function quoteEthCost(uint256 count) view returns (uint256)',
+        'function eqtyToken() view returns (address)',
+      ],
+      signer
+    ) as unknown as EthersAnchorFeeContractLike;
+  }
+
+  async quoteEqtyCost(count: bigint): Promise<bigint> {
+    return this.contract.quoteEqtyCost(count);
+  }
+
+  async quoteEthCost(count: bigint): Promise<bigint> {
+    return this.contract.quoteEthCost(count);
+  }
+
+  async eqtyToken(): Promise<string> {
+    return this.contract.eqtyToken();
+  }
+}
+
+class EthersEqtyTokenContract implements EthersEqtyTokenLike {
+  private readonly contract: EthersEqtyTokenLike;
+
+  constructor(signer: Signer, address: string) {
+    this.contract = new Contract(
+      address,
+      ['function allowance(address owner, address spender) view returns (uint256)'],
+      signer
+    ) as unknown as EthersEqtyTokenLike;
+  }
+
+  async allowance(owner: string, spender: string): Promise<bigint> {
+    return this.contract.allowance(owner, spender);
+  }
+}
 /* v8 ignore stop */
 
 export default class EQTYService {
   private readonly provider: Provider;
   private readonly signerClient: Signer;
-  private readonly anchorClient: AnchorClient<string>;
+  private readonly anchorClient: EthersAnchorClientLike;
+  private readonly feeContract: EthersAnchorFeeContractLike;
   private readonly anchorQueue: Array<{ key: Binary; value: Binary }> = [];
   public readonly signer: EthersSignerLike;
   private readonly logger: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
   private readonly lockableClientOverride;
+  private readonly eqtyTokenOverride;
+  private readonly anchorContractAddress: `0x${string}`;
 
   public constructor(
     public readonly address: string,
@@ -102,19 +156,25 @@ export default class EQTYService {
         );
       })();
 
+    this.anchorContractAddress = AnchorClient.contractAddress(this.chainId);
+
     if (options.deps?.anchorClient) {
-      this.anchorClient = options.deps.anchorClient as AnchorClient<string>;
+      this.anchorClient = options.deps.anchorClient;
     } else {
       /* v8 ignore start */
-      const contractAddress = AnchorClient.contractAddress(this.chainId);
-      const contract = new EthersAnchorContract(this.signerClient as Signer, contractAddress);
-      this.anchorClient = new AnchorClient(contract);
+      const contract = new EthersAnchorContract(this.signerClient as Signer, this.anchorContractAddress);
+      this.anchorClient = new AnchorClient(contract) as unknown as EthersAnchorClientLike;
       /* v8 ignore stop */
     }
+
+    this.feeContract =
+      options.deps?.feeContract ??
+      new EthersAnchorFeeContract(this.signerClient as Signer, this.anchorContractAddress);
 
     this.signer = options.deps?.signer ?? new EthersSignerAdapter(this.signerClient as Signer);
     this.logger = options.deps?.logger ?? console;
     this.lockableClientOverride = options.deps?.lockableClient;
+    this.eqtyTokenOverride = options.deps?.eqtyToken;
   }
 
   private isSupportedChain(chainId: number): boolean {
@@ -148,18 +208,42 @@ export default class EQTYService {
     }
   }
 
-  async submitAnchors(): Promise<string | undefined> {
+  async submitAnchors(txOptions?: { value?: bigint }): Promise<string | undefined> {
     if (this.anchorQueue.length === 0) return undefined;
 
     const payload = this.anchorQueue.slice();
     this.anchorQueue.length = 0;
 
     try {
-      return await this.anchorClient.anchor(payload);
+      const nextTxOptions = txOptions ?? (await this.resolveAnchorTxOptions(payload.length));
+      return await this.anchorClient.anchor(payload, nextTxOptions);
     } catch (error) {
       this.anchorQueue.unshift(...payload);
       throw error;
     }
+  }
+
+  private async resolveAnchorTxOptions(count: number): Promise<{ value?: bigint }> {
+    const batchSize = BigInt(count);
+    const quotedEqtyCost = await this.feeContract.quoteEqtyCost(batchSize);
+
+    if (quotedEqtyCost === 0n) {
+      return { value: 0n };
+    }
+
+    const eqtyTokenAddress = await this.feeContract.eqtyToken();
+    if (eqtyTokenAddress !== ZeroAddress) {
+      const eqtyToken =
+        this.eqtyTokenOverride ?? new EthersEqtyTokenContract(this.signerClient as Signer, eqtyTokenAddress);
+      const allowance = await eqtyToken.allowance(this.address, this.anchorContractAddress);
+
+      if (allowance >= quotedEqtyCost) {
+        return { value: 0n };
+      }
+    }
+
+    const quotedEthCost = await this.feeContract.quoteEthCost(batchSize);
+    return { value: quotedEthCost };
   }
 
   async sign(...subjects: Array<Event | Message>): Promise<void> {

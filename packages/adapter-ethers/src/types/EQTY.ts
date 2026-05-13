@@ -3,9 +3,20 @@ import type { Provider, Signer, TypedDataDomain as EthersTypedDataDomain } from 
 
 export type TypedDataField = { name: string; type: string };
 export type TypedDataDomain = EthersTypedDataDomain;
+export type AnchorTxOptions = { value?: bigint };
 
 export interface EthersAnchorClientLike {
-  anchor(payload: Array<{ key: Binary; value: Binary }>): Promise<string>;
+  anchor(payload: Array<{ key: Binary; value: Binary }>, txOptions?: AnchorTxOptions): Promise<string>;
+}
+
+export interface EthersAnchorFeeContractLike {
+  quoteEqtyCost(count: bigint): Promise<bigint>;
+  quoteEthCost(count: bigint): Promise<bigint>;
+  eqtyToken(): Promise<string>;
+}
+
+export interface EthersEqtyTokenLike {
+  allowance(owner: string, spender: string): Promise<bigint>;
 }
 
 export interface EthersSignerLike {
@@ -19,6 +30,8 @@ export interface EthersSignerLike {
 
 export interface EQTYServiceDeps {
   anchorClient?: EthersAnchorClientLike;
+  feeContract?: EthersAnchorFeeContractLike;
+  eqtyToken?: EthersEqtyTokenLike;
   signer?: EthersSignerLike;
   logger?: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
   lockableClient?: {
@@ -34,7 +47,10 @@ export interface EIP1193Provider {
 }
 
 export interface EthersAnchorContractLike {
-  anchor(anchors: Array<{ key: `0x${string}`; value: `0x${string}` }>): Promise<unknown>;
+  anchor(
+    anchors: Array<{ key: `0x${string}`; value: `0x${string}` }>,
+    txOptions?: AnchorTxOptions
+  ): Promise<unknown>;
   maxAnchors(): Promise<bigint>;
 }
 

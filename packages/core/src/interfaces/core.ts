@@ -40,7 +40,7 @@ export interface AnchorProvider {
   signer: any;
   sign(...subjects: Array<Event | Message>): Promise<void>;
   anchor(...anchors: any[]): Promise<void>;
-  submitAnchors(): Promise<string | undefined>;
+  submitAnchors(txOptions?: { value?: bigint }): Promise<string | undefined>;
   verifyAnchors(...anchors: any[]): Promise<{
     verified: boolean;
     anchors: Record<string, string | undefined>;

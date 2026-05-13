@@ -13,9 +13,16 @@ import {
   custom,
   getAddress,
   parseAbiItem,
+  zeroAddress,
 } from "viem";
 import { base, baseSepolia } from "viem/chains";
-import type { EQTYServiceDeps } from "../types/EQTY";
+import type {
+  AnchorClientLike,
+  AnchorFeeReader,
+  AnchorTxOptions,
+  EqtyTokenReader,
+  EQTYServiceDeps,
+} from "../types/EQTY";
 
 const ZERO_HASH = Binary.fromHex("0x" + "0".repeat(64));
 
@@ -25,11 +32,13 @@ const ZERO_HASH = Binary.fromHex("0x" + "0".repeat(64));
 export default class EQTYService {
   private publicClient: PublicClient;
   private walletClient: WalletClient;
-  private anchorClient: AnchorClient<any>;
+  private anchorClient: AnchorClientLike;
+  private feeReader: AnchorFeeReader;
   private anchorQueue: Array<{ key: Binary; value: Binary }> = [];
   public readonly signer: ViemSigner;
   private readonly logger: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
   private readonly lockableClientOverride;
+  private readonly eqtyTokenOverride;
 
   private getChain() {
     switch (this.chainId) {
@@ -77,19 +86,22 @@ export default class EQTYService {
       })();
 
     if (deps.anchorClient) {
-      this.anchorClient = deps.anchorClient as AnchorClient<any>;
+      this.anchorClient = deps.anchorClient;
     } else {
       const contract = new ViemContract(
         this.publicClient,
         this.walletClient,
         AnchorClient.contractAddress(this.chainId)
       );
-      this.anchorClient = new AnchorClient(contract);
+      this.anchorClient = new AnchorClient(contract) as unknown as AnchorClientLike;
     }
+
+    this.feeReader = deps.feeReader ?? this;
 
     this.signer = deps.signer ?? new ViemSigner(this.walletClient);
     this.logger = deps.logger ?? console;
     this.lockableClientOverride = deps.lockableClient;
+    this.eqtyTokenOverride = deps.eqtyToken;
   }
 
   async anchor(
@@ -119,17 +131,87 @@ export default class EQTYService {
     }
   }
 
-  async submitAnchors(): Promise<string | undefined> {
+  async submitAnchors(txOptions?: AnchorTxOptions): Promise<string | undefined> {
     if (this.anchorQueue.length === 0) return undefined;
 
     const payload = this.anchorQueue.slice();
     this.anchorQueue = [];
     try {
-      return await this.anchorClient.anchor(payload);
+      const nextTxOptions = txOptions ?? (await this.resolveAnchorTxOptions(payload.length));
+      return await this.anchorClient.anchor(payload, nextTxOptions);
     } catch (err) {
       this.anchorQueue.unshift(...payload);
       throw err;
     }
+  }
+
+  async quoteEqtyCost(count: bigint): Promise<bigint> {
+    return (await (this.publicClient as any).readContract({
+      address: AnchorClient.contractAddress(this.chainId),
+      abi: [{ name: 'quoteEqtyCost', type: 'function', stateMutability: 'view', inputs: [{ name: 'count', type: 'uint256' }], outputs: [{ name: 'cost', type: 'uint256' }] }],
+      functionName: 'quoteEqtyCost',
+      args: [count],
+    })) as bigint;
+  }
+
+  async quoteEthCost(count: bigint): Promise<bigint> {
+    return (await (this.publicClient as any).readContract({
+      address: AnchorClient.contractAddress(this.chainId),
+      abi: [{ name: 'quoteEthCost', type: 'function', stateMutability: 'view', inputs: [{ name: 'count', type: 'uint256' }], outputs: [{ name: 'cost', type: 'uint256' }] }],
+      functionName: 'quoteEthCost',
+      args: [count],
+    })) as bigint;
+  }
+
+  async eqtyToken(): Promise<string> {
+    return (await (this.publicClient as any).readContract({
+      address: AnchorClient.contractAddress(this.chainId),
+      abi: [{ name: 'eqtyToken', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: 'token', type: 'address' }] }],
+      functionName: 'eqtyToken',
+      args: [],
+    })) as string;
+  }
+
+  async allowance(owner: string, spender: string): Promise<bigint> {
+    return (await (this.publicClient as any).readContract({
+      address: spender as `0x${string}`,
+      abi: [{ name: 'allowance', type: 'function', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }], outputs: [{ name: 'remaining', type: 'uint256' }] }],
+      functionName: 'allowance',
+      args: [owner, spender],
+    })) as bigint;
+  }
+
+  private async resolveAnchorTxOptions(count: number): Promise<AnchorTxOptions> {
+    const batchSize = BigInt(count);
+    const quotedEqtyCost = await this.feeReader.quoteEqtyCost(batchSize);
+
+    if (quotedEqtyCost === 0n) {
+      return { value: 0n };
+    }
+
+    const anchorAddress = AnchorClient.contractAddress(this.chainId);
+    const eqtyTokenAddress = await this.feeReader.eqtyToken();
+    if (eqtyTokenAddress !== zeroAddress) {
+      const eqtyToken: EqtyTokenReader =
+        this.eqtyTokenOverride ??
+        {
+          allowance: async (owner: string, spender: string) =>
+            (await (this.publicClient as any).readContract({
+              address: eqtyTokenAddress as `0x${string}`,
+              abi: [{ name: 'allowance', type: 'function', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }], outputs: [{ name: 'remaining', type: 'uint256' }] }],
+              functionName: 'allowance',
+              args: [owner, spender],
+            })) as bigint,
+        };
+      const allowance = await eqtyToken.allowance(this.address, anchorAddress);
+
+      if (allowance >= quotedEqtyCost) {
+        return { value: 0n };
+      }
+    }
+
+    const quotedEthCost = await this.feeReader.quoteEthCost(batchSize);
+    return { value: quotedEthCost };
   }
 
   async sign(...subjects: Array<Event | Message>): Promise<void> {

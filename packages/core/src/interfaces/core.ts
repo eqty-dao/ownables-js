@@ -1,6 +1,7 @@
 import type { Event, Message } from 'eqty-core';
 import type { TypedPackage } from '../types/TypedPackage';
 import type { OwnableRPC } from '../types/OwnableRuntime';
+import type { PublicEvent } from '../types/OwnableRuntime';
 
 export type LogProgress = (step: string, meta?: Record<string, unknown>) => void;
 
@@ -41,6 +42,12 @@ export interface AnchorProvider {
   sign(...subjects: Array<Event | Message>): Promise<void>;
   anchor(...anchors: any[]): Promise<void>;
   submitAnchors(txOptions?: { value?: bigint }): Promise<string | undefined>;
+  emitPublicEvent(
+    subjectId: string,
+    eventType: string,
+    data: Uint8Array,
+    txOptions?: { value?: bigint }
+  ): Promise<PublicEvent>;
   verifyAnchors(...anchors: any[]): Promise<{
     verified: boolean;
     anchors: Record<string, string | undefined>;

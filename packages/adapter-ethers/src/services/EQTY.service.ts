@@ -13,6 +13,7 @@ import type {
   EthersAnchorContractLike,
   EthersAnchorFeeContractLike,
   EthersEqtyTokenLike,
+  EthersPublicEventClientLike,
   EthersServiceOptions,
   EthersSignerLike,
   TypedDataField,
@@ -70,6 +71,71 @@ class EthersAnchorContract implements EthersAnchorContractLike {
   }
 }
 
+class EthersPublicEventContract implements EthersPublicEventClientLike {
+  private readonly contract: Contract;
+  private readonly iface = new Interface([
+    'function emitPublicEvent(bytes32 subjectId, string eventType, bytes data) payable',
+    'event PublicEvent(bytes32 indexed subjectId, address indexed source, string eventType, bytes data, uint64 timestamp)',
+  ]);
+
+  constructor(signer: Signer, address: `0x${string}`) {
+    this.contract = new Contract(
+      address,
+      [
+        'function emitPublicEvent(bytes32 subjectId, string eventType, bytes data) payable',
+        'event PublicEvent(bytes32 indexed subjectId, address indexed source, string eventType, bytes data, uint64 timestamp)',
+      ],
+      signer
+    );
+  }
+
+  async emitPublicEvent(
+    subjectId: string,
+    eventType: string,
+    data: Uint8Array,
+    txOptions?: { value?: bigint }
+  ) {
+    const tx = await (this.contract as any).emitPublicEvent(subjectId, eventType, data, txOptions);
+    const receipt = await tx.wait();
+    const parsed = receipt.logs
+      .map((log: any) => {
+        try {
+          return this.iface.parseLog(log);
+        } catch {
+          return null;
+        }
+      })
+      .find((log: any) => log?.name === 'PublicEvent');
+
+    if (!parsed) {
+      throw new Error('PublicEvent log not found in transaction receipt');
+    }
+
+    const receiptLog = receipt.logs.find((log: any) => {
+      try {
+        const parsedLog = this.iface.parseLog(log);
+        return parsedLog?.name === 'PublicEvent';
+      } catch {
+        return false;
+      }
+    });
+
+    if (!receiptLog) {
+      throw new Error('PublicEvent receipt log metadata not found');
+    }
+
+    return {
+      source: parsed.args.source as string,
+      eventType: parsed.args.eventType as string,
+      data: Binary.fromHex(parsed.args.data as string).hex,
+      blockNumber: Number(receipt.blockNumber),
+      transactionHash: receipt.hash ?? tx.hash,
+      transactionIndex: Number(receipt.index ?? receipt.transactionIndex ?? tx.index ?? 0),
+      logIndex: receiptLog.index,
+    };
+  }
+}
+
 class EthersAnchorFeeContract implements EthersAnchorFeeContractLike {
   private readonly contract: EthersAnchorFeeContractLike;
 
@@ -119,6 +185,7 @@ export default class EQTYService {
   private readonly provider: Provider;
   private readonly signerClient: Signer;
   private readonly anchorClient: EthersAnchorClientLike;
+  private readonly publicEventClient: EthersPublicEventClientLike;
   private readonly feeContract: EthersAnchorFeeContractLike;
   private readonly anchorQueue: Array<{ key: Binary; value: Binary }> = [];
   public readonly signer: EthersSignerLike;
@@ -166,6 +233,10 @@ export default class EQTYService {
       this.anchorClient = new AnchorClient(contract) as unknown as EthersAnchorClientLike;
       /* v8 ignore stop */
     }
+
+    this.publicEventClient =
+      options.deps?.publicEventClient ??
+      new EthersPublicEventContract(this.signerClient as Signer, this.anchorContractAddress);
 
     this.feeContract =
       options.deps?.feeContract ??
@@ -221,6 +292,16 @@ export default class EQTYService {
       this.anchorQueue.unshift(...payload);
       throw error;
     }
+  }
+
+  async emitPublicEvent(
+    subjectId: string,
+    eventType: string,
+    data: Uint8Array,
+    txOptions?: { value?: bigint }
+  ) {
+    const nextTxOptions = txOptions ?? (await this.resolveAnchorTxOptions(1));
+    return this.publicEventClient.emitPublicEvent(subjectId, eventType, data, nextTxOptions);
   }
 
   private async resolveAnchorTxOptions(count: number): Promise<{ value?: bigint }> {

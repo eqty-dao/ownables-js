@@ -18,3 +18,4 @@ ownables/*/pkg/
 ownables/*/schema/
 *.wasm
 
+.playwright-mcp/

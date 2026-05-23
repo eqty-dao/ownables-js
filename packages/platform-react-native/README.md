@@ -41,7 +41,9 @@ Expected ABI call types:
 - `instantiate`
 - `execute`
 - `query`
-- `external_event`
+- `register`
+- `ingest`
+- `encode_public_event`
 
 Expected payload format:
 
@@ -92,7 +94,7 @@ export class NativeWamrBridge implements RNRuntimeBridge {
 
   async call(
     instanceId: string,
-    type: 'instantiate' | 'execute' | 'query' | 'external_event',
+    type: 'instantiate' | 'execute' | 'query' | 'register' | 'ingest' | 'encode_public_event',
     payload: Uint8Array
   ): Promise<Uint8Array> {
     // delegate to native module

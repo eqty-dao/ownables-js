@@ -29,7 +29,9 @@ function invoke(type, inputBytes) {
       case "instantiate": packed = exportsRef.ownable_instantiate(inPtr, len); break;
       case "execute": packed = exportsRef.ownable_execute(inPtr, len); break;
       case "query": packed = exportsRef.ownable_query(inPtr, len); break;
-      case "external_event": packed = exportsRef.ownable_external_event(inPtr, len); break;
+      case "register": packed = exportsRef.ownable_register(inPtr, len); break;
+      case "ingest": packed = exportsRef.ownable_ingest(inPtr, len); break;
+      case "encode_public_event": packed = exportsRef.ownable_encode_public_event(inPtr, len); break;
       default: throw new Error(\`unknown message type \${type}\`);
     }
   } finally {

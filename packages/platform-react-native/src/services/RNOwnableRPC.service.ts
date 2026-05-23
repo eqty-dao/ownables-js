@@ -1,5 +1,13 @@
 import { decode, encode } from 'cbor-x';
-import type { CosmWasmEvent, CosmWasmMessageInfo, OwnableRPC, StateDump } from '@ownables/core';
+import type {
+  CosmWasmEvent,
+  CosmWasmMessageInfo,
+  OwnableEvent,
+  OwnableRPC,
+  PublicEvent,
+  RuntimePublicEvent,
+  StateDump,
+} from '@ownables/core';
 import type TypedDict from '@ownables/core/types/TypedDict';
 import type { RNOwnableRPCOptions, RNAbiCallType } from '../types/PlatformReactNative';
 
@@ -100,6 +108,21 @@ export default class RNOwnableRPC implements OwnableRPC {
     return next;
   }
 
+  private async payloadCall(type: RNAbiCallType, request: TypedDict): Promise<Uint8Array> {
+    const instanceId = this.ensureInitialized();
+    const input = encode(request) as Uint8Array;
+    const output = await this.options.bridge.call(instanceId, type, input);
+    const envelope = decode(output) as HostAbiEnvelope;
+
+    if (!envelope.success) {
+      throw new Error(
+        `Ownable ABI call failed: ${envelope.error_code || 'UNKNOWN'} ${envelope.error_message || ''}`.trim()
+      );
+    }
+
+    return envelope.payload ?? new Uint8Array();
+  }
+
   private attributesToDict(attributes: Array<{ key: string; value: string }>): TypedDict<string> {
     return Object.fromEntries(attributes.map((attribute) => [attribute.key, attribute.value]));
   }
@@ -156,9 +179,9 @@ export default class RNOwnableRPC implements OwnableRPC {
     return this.toExecuteResult(decode(response) as AbiResponse, newState);
   }
 
-  async externalEvent(
-    msg: TypedDict,
-    info: TypedDict,
+  async register(
+    event: RuntimePublicEvent,
+    info: CosmWasmMessageInfo,
     state: StateDump
   ): Promise<{
     attributes: TypedDict<string>;
@@ -167,17 +190,43 @@ export default class RNOwnableRPC implements OwnableRPC {
     state: StateDump;
   }> {
     const { response, state: newState } = await this.workerCall(
-      'external_event',
+      'register',
       {
-        msg: msg.msg,
+        msg: event,
         info,
-        ownable_id: this.ownableId,
         mem: { state_dump: state },
       },
       state
     );
 
     return this.toExecuteResult(decode(response) as AbiResponse, newState);
+  }
+
+  async ingest(
+    event: OwnableEvent,
+    info: CosmWasmMessageInfo,
+    state: StateDump
+  ): Promise<{
+    attributes: TypedDict<string>;
+    events: Array<CosmWasmEvent>;
+    data: string;
+    state: StateDump;
+  }> {
+    const { response, state: newState } = await this.workerCall(
+      'ingest',
+      {
+        msg: event,
+        info,
+        mem: { state_dump: state },
+      },
+      state
+    );
+
+    return this.toExecuteResult(decode(response) as AbiResponse, newState);
+  }
+
+  async encodePublicEvent(eventType: string, payload: Uint8Array): Promise<Uint8Array> {
+    return this.payloadCall('encode_public_event', { eventType, data: payload });
   }
 
   async query(msg: TypedDict, state: StateDump): Promise<unknown> {

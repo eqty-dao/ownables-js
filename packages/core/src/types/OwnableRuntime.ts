@@ -12,6 +12,32 @@ export interface CosmWasmEvent {
   attributes: TypedDict<string>;
 }
 
+export interface PublicEvent {
+  source: string;
+  eventType: string;
+  data: string;
+  blockNumber: number;
+  transactionHash: string;
+  transactionIndex: number;
+  logIndex: number;
+}
+
+export interface RuntimePublicEvent extends Omit<PublicEvent, 'data'> {
+  data: Uint8Array;
+}
+
+export interface OwnableEventSource {
+  id: string;
+  owner: string;
+  issuer: string;
+}
+
+export interface OwnableEvent {
+  source: OwnableEventSource;
+  eventType: string;
+  attributes: TypedDict;
+}
+
 export interface OwnableRPC {
   initialize: (js: string, wasm: Uint8Array) => Promise<void>;
   instantiate: (
@@ -28,9 +54,9 @@ export interface OwnableRPC {
     data: string;
     state: StateDump;
   }>;
-  externalEvent: (
-    msg: TypedDict,
-    info: TypedDict,
+  register: (
+    event: RuntimePublicEvent,
+    info: CosmWasmMessageInfo,
     state: StateDump
   ) => Promise<{
     attributes: TypedDict<string>;
@@ -38,6 +64,17 @@ export interface OwnableRPC {
     data: string;
     state: StateDump;
   }>;
+  ingest: (
+    event: OwnableEvent,
+    info: CosmWasmMessageInfo,
+    state: StateDump
+  ) => Promise<{
+    attributes: TypedDict<string>;
+    events: Array<CosmWasmEvent>;
+    data: string;
+    state: StateDump;
+  }>;
+  encodePublicEvent: (eventType: string, payload: Uint8Array) => Promise<Uint8Array>;
   query: (msg: TypedDict, state: StateDump) => Promise<any>;
   refresh: (state: StateDump) => Promise<void>;
   terminate: () => void;

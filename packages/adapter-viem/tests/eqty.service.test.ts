@@ -217,6 +217,78 @@ describe('EQTYService', () => {
     expect(feeReader.quoteEqtyCost).not.toHaveBeenCalled();
   });
 
+  it('emits public events with EQTY payment when allowance covers the fee', async () => {
+    const publicEventClient = {
+      emitPublicEvent: vi.fn().mockResolvedValue({
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'11'.repeat(4)}`,
+        blockNumber: 1,
+        transactionHash: `0x${'22'.repeat(32)}`,
+        transactionIndex: 0,
+        logIndex: 1,
+      }),
+    };
+    const feeReader = {
+      quoteEqtyCost: vi.fn().mockResolvedValue(12n),
+      quoteEthCost: vi.fn().mockResolvedValue(34n),
+      eqtyToken: vi.fn().mockResolvedValue('0x1111111111111111111111111111111111111111'),
+    };
+    const eqtyToken = { allowance: vi.fn().mockResolvedValue(12n) };
+    const service = createService(
+      '0xabc',
+      84532,
+      { account: '0xabc', signMessage: vi.fn() } as any,
+      { getBlockNumber: vi.fn(), getLogs: vi.fn() } as any,
+      undefined,
+      { publicEventClient, feeReader, eqtyToken, signer: {} as any }
+    );
+
+    await service.emitPublicEvent(`0x${'33'.repeat(32)}`, 'consume', Uint8Array.from([1, 2, 3]));
+    expect(publicEventClient.emitPublicEvent).toHaveBeenCalledWith(
+      `0x${'33'.repeat(32)}`,
+      'consume',
+      Uint8Array.from([1, 2, 3]),
+      { value: 0n }
+    );
+  });
+
+  it('emits public events with ETH when allowance is insufficient', async () => {
+    const publicEventClient = {
+      emitPublicEvent: vi.fn().mockResolvedValue({
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'11'.repeat(4)}`,
+        blockNumber: 1,
+        transactionHash: `0x${'22'.repeat(32)}`,
+        transactionIndex: 0,
+        logIndex: 1,
+      }),
+    };
+    const feeReader = {
+      quoteEqtyCost: vi.fn().mockResolvedValue(12n),
+      quoteEthCost: vi.fn().mockResolvedValue(34n),
+      eqtyToken: vi.fn().mockResolvedValue('0x1111111111111111111111111111111111111111'),
+    };
+    const eqtyToken = { allowance: vi.fn().mockResolvedValue(11n) };
+    const service = createService(
+      '0xabc',
+      84532,
+      { account: '0xabc', signMessage: vi.fn() } as any,
+      { getBlockNumber: vi.fn(), getLogs: vi.fn() } as any,
+      undefined,
+      { publicEventClient, feeReader, eqtyToken, signer: {} as any }
+    );
+
+    await service.emitPublicEvent(`0x${'33'.repeat(32)}`, 'consume', Uint8Array.from([1, 2, 3]));
+    expect(publicEventClient.emitPublicEvent).toHaveBeenCalledWith(
+      `0x${'33'.repeat(32)}`,
+      'consume',
+      Uint8Array.from([1, 2, 3]),
+      { value: 34n }
+    );
+  });
+
   it('delegates sign() to subject.signWith', async () => {
     const signer = { sig: true } as any;
     const service = createService(

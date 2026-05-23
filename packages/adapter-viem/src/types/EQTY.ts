@@ -3,9 +3,27 @@ import type { Binary, ViemSigner } from 'eqty-core';
 export type TypedDataDomain = Record<string, unknown>;
 export type TypedDataField = { name: string; type: string };
 export type AnchorTxOptions = { value?: bigint };
+export type EmittedPublicEvent = {
+  source: string;
+  eventType: string;
+  data: string;
+  blockNumber: number;
+  transactionHash: string;
+  transactionIndex: number;
+  logIndex: number;
+};
 
 export interface AnchorClientLike {
   anchor(payload: Array<{ key: Binary; value: Binary }>, txOptions?: AnchorTxOptions): Promise<string>;
+}
+
+export interface PublicEventClientLike {
+  emitPublicEvent(
+    subjectId: string,
+    eventType: string,
+    data: Uint8Array,
+    txOptions?: AnchorTxOptions
+  ): Promise<EmittedPublicEvent>;
 }
 
 export interface AnchorFeeReader {
@@ -20,6 +38,7 @@ export interface EqtyTokenReader {
 
 export interface EQTYServiceDeps {
   anchorClient?: AnchorClientLike;
+  publicEventClient?: PublicEventClientLike;
   feeReader?: AnchorFeeReader;
   eqtyToken?: EqtyTokenReader;
   signer?: ViemSigner;

@@ -4,9 +4,27 @@ import type { Provider, Signer, TypedDataDomain as EthersTypedDataDomain } from 
 export type TypedDataField = { name: string; type: string };
 export type TypedDataDomain = EthersTypedDataDomain;
 export type AnchorTxOptions = { value?: bigint };
+export type EmittedPublicEvent = {
+  source: string;
+  eventType: string;
+  data: string;
+  blockNumber: number;
+  transactionHash: string;
+  transactionIndex: number;
+  logIndex: number;
+};
 
 export interface EthersAnchorClientLike {
   anchor(payload: Array<{ key: Binary; value: Binary }>, txOptions?: AnchorTxOptions): Promise<string>;
+}
+
+export interface EthersPublicEventClientLike {
+  emitPublicEvent(
+    subjectId: string,
+    eventType: string,
+    data: Uint8Array,
+    txOptions?: AnchorTxOptions
+  ): Promise<EmittedPublicEvent>;
 }
 
 export interface EthersAnchorFeeContractLike {
@@ -30,6 +48,7 @@ export interface EthersSignerLike {
 
 export interface EQTYServiceDeps {
   anchorClient?: EthersAnchorClientLike;
+  publicEventClient?: EthersPublicEventClientLike;
   feeContract?: EthersAnchorFeeContractLike;
   eqtyToken?: EthersEqtyTokenLike;
   signer?: EthersSignerLike;

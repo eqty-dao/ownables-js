@@ -63,17 +63,40 @@ function buildMockExports() {
     });
   });
 
-  const ownable_external_event = vi.fn((ptr: number, len: number) => {
+  const ownable_register = vi.fn((ptr: number, len: number) => {
     const request = decode(readInput(ptr, len)) as any;
     stateDump = [...request.mem.state_dump, [[5], [6]]];
     return makeEnvelope({
       result: encode({
-        attributes: [{ key: 'method', value: 'external' }],
-        events: [{ type: 'external_event', attributes: [{ key: 'id', value: request.ownable_id }] }],
+        attributes: [{ key: 'method', value: 'register' }],
+        events: [{ type: 'register', attributes: [{ key: 'source', value: request.msg.source }] }],
         data: 'ext',
       }),
       mem: { state_dump: stateDump },
     });
+  });
+
+  const ownable_ingest = vi.fn((ptr: number, len: number) => {
+    const request = decode(readInput(ptr, len)) as any;
+    stateDump = [...request.mem.state_dump, [[7], [8]]];
+    return makeEnvelope({
+      result: encode({
+        attributes: [{ key: 'method', value: 'ingest' }],
+        events: [{ type: 'ingest', attributes: [{ key: 'id', value: request.msg.source.id }] }],
+        data: 'ingested',
+      }),
+      mem: { state_dump: stateDump },
+    });
+  });
+
+  const ownable_encode_public_event = vi.fn((ptr: number, len: number) => {
+    const request = decode(readInput(ptr, len)) as any;
+    return writeOutput(
+      encode({
+        success: true,
+        payload: Uint8Array.from([request.eventType.length, request.data.length]),
+      }) as Uint8Array
+    );
   });
 
   const ownable_query = vi.fn((_ptr: number, _len: number) => {
@@ -89,9 +112,19 @@ function buildMockExports() {
       ownable_instantiate,
       ownable_execute,
       ownable_query,
-      ownable_external_event,
+      ownable_register,
+      ownable_ingest,
+      ownable_encode_public_event,
     },
-    spies: { ownable_instantiate, ownable_execute, ownable_external_event, ownable_query, free },
+    spies: {
+      ownable_instantiate,
+      ownable_execute,
+      ownable_register,
+      ownable_ingest,
+      ownable_encode_public_event,
+      ownable_query,
+      free,
+    },
   };
 }
 
@@ -100,7 +133,7 @@ describe('NodeSandboxOwnableRPC', () => {
     vi.restoreAllMocks();
   });
 
-  it('initializes wasm and executes instantiate/execute/external/query flow', async () => {
+  it('initializes wasm and executes instantiate/execute/register/ingest/query flow', async () => {
     const mock = buildMockExports();
     vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue({ exports: mock.exports } as any);
 
@@ -120,16 +153,41 @@ describe('NodeSandboxOwnableRPC', () => {
     expect(execute.events[0]?.attributes.action).toBe('transfer');
     expect(execute.state.length).toBe(2);
 
-    const external = await rpc.externalEvent(
-      { msg: { event_type: 'consume', attributes: {} } },
+    const registered = await rpc.register(
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'11'.repeat(4)}`,
+        blockNumber: 1,
+        transactionHash: `0x${'22'.repeat(32)}`,
+        transactionIndex: 0,
+        logIndex: 1,
+      },
       { sender: 'alice', funds: [] },
       execute.state
     );
-    expect(external.attributes.method).toBe('external');
-    expect(external.events[0]?.attributes.id).toBe('ownable-1');
-    expect(external.state.length).toBe(3);
+    expect(registered.attributes.method).toBe('register');
+    expect(registered.events[0]?.attributes.source).toBe('0xsource');
+    expect(registered.state.length).toBe(3);
 
-    await expect(rpc.query({ get_info: {} }, external.state)).resolves.toEqual({ owner: 'alice' });
+    const ingested = await rpc.ingest(
+      {
+        source: { id: 'src-1', owner: 'owner-1', issuer: 'issuer-1' },
+        eventType: 'consume',
+        attributes: {},
+      },
+      { sender: 'alice', funds: [] },
+      registered.state
+    );
+    expect(ingested.attributes.method).toBe('ingest');
+    expect(ingested.events[0]?.attributes.id).toBe('src-1');
+    expect(ingested.state.length).toBe(4);
+
+    await expect(rpc.encodePublicEvent('consume', Uint8Array.from([1, 2, 3]))).resolves.toEqual(
+      Uint8Array.from([7, 3])
+    );
+
+    await expect(rpc.query({ get_info: {} }, ingested.state)).resolves.toEqual({ owner: 'alice' });
     expect(mock.spies.ownable_query).toHaveBeenCalled();
   });
 

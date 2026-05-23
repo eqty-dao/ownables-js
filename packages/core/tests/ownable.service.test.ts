@@ -258,7 +258,7 @@ describe('OwnableService', () => {
     expect(storeSpy).toHaveBeenCalledWith(chain, [['k', 'v']]);
   });
 
-  it('applies event chain and handles instantiate/execute/external contexts', async () => {
+  it('applies event chain and handles instantiate/execute/register/ingest contexts', async () => {
     const service = createService(
       {
         hasStore: vi.fn().mockResolvedValue(false),
@@ -271,7 +271,8 @@ describe('OwnableService', () => {
     const rpc = {
       instantiate: vi.fn().mockResolvedValue({ state: [['s1', 1]] }),
       execute: vi.fn().mockResolvedValue({ state: [['s2', 2]] }),
-      externalEvent: vi.fn().mockResolvedValue({ state: [['s3', 3]] }),
+      register: vi.fn().mockResolvedValue({ state: [['s3', 3]] }),
+      ingest: vi.fn().mockResolvedValue({ state: [['s4', 4]] }),
     };
     const chain = {
       id: 'chain-apply',
@@ -279,19 +280,39 @@ describe('OwnableService', () => {
         { parsedData: { '@context': 'instantiate_msg.json', foo: 1 }, signerAddress: '0x1', hash: { hex: '0x1' } },
         { parsedData: { '@context': 'execute_msg.json', bar: 2 }, signerAddress: '0x2', hash: { hex: '0x2' } },
         {
-          parsedData: { '@context': 'external_event_msg.json', type: 'x', attributes: { a: 1 } },
+          parsedData: {
+            '@context': 'register_public_event_msg.json',
+            source: '0xabc',
+            eventType: 'x',
+            data: `0x${'11'.repeat(4)}`,
+            blockNumber: 1,
+            transactionHash: `0x${'22'.repeat(32)}`,
+            transactionIndex: 0,
+            logIndex: 1,
+          },
           signerAddress: '0x3',
           hash: { hex: '0x3' },
+        },
+        {
+          parsedData: {
+            '@context': 'ingest_event_msg.json',
+            source: { id: 'src-1', owner: 'owner-1', issuer: 'issuer-1' },
+            eventType: 'consume',
+            attributes: { a: 1 },
+          },
+          signerAddress: '0x4',
+          hash: { hex: '0x4' },
         },
       ],
     } as any;
     (service as any)._rpc.set(chain.id, rpc);
 
     const state = await service.apply(chain, [] as any);
-    expect(state).toEqual([['s3', 3]]);
+    expect(state).toEqual([['s4', 4]]);
     expect(rpc.instantiate).toHaveBeenCalledTimes(1);
     expect(rpc.execute).toHaveBeenCalledTimes(1);
-    expect(rpc.externalEvent).toHaveBeenCalledTimes(1);
+    expect(rpc.register).toHaveBeenCalledTimes(1);
+    expect(rpc.ingest).toHaveBeenCalledTimes(1);
   });
 
   it('throws on unknown event context during apply', async () => {
@@ -308,7 +329,8 @@ describe('OwnableService', () => {
     (service as any)._rpc.set(chain.id, {
       instantiate: vi.fn(),
       execute: vi.fn(),
-      externalEvent: vi.fn(),
+      register: vi.fn(),
+      ingest: vi.fn(),
     });
 
     await expect(service.apply(chain, [] as any)).rejects.toThrow('Unknown event type');
@@ -328,13 +350,14 @@ describe('OwnableService', () => {
       {} as any
     );
     const rpcConsumer = {
-      externalEvent: vi.fn().mockResolvedValue({ state: [['consumer', 1]] }),
+      ingest: vi.fn().mockResolvedValue({ state: [['consumer', 1]] }),
     };
     const rpcConsumable = {
       execute: vi.fn().mockResolvedValue({
         events: [{ type: 'consume', attributes: { any: 'value' } }],
         state: [['consumable', 1]],
       }),
+      query: vi.fn().mockResolvedValue({ owner: 'owner-1', issuer: 'issuer-1' }),
     };
     (service as any)._rpc.set(consumer.id, rpcConsumer);
     (service as any)._rpc.set(consumable.id, rpcConsumable);
@@ -344,7 +367,20 @@ describe('OwnableService', () => {
     await service.consume(consumer, consumable);
 
     expect(rpcConsumable.execute).toHaveBeenCalled();
-    expect(rpcConsumer.externalEvent).toHaveBeenCalled();
+    expect(rpcConsumable.query).toHaveBeenCalledWith({ get_info: {} }, [['consumable', 1]]);
+    expect(rpcConsumer.ingest).toHaveBeenCalledWith(
+      {
+        source: {
+          id: consumable.id,
+          owner: 'owner-1',
+          issuer: 'issuer-1',
+        },
+        eventType: 'consume',
+        attributes: { any: 'value' },
+      },
+      { sender: '0xabc', funds: [] },
+      [['state', 1]]
+    );
     expect(eqty.sign).toHaveBeenCalledTimes(2);
   });
 
@@ -626,7 +662,8 @@ describe('OwnableService', () => {
     const rpc = {
       execute: vi.fn().mockResolvedValue({ state: [['next', 1]] }),
       instantiate: vi.fn().mockResolvedValue({ state: [['init', 1]] }),
-      externalEvent: vi.fn().mockResolvedValue({ state: [['ext', 1]] }),
+      register: vi.fn().mockResolvedValue({ state: [['ext', 1]] }),
+      ingest: vi.fn().mockResolvedValue({ state: [['ingest', 1]] }),
     };
     const events = Array.from({ length: 12 }, (_, i) =>
       i === 5
@@ -662,7 +699,8 @@ describe('OwnableService', () => {
         .mockResolvedValueOnce({ state: [['ok', 1]] })
         .mockRejectedValueOnce(new Error('boom')),
       instantiate: vi.fn(),
-      externalEvent: vi.fn(),
+      register: vi.fn(),
+      ingest: vi.fn(),
     };
     const chain = {
       id: 'chain-fail',
@@ -694,9 +732,10 @@ describe('OwnableService', () => {
     const consumable = { id: 'consumable-1', state: { hex: '0x2' } } as any;
     (service as any)._rpc.set(consumable.id, {
       execute: vi.fn().mockResolvedValue({ events: [], state: [['x', 1]] }),
+      query: vi.fn().mockResolvedValue({ owner: 'owner-1', issuer: 'issuer-1' }),
     });
     (service as any)._rpc.set(consumer.id, {
-      externalEvent: vi.fn(),
+      ingest: vi.fn(),
     });
 
     await expect(service.consume(consumer, consumable)).rejects.toThrow(
@@ -708,5 +747,76 @@ describe('OwnableService', () => {
       [] as any
     );
     expect((service as any).stateStore.setAll).not.toHaveBeenCalled();
+  });
+
+  it('registers public events once and skips duplicates', async () => {
+    const stateStore = createStateStore();
+    const chain = {
+      id: 'ownable-register',
+      state: { hex: '0xstate' },
+      latestHash: { hex: `0x${'1'.repeat(64)}` },
+      toJSON: vi.fn().mockReturnValue({ id: 'ownable-register', events: [] }),
+      add: vi.fn(),
+      events: [],
+    } as any;
+    await stateStore.createStore(`ownable:${chain.id}`);
+    await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
+    const service = createService(
+      stateStore as any,
+      { getStateDump: vi.fn().mockResolvedValue([['s', 1]]) } as any,
+      { address: '0xabc', sign: vi.fn(), anchor: vi.fn() } as any,
+      {} as any
+    );
+    const register = vi.fn().mockResolvedValue({ state: [['next', 1]] });
+    (service as any)._rpc.set(chain.id, { register });
+    vi.spyOn(service, 'store').mockResolvedValue(undefined as any);
+
+    const event = {
+      source: '0xsource',
+      eventType: 'consume',
+      data: `0x${'11'.repeat(4)}`,
+      blockNumber: 1,
+      transactionHash: `0x${'22'.repeat(32)}`,
+      transactionIndex: 0,
+      logIndex: 7,
+    };
+
+    await service.registerPublicEvent(chain, event);
+    await service.registerPublicEvent(chain, event);
+
+    expect(register).toHaveBeenCalledTimes(1);
+    expect(await stateStore.get(`ownable:${chain.id}.public-event-replays`, `${event.transactionHash}:${event.logIndex}`)).toBe(true);
+  });
+
+  it('encodes, emits, and registers public events', async () => {
+    const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
+    const eqty = {
+      address: '0xabc',
+      sign: vi.fn(),
+      emitPublicEvent: vi.fn().mockResolvedValue({
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'33'.repeat(4)}`,
+        blockNumber: 5,
+        transactionHash: `0x${'44'.repeat(32)}`,
+        transactionIndex: 2,
+        logIndex: 9,
+      }),
+    };
+    const service = createService(
+      {} as any,
+      {} as any,
+      eqty as any,
+      {} as any
+    );
+    const encodePublicEvent = vi.fn().mockResolvedValue(Uint8Array.from([1, 2, 3]));
+    (service as any)._rpc.set(chain.id, { encodePublicEvent });
+    const registerSpy = vi.spyOn(service, 'registerPublicEvent').mockResolvedValue(undefined);
+
+    await service.emitPublicEvent(chain, 'consume', { amount: 1 });
+
+    expect(encodePublicEvent).toHaveBeenCalledWith('consume', expect.any(Uint8Array));
+    expect(eqty.emitPublicEvent).toHaveBeenCalledWith(chain.id, 'consume', Uint8Array.from([1, 2, 3]));
+    expect(registerSpy).toHaveBeenCalled();
   });
 });

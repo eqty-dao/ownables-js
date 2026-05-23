@@ -22,6 +22,7 @@ import type {
   AnchorTxOptions,
   EqtyTokenReader,
   EQTYServiceDeps,
+  PublicEventClientLike,
 } from "../types/EQTY";
 
 const ZERO_HASH = Binary.fromHex("0x" + "0".repeat(64));
@@ -33,6 +34,7 @@ export default class EQTYService {
   private publicClient: PublicClient;
   private walletClient: WalletClient;
   private anchorClient: AnchorClientLike;
+  private publicEventClient: PublicEventClientLike;
   private feeReader: AnchorFeeReader;
   private anchorQueue: Array<{ key: Binary; value: Binary }> = [];
   public readonly signer: ViemSigner;
@@ -96,6 +98,70 @@ export default class EQTYService {
       this.anchorClient = new AnchorClient(contract) as unknown as AnchorClientLike;
     }
 
+    this.publicEventClient =
+      deps.publicEventClient ??
+      {
+        emitPublicEvent: async (
+          subjectId: string,
+          eventType: string,
+          data: Uint8Array,
+          txOptions?: AnchorTxOptions
+        ) => {
+          const transactionHash = await (this.walletClient as any).writeContract({
+            account: (this.walletClient as any).account,
+            address: AnchorClient.contractAddress(this.chainId) as `0x${string}`,
+            abi: [
+              {
+                type: 'function',
+                name: 'emitPublicEvent',
+                stateMutability: 'payable',
+                inputs: [
+                  { name: 'subjectId', type: 'bytes32' },
+                  { name: 'eventType', type: 'string' },
+                  { name: 'data', type: 'bytes' },
+                ],
+                outputs: [],
+              },
+            ],
+            functionName: 'emitPublicEvent',
+            args: [subjectId, eventType, data],
+            value: txOptions?.value,
+          });
+          const receipt = await (this.publicClient as any).waitForTransactionReceipt({ hash: transactionHash });
+          const publicEventAbi = parseAbiItem(
+            'event PublicEvent(bytes32 indexed subjectId, address indexed source, string eventType, bytes data, uint64 timestamp)'
+          );
+          const logs = await (this.publicClient as any).getLogs({
+            address: AnchorClient.contractAddress(this.chainId) as `0x${string}`,
+            event: publicEventAbi,
+            fromBlock: receipt.blockNumber,
+            toBlock: receipt.blockNumber,
+          });
+          const log = logs.find(
+            (entry: any) =>
+              entry.transactionHash === transactionHash &&
+              entry.args?.subjectId?.toLowerCase?.() === subjectId.toLowerCase()
+          );
+
+          if (!log) {
+            throw new Error('PublicEvent log not found in transaction receipt');
+          }
+
+          return {
+            source: log.args.source as string,
+            eventType: log.args.eventType as string,
+            data:
+              typeof log.args.data === 'string'
+                ? Binary.fromHex(log.args.data).hex
+                : new Binary(log.args.data as Uint8Array).hex,
+            blockNumber: Number(receipt.blockNumber),
+            transactionHash,
+            transactionIndex: Number(receipt.transactionIndex ?? receipt.index ?? 0),
+            logIndex: Number(log.logIndex),
+          };
+        },
+      };
+
     this.feeReader = deps.feeReader ?? this;
 
     this.signer = deps.signer ?? new ViemSigner(this.walletClient);
@@ -143,6 +209,16 @@ export default class EQTYService {
       this.anchorQueue.unshift(...payload);
       throw err;
     }
+  }
+
+  async emitPublicEvent(
+    subjectId: string,
+    eventType: string,
+    data: Uint8Array,
+    txOptions?: AnchorTxOptions
+  ) {
+    const nextTxOptions = txOptions ?? (await this.resolveAnchorTxOptions(1));
+    return this.publicEventClient.emitPublicEvent(subjectId, eventType, data, nextTxOptions);
   }
 
   async quoteEqtyCost(count: bigint): Promise<bigint> {

@@ -1,6 +1,12 @@
 import type { TypedPackage } from '@ownables/core';
 
-export type RNAbiCallType = 'instantiate' | 'execute' | 'query' | 'external_event';
+export type RNAbiCallType =
+  | 'instantiate'
+  | 'execute'
+  | 'query'
+  | 'register'
+  | 'ingest'
+  | 'encode_public_event';
 
 export interface RNRuntimeBridge {
   createInstance(id: string): Promise<string> | string;

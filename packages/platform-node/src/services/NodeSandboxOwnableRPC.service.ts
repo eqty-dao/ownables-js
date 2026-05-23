@@ -1,5 +1,13 @@
 import { decode, encode } from 'cbor-x';
-import type { CosmWasmEvent, CosmWasmMessageInfo, OwnableRPC, StateDump } from '@ownables/core';
+import type {
+  CosmWasmEvent,
+  CosmWasmMessageInfo,
+  OwnableEvent,
+  OwnableRPC,
+  PublicEvent,
+  RuntimePublicEvent,
+  StateDump,
+} from '@ownables/core';
 import type TypedDict from '@ownables/core/types/TypedDict';
 
 type AbiExports = WebAssembly.Exports & {
@@ -9,7 +17,9 @@ type AbiExports = WebAssembly.Exports & {
   ownable_instantiate: (ptr: number, len: number) => bigint | number;
   ownable_execute: (ptr: number, len: number) => bigint | number;
   ownable_query: (ptr: number, len: number) => bigint | number;
-  ownable_external_event: (ptr: number, len: number) => bigint | number;
+  ownable_register: (ptr: number, len: number) => bigint | number;
+  ownable_ingest: (ptr: number, len: number) => bigint | number;
+  ownable_encode_public_event: (ptr: number, len: number) => bigint | number;
 };
 
 interface HostAbiEnvelope {
@@ -66,7 +76,9 @@ export default class NodeSandboxOwnableRPC implements OwnableRPC {
       typeof exportsRef.ownable_instantiate !== 'function' ||
       typeof exportsRef.ownable_execute !== 'function' ||
       typeof exportsRef.ownable_query !== 'function' ||
-      typeof exportsRef.ownable_external_event !== 'function'
+      typeof exportsRef.ownable_register !== 'function' ||
+      typeof exportsRef.ownable_ingest !== 'function' ||
+      typeof exportsRef.ownable_encode_public_event !== 'function'
     ) {
       throw new Error('Invalid ownable runtime exports');
     }
@@ -105,8 +117,14 @@ export default class NodeSandboxOwnableRPC implements OwnableRPC {
         case 'query':
           packed = exportsRef.ownable_query(inPtr, len);
           break;
-        case 'external_event':
-          packed = exportsRef.ownable_external_event(inPtr, len);
+        case 'register':
+          packed = exportsRef.ownable_register(inPtr, len);
+          break;
+        case 'ingest':
+          packed = exportsRef.ownable_ingest(inPtr, len);
+          break;
+        case 'encode_public_event':
+          packed = exportsRef.ownable_encode_public_event(inPtr, len);
           break;
         default:
           throw new Error(`unknown message type ${type}`);
@@ -156,6 +174,20 @@ export default class NodeSandboxOwnableRPC implements OwnableRPC {
     const next = this._queue.then(call, call);
     this._queue = next.catch(() => {});
     return next;
+  }
+
+  private invokePayload(type: string, request: TypedDict): Uint8Array {
+    const input = encode(request) as Uint8Array;
+    const output = this.invoke(type, input);
+    const envelope = decode(output) as HostAbiEnvelope;
+
+    if (!envelope.success) {
+      throw new Error(
+        `Ownable ABI call failed: ${envelope.error_code || 'UNKNOWN'} ${envelope.error_message || ''}`.trim()
+      );
+    }
+
+    return envelope.payload ?? new Uint8Array();
   }
 
   private attributesToDict(attributes: Array<{ key: string; value: string }>): TypedDict<string> {
@@ -212,9 +244,9 @@ export default class NodeSandboxOwnableRPC implements OwnableRPC {
     return this.toExecuteResult(decode(response) as AbiResponse, newState);
   }
 
-  async externalEvent(
-    msg: TypedDict,
-    info: TypedDict,
+  async register(
+    event: RuntimePublicEvent,
+    info: CosmWasmMessageInfo,
     state: StateDump
   ): Promise<{
     attributes: TypedDict<string>;
@@ -223,16 +255,41 @@ export default class NodeSandboxOwnableRPC implements OwnableRPC {
     state: StateDump;
   }> {
     const { response, state: newState } = await this.workerCall(
-      'external_event',
+      'register',
       {
-        msg: msg.msg,
+        msg: event,
         info,
-        ownable_id: this.ownableId,
         mem: { state_dump: state },
       },
       state
     );
     return this.toExecuteResult(decode(response) as AbiResponse, newState);
+  }
+
+  async ingest(
+    event: OwnableEvent,
+    info: CosmWasmMessageInfo,
+    state: StateDump
+  ): Promise<{
+    attributes: TypedDict<string>;
+    events: Array<CosmWasmEvent>;
+    data: string;
+    state: StateDump;
+  }> {
+    const { response, state: newState } = await this.workerCall(
+      'ingest',
+      {
+        msg: event,
+        info,
+        mem: { state_dump: state },
+      },
+      state
+    );
+    return this.toExecuteResult(decode(response) as AbiResponse, newState);
+  }
+
+  async encodePublicEvent(eventType: string, payload: Uint8Array): Promise<Uint8Array> {
+    return this.invokePayload('encode_public_event', { eventType, data: payload });
   }
 
   async query(msg: TypedDict, state: StateDump): Promise<unknown> {

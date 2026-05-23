@@ -4,10 +4,10 @@ use std::fmt::Display;
 use std::panic::UnwindSafe;
 
 use cosmwasm_std::{MessageInfo, Response};
-use ownable_std::{create_lto_env, ExternalEventMsg, IdbStateDump, load_lto_deps};
+use ownable_std::{create_lto_env, IdbStateDump, load_lto_deps};
 use serde::{Deserialize, Serialize};
 
-use msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use msg::{ExecuteMsg, IngestEventMsg, InstantiateMsg, QueryMsg, RegisterPublicEventMsg};
 
 pub mod contract;
 pub mod error;
@@ -34,11 +34,25 @@ struct AbiQueryRequest {
 }
 
 #[derive(Serialize, Deserialize)]
-struct AbiExternalEventRequest {
-    msg: ExternalEventMsg,
+struct AbiRegisterRequest {
+    msg: RegisterPublicEventMsg,
     info: MessageInfo,
-    ownable_id: String,
     mem: IdbStateDump,
+}
+
+#[derive(Serialize, Deserialize)]
+struct AbiIngestRequest {
+    msg: IngestEventMsg,
+    info: MessageInfo,
+    mem: IdbStateDump,
+}
+
+#[derive(Serialize, Deserialize)]
+struct AbiEncodePublicEventRequest {
+    #[serde(rename = "eventType")]
+    event_type: String,
+    #[serde(with = "serde_bytes")]
+    data: Vec<u8>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -321,21 +335,49 @@ fn query_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
     cbor_to_vec(&payload)
 }
 
-fn external_event_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
-    let request: AbiExternalEventRequest = cbor_from_slice(input)?;
+fn register_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
+    let request: AbiRegisterRequest = cbor_from_slice(input)?;
     let mut deps = load_lto_deps(Some(request.mem));
 
-    let response = contract::register_external_event(
-        request.info,
-        deps.as_mut(),
-        request.msg,
-        request.ownable_id,
-    )
-    .map_err(HostAbiError::from_display)?;
+    let response =
+        contract::register(request.info, deps.as_mut(), request.msg).map_err(HostAbiError::from_display)?;
 
     let payload = AbiResultPayload {
         result: cbor_to_vec(&AbiResponse::from(response))?,
         mem: Some(IdbStateDump::from(deps.storage)),
+    };
+
+    cbor_to_vec(&payload)
+}
+
+fn ingest_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
+    let request: AbiIngestRequest = cbor_from_slice(input)?;
+    let mut deps = load_lto_deps(Some(request.mem));
+
+    let response =
+        contract::ingest(request.info, deps.as_mut(), request.msg).map_err(HostAbiError::from_display)?;
+
+    let payload = AbiResultPayload {
+        result: cbor_to_vec(&AbiResponse::from(response))?,
+        mem: Some(IdbStateDump::from(deps.storage)),
+    };
+
+    cbor_to_vec(&payload)
+}
+
+fn encode_public_event_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
+    let request: AbiEncodePublicEventRequest = cbor_from_slice(input)?;
+
+    if request.event_type.is_empty() {
+        return Err(HostAbiError::with_code(
+            "INVALID_EVENT_TYPE",
+            "eventType must not be empty",
+        ));
+    }
+
+    let payload = AbiResultPayload {
+        result: request.data,
+        mem: None,
     };
 
     cbor_to_vec(&payload)
@@ -367,8 +409,18 @@ pub extern "C" fn ownable_query(ptr: u32, len: u32) -> u64 {
 }
 
 #[no_mangle]
-pub extern "C" fn ownable_external_event(ptr: u32, len: u32) -> u64 {
-    dispatch(ptr, len, external_event_handler)
+pub extern "C" fn ownable_register(ptr: u32, len: u32) -> u64 {
+    dispatch(ptr, len, register_handler)
+}
+
+#[no_mangle]
+pub extern "C" fn ownable_ingest(ptr: u32, len: u32) -> u64 {
+    dispatch(ptr, len, ingest_handler)
+}
+
+#[no_mangle]
+pub extern "C" fn ownable_encode_public_event(ptr: u32, len: u32) -> u64 {
+    dispatch(ptr, len, encode_public_event_handler)
 }
 
 #[allow(dead_code)]

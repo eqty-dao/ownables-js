@@ -1,11 +1,12 @@
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use crate::msg::{ExecuteMsg, IngestEventMsg, InstantiateMsg, QueryMsg, RegisterPublicEventMsg};
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::{Addr, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 use cosmwasm_std::{Binary, to_json_binary};
 use cw2::set_contract_version;
 use crate::state::{NFT_ITEM, CONFIG, METADATA, LOCKED, PACKAGE_CID, OWNABLE_INFO, NETWORK_ID};
-use ownable_std::{ExternalEventMsg, InfoResponse, Metadata, OwnableInfo};
+use ownable_std::{InfoResponse, Metadata, OwnableInfo};
+use serde_json::Value;
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:ownable-static";
@@ -116,28 +117,26 @@ pub fn try_transfer(info: MessageInfo, deps: DepsMut, to: Addr) -> Result<Respon
     )
 }
 
-pub fn register_external_event(
+pub fn register(
     info: MessageInfo,
     deps: DepsMut,
-    event: ExternalEventMsg,
-    _ownable_id: String,
+    event: RegisterPublicEventMsg,
 ) -> Result<Response, ContractError> {
-    let mut response = Response::new()
-        .add_attribute("method", "register_external_event");
+    let mut response = Response::new().add_attribute("method", "register");
 
     match event.event_type.as_str() {
         "lock" => {
-            try_register_lock(
-                info,
-                deps,
-                event,
-            )?;
+            try_register_lock(info, deps, event)?;
             response = response.add_attribute("event_type", "lock");
-        },
+        }
         _ => return Err(ContractError::MatchEventError { val: event.event_type }),
     };
 
     Ok(response)
+}
+
+pub fn ingest(_info: MessageInfo, _deps: DepsMut, _event: IngestEventMsg) -> Result<Response, ContractError> {
+    Err(ContractError::NotImplemented {})
 }
 
 fn try_release(_info: MessageInfo, deps: DepsMut, to: Addr) -> Result<Response, ContractError> {
@@ -164,19 +163,28 @@ fn try_release(_info: MessageInfo, deps: DepsMut, to: Addr) -> Result<Response, 
 fn try_register_lock(
     info: MessageInfo,
     deps: DepsMut,
-    event: ExternalEventMsg,
+    event: RegisterPublicEventMsg,
 ) -> Result<Response, ContractError> {
-    let owner = event.attributes.get("owner")
-        .cloned()
+    let payload: Value = ciborium::de::from_reader(event.data.as_slice())
+        .map_err(|_| ContractError::InvalidExternalEventArgs {})?;
+    let owner = payload.get("owner").and_then(Value::as_str).unwrap_or_default();
+    let nft_id = payload
+        .get("token_id")
+        .or_else(|| payload.get("tokenId"))
+        .and_then(|value| {
+            value.as_str().map(ToString::to_string).or_else(|| {
+                if value.is_number() {
+                    Some(value.to_string())
+                } else {
+                    None
+                }
+            })
+        })
         .unwrap_or_default();
-    let nft_id = event.attributes.get("token_id")
-        .cloned()
-        .unwrap_or_default();
-    let contract_addr = event.attributes.get("contract")
-        .cloned()
-        .unwrap_or_default();
+    let contract_addr = payload.get("contract").and_then(Value::as_str).unwrap_or_default();
+    let event_network = payload.get("network").and_then(Value::as_str).unwrap_or_default();
 
-    if owner.is_empty() || nft_id.is_empty() || contract_addr.is_empty() {
+    if owner.is_empty() || nft_id.is_empty() || contract_addr.is_empty() || event_network.is_empty() {
         return Err(ContractError::InvalidExternalEventArgs {});
     }
 
@@ -191,10 +199,7 @@ fn try_register_lock(
         });
     }
 
-    let event_network = event.network.unwrap_or("".to_string());
-    if event_network == "" {
-        return Err(ContractError::MatchChainIdError { val: "No network".to_string() })
-    } else if event_network != nft.network {
+    if event_network != nft.network {
         return Err(ContractError::LockError {
             val: "network mismatch".to_string()
         });
@@ -215,7 +220,7 @@ fn try_register_lock(
 
             Ok(try_release(info, deps, address)?)
         }
-        _ => return Err(ContractError::MatchChainIdError { val: event_network }),
+        _ => return Err(ContractError::MatchChainIdError { val: event_network.to_string() }),
     }
 }
 

@@ -1,5 +1,6 @@
-use cosmwasm_std::{Addr};
+use cosmwasm_std::{Addr, Binary};
 use schemars::JsonSchema;
+use serde_json::Value;
 use serde::{Deserialize, Serialize};
 use ownable_std_macros::{
     ownables_transfer, ownables_lock,
@@ -29,3 +30,37 @@ pub enum ExecuteMsg {}
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RegisterPublicEventMsg {
+    pub source: String,
+    pub event_type: String,
+    pub data: Binary,
+    pub block_number: u64,
+    pub transaction_hash: Binary,
+    pub transaction_index: u32,
+    pub log_index: u32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
+pub struct OwnableEventSource {
+    pub id: String,
+    pub owner: String,
+    pub issuer: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct IngestEventMsg {
+    pub source: OwnableEventSource,
+    pub event_type: String,
+    pub attributes: Value,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct EncodePublicEventMsg {
+    pub event_type: String,
+    pub data: Binary,
+}

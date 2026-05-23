@@ -1,4 +1,4 @@
-use cosmwasm_std::{Addr, Binary};
+use cosmwasm_std::Addr;
 use schemars::JsonSchema;
 use serde_json::Value;
 use serde::{Deserialize, Serialize};
@@ -36,9 +36,9 @@ pub enum QueryMsg {}
 pub struct RegisterPublicEventMsg {
     pub source: String,
     pub event_type: String,
-    pub data: Binary,
+    pub data: Vec<u8>,
     pub block_number: u64,
-    pub transaction_hash: Binary,
+    pub transaction_hash: Vec<u8>,
     pub transaction_index: u32,
     pub log_index: u32,
 }
@@ -62,5 +62,5 @@ pub struct IngestEventMsg {
 #[serde(rename_all = "camelCase")]
 pub struct EncodePublicEventMsg {
     pub event_type: String,
-    pub data: Binary,
+    pub data: Vec<u8>,
 }

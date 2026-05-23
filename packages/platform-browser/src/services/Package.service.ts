@@ -337,13 +337,13 @@ export default class PackageService {
 
     if (ownablesAbi !== "1") {
       throw new Error(
-        `Invalid package: expected package.json ownablesAbi to be \"1\", got \"${String(ownablesAbi)}\"`
+        `Invalid package: expected package.json ownablesAbi to be "1", got "${String(ownablesAbi)}"`
       );
     }
 
     if (wireFormat !== "cbor") {
       throw new Error(
-        `Invalid package: expected package.json wireFormat to be \"cbor\", got \"${String(wireFormat)}\"`
+        `Invalid package: expected package.json wireFormat to be "cbor", got "${String(wireFormat)}"`
       );
     }
   }

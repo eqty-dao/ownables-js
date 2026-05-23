@@ -1,4 +1,10 @@
-export default function ownableErrorMessage(error: any): string {
+type ErrorWithShortMessage = Error & { shortMessage?: unknown };
+
+function hasShortMessage(error: Error): error is ErrorWithShortMessage {
+  return 'shortMessage' in error;
+}
+
+export default function ownableErrorMessage(error: unknown): string {
   if (!(error instanceof Error)) {
     return typeof error === 'string' ? error : 'Internal error';
   }
@@ -9,7 +15,7 @@ export default function ownableErrorMessage(error: any): string {
     return error.cause.message.replace(/^Custom Error val: "(.+)"$/, '$1');
   }
 
-  const viemShortMessage = (error as any).shortMessage;
+  const viemShortMessage = hasShortMessage(error) ? error.shortMessage : undefined;
   if (typeof viemShortMessage === 'string' && viemShortMessage.trim()) {
     return viemShortMessage.trim();
   }

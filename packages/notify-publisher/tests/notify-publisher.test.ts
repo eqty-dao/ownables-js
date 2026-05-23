@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { NotifyPublisherService } from "../src";
-import {
+import type {
   OwnablesNotificationBuilderService,
   OwnablesNotificationValidatorService,
 } from "@ownables/notify-core";

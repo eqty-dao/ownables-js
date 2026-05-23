@@ -119,7 +119,7 @@ describe('PackageService', () => {
       { fileReaderFactory: fileReaderFactory as any }
     );
 
-    await expect(service.getAssetAsText('cid-1', 'missing.txt')).rejects.toContain('Asset \"missing.txt\" is not in package cid-1');
+    await expect(service.getAssetAsText('cid-1', 'missing.txt')).rejects.toContain('Asset "missing.txt" is not in package cid-1');
   });
 
   it('processes local package and stores metadata', async () => {

@@ -431,8 +431,9 @@ fn _round_trip_ptr_len_for_tests(packed: u64) -> (u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::msg::{EncodePublicEventMsg, IngestEventMsg, OwnableEventSource, RegisterPublicEventMsg};
-    use cosmwasm_std::Addr;
+    use crate::msg::{EncodePublicEventMsg, ExecuteMsg, IngestEventMsg, OwnableEventSource, RegisterPublicEventMsg};
+    use cosmwasm_std::{Addr, Uint128};
+    use ownable_std::NFT;
     use std::collections::HashMap;
     use serde_json::json;
 
@@ -451,6 +452,42 @@ mod tests {
 
     fn decode_payload(bytes: Vec<u8>) -> AbiResultPayload {
         cbor_from_slice(&bytes).expect("decode payload")
+    }
+
+    fn instantiate_mem() -> IdbStateDump {
+        let request = AbiInstantiateRequest {
+            msg: InstantiateMsg {
+                name: "Dossier".to_string(),
+                description: "Dossier ownable".to_string(),
+                ownable_id: "dossier-1".to_string(),
+                ownable_type: Some("dossier".to_string()),
+                network_id: 1,
+                package: "bafy-package".to_string(),
+                nft: Some(NFT {
+                    network: "eip155:1".to_string(),
+                    id: Uint128::new(1),
+                    address: "nft-contract-address".to_string(),
+                    lock_service: None,
+                }),
+            },
+            info: sample_info(),
+        };
+
+        let out = instantiate_handler(&cbor_to_vec(&request).expect("encode instantiate request"))
+            .expect("instantiate handler succeeds");
+        decode_payload(out).mem.expect("instantiate returns memory")
+    }
+
+    fn locked_mem(mem: IdbStateDump) -> IdbStateDump {
+        let request = AbiExecuteRequest {
+            msg: ExecuteMsg::Lock {},
+            info: sample_info(),
+            mem,
+        };
+
+        let out = execute_handler(&cbor_to_vec(&request).expect("encode execute request"))
+            .expect("execute lock succeeds");
+        decode_payload(out).mem.expect("execute returns memory")
     }
 
     #[test]
@@ -472,6 +509,54 @@ mod tests {
         let err = register_handler(&cbor_to_vec(&request).expect("encode register request"))
             .expect_err("register handler should fail");
         assert!(err.message.contains("Invalid external event args"));
+    }
+
+    #[test]
+    fn register_handler_accepts_valid_lock_payload_and_unlocks_state() {
+        let request = AbiRegisterRequest {
+            msg: RegisterPublicEventMsg {
+                source: "0xsource".to_string(),
+                event_type: "lock".to_string(),
+                data: cbor_to_vec(&json!({
+                    "owner": "owner",
+                    "tokenId": "1",
+                    "contract": "nft-contract-address",
+                    "network": "eip155:1"
+                }))
+                .expect("encode lock payload"),
+                block_number: 1,
+                transaction_hash: vec![0xaa, 0xbb],
+                transaction_index: 0,
+                log_index: 0,
+            },
+            info: sample_info(),
+            mem: locked_mem(instantiate_mem()),
+        };
+
+        let out = register_handler(&cbor_to_vec(&request).expect("encode register request"))
+            .expect("register handler succeeds");
+        let payload = decode_payload(out);
+        let mem = payload.mem.expect("register returns memory");
+        let response: AbiResponse = cbor_from_slice(&payload.result).expect("decode response");
+
+        assert!(response
+            .attributes
+            .iter()
+            .any(|attr| attr.key == "method" && attr.value == "register"));
+        assert!(response
+            .attributes
+            .iter()
+            .any(|attr| attr.key == "event_type" && attr.value == "lock"));
+
+        let query = AbiQueryRequest {
+            msg: QueryMsg::IsLocked {},
+            mem,
+        };
+        let out = query_handler(&cbor_to_vec(&query).expect("encode query request"))
+            .expect("query handler succeeds");
+        let payload = decode_payload(out);
+        let is_locked: bool = serde_json::from_slice(&payload.result).expect("decode lock state");
+        assert!(!is_locked);
     }
 
     #[test]

@@ -281,7 +281,7 @@ describe('OwnableService', () => {
         { parsedData: { '@context': 'execute_msg.json', bar: 2 }, signerAddress: '0x2', hash: { hex: '0x2' } },
         {
           parsedData: {
-            '@context': 'register_public_event_msg.json',
+            '@context': 'register_msg.json',
             source: '0xabc',
             eventType: 'x',
             data: `0x${'11'.repeat(4)}`,
@@ -295,7 +295,7 @@ describe('OwnableService', () => {
         },
         {
           parsedData: {
-            '@context': 'ingest_event_msg.json',
+            '@context': 'ingest_msg.json',
             source: { id: 'src-1', owner: 'owner-1', issuer: 'issuer-1' },
             eventType: 'consume',
             attributes: { a: 1 },

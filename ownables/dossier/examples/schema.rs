@@ -3,9 +3,9 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
-use ownable_static::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use ownable_static::msg::{EncodePublicEventMsg, ExecuteMsg, IngestEventMsg, InstantiateMsg, QueryMsg, RegisterPublicEventMsg};
 use ownable_static::state::{Config};
-use ownable_std::{ExternalEventMsg, InfoResponse, Metadata};
+use ownable_std::{InfoResponse, Metadata};
 
 fn main() {
     let mut out_dir = current_dir().unwrap();
@@ -16,7 +16,9 @@ fn main() {
     export_schema(&schema_for!(InstantiateMsg), &out_dir);
     export_schema(&schema_for!(ExecuteMsg), &out_dir);
     export_schema(&schema_for!(QueryMsg), &out_dir);
-    export_schema(&schema_for!(ExternalEventMsg), &out_dir);
+    export_schema(&schema_for!(RegisterPublicEventMsg), &out_dir);
+    export_schema(&schema_for!(IngestEventMsg), &out_dir);
+    export_schema(&schema_for!(EncodePublicEventMsg), &out_dir);
     export_schema(&schema_for!(InfoResponse), &out_dir);
     export_schema(&schema_for!(Metadata), &out_dir);
     export_schema(&schema_for!(Config), &out_dir);

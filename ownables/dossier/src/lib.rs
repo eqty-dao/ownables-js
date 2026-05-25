@@ -4,10 +4,10 @@ use std::fmt::Display;
 use std::panic::UnwindSafe;
 
 use cosmwasm_std::{MessageInfo, Response};
-use ownable_std::{create_lto_env, ExternalEventMsg, IdbStateDump, load_lto_deps};
+use ownable_std::{create_lto_env, IdbStateDump, load_lto_deps};
 use serde::{Deserialize, Serialize};
 
-use msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use msg::{ExecuteMsg, IngestEventMsg, InstantiateMsg, QueryMsg, RegisterPublicEventMsg};
 
 pub mod contract;
 pub mod error;
@@ -34,11 +34,25 @@ struct AbiQueryRequest {
 }
 
 #[derive(Serialize, Deserialize)]
-struct AbiExternalEventRequest {
-    msg: ExternalEventMsg,
+struct AbiRegisterRequest {
+    msg: RegisterPublicEventMsg,
     info: MessageInfo,
-    ownable_id: String,
     mem: IdbStateDump,
+}
+
+#[derive(Serialize, Deserialize)]
+struct AbiIngestRequest {
+    msg: IngestEventMsg,
+    info: MessageInfo,
+    mem: IdbStateDump,
+}
+
+#[derive(Serialize, Deserialize)]
+struct AbiEncodePublicEventRequest {
+    #[serde(rename = "eventType")]
+    event_type: String,
+    #[serde(with = "serde_bytes")]
+    data: Vec<u8>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -321,21 +335,49 @@ fn query_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
     cbor_to_vec(&payload)
 }
 
-fn external_event_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
-    let request: AbiExternalEventRequest = cbor_from_slice(input)?;
+fn register_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
+    let request: AbiRegisterRequest = cbor_from_slice(input)?;
     let mut deps = load_lto_deps(Some(request.mem));
 
-    let response = contract::register_external_event(
-        request.info,
-        deps.as_mut(),
-        request.msg,
-        request.ownable_id,
-    )
-    .map_err(HostAbiError::from_display)?;
+    let response =
+        contract::register(request.info, deps.as_mut(), request.msg).map_err(HostAbiError::from_display)?;
 
     let payload = AbiResultPayload {
         result: cbor_to_vec(&AbiResponse::from(response))?,
         mem: Some(IdbStateDump::from(deps.storage)),
+    };
+
+    cbor_to_vec(&payload)
+}
+
+fn ingest_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
+    let request: AbiIngestRequest = cbor_from_slice(input)?;
+    let mut deps = load_lto_deps(Some(request.mem));
+
+    let response =
+        contract::ingest(request.info, deps.as_mut(), request.msg).map_err(HostAbiError::from_display)?;
+
+    let payload = AbiResultPayload {
+        result: cbor_to_vec(&AbiResponse::from(response))?,
+        mem: Some(IdbStateDump::from(deps.storage)),
+    };
+
+    cbor_to_vec(&payload)
+}
+
+fn encode_public_event_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
+    let request: AbiEncodePublicEventRequest = cbor_from_slice(input)?;
+
+    if request.event_type.is_empty() {
+        return Err(HostAbiError::with_code(
+            "INVALID_EVENT_TYPE",
+            "eventType must not be empty",
+        ));
+    }
+
+    let payload = AbiResultPayload {
+        result: request.data,
+        mem: None,
     };
 
     cbor_to_vec(&payload)
@@ -367,11 +409,212 @@ pub extern "C" fn ownable_query(ptr: u32, len: u32) -> u64 {
 }
 
 #[no_mangle]
-pub extern "C" fn ownable_external_event(ptr: u32, len: u32) -> u64 {
-    dispatch(ptr, len, external_event_handler)
+pub extern "C" fn ownable_register(ptr: u32, len: u32) -> u64 {
+    dispatch(ptr, len, register_handler)
+}
+
+#[no_mangle]
+pub extern "C" fn ownable_ingest(ptr: u32, len: u32) -> u64 {
+    dispatch(ptr, len, ingest_handler)
+}
+
+#[no_mangle]
+pub extern "C" fn ownable_encode_public_event(ptr: u32, len: u32) -> u64 {
+    dispatch(ptr, len, encode_public_event_handler)
 }
 
 #[allow(dead_code)]
 fn _round_trip_ptr_len_for_tests(packed: u64) -> (u32, u32) {
     unpack_ptr_len(packed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::msg::{EncodePublicEventMsg, ExecuteMsg, IngestEventMsg, OwnableEventSource, RegisterPublicEventMsg};
+    use cosmwasm_std::{Addr, Uint128};
+    use ownable_std::NFT;
+    use std::collections::HashMap;
+    use serde_json::json;
+
+    fn sample_mem() -> IdbStateDump {
+        IdbStateDump {
+            state_dump: HashMap::new(),
+        }
+    }
+
+    fn sample_info() -> MessageInfo {
+        MessageInfo {
+            sender: Addr::unchecked("owner"),
+            funds: Vec::new(),
+        }
+    }
+
+    fn decode_payload(bytes: Vec<u8>) -> AbiResultPayload {
+        cbor_from_slice(&bytes).expect("decode payload")
+    }
+
+    fn instantiate_mem() -> IdbStateDump {
+        let request = AbiInstantiateRequest {
+            msg: InstantiateMsg {
+                name: "Dossier".to_string(),
+                description: "Dossier ownable".to_string(),
+                ownable_id: "dossier-1".to_string(),
+                ownable_type: Some("dossier".to_string()),
+                network_id: 1,
+                package: "bafy-package".to_string(),
+                nft: Some(NFT {
+                    network: "eip155:1".to_string(),
+                    id: Uint128::new(1),
+                    address: "nft-contract-address".to_string(),
+                    lock_service: None,
+                }),
+            },
+            info: sample_info(),
+        };
+
+        let out = instantiate_handler(&cbor_to_vec(&request).expect("encode instantiate request"))
+            .expect("instantiate handler succeeds");
+        decode_payload(out).mem.expect("instantiate returns memory")
+    }
+
+    fn locked_mem(mem: IdbStateDump) -> IdbStateDump {
+        let request = AbiExecuteRequest {
+            msg: ExecuteMsg::Lock {},
+            info: sample_info(),
+            mem,
+        };
+
+        let out = execute_handler(&cbor_to_vec(&request).expect("encode execute request"))
+            .expect("execute lock succeeds");
+        decode_payload(out).mem.expect("execute returns memory")
+    }
+
+    #[test]
+    fn register_handler_rejects_invalid_lock_payload() {
+        let request = AbiRegisterRequest {
+            msg: RegisterPublicEventMsg {
+                source: "0xsource".to_string(),
+                event_type: "lock".to_string(),
+                data: cbor_to_vec(&json!({"owner":"owner"})).expect("encode payload"),
+                block_number: 1,
+                transaction_hash: vec![0xaa, 0xbb],
+                transaction_index: 0,
+                log_index: 0,
+            },
+            info: sample_info(),
+            mem: sample_mem(),
+        };
+
+        let err = register_handler(&cbor_to_vec(&request).expect("encode register request"))
+            .expect_err("register handler should fail");
+        assert!(err.message.contains("Invalid external event args"));
+    }
+
+    #[test]
+    fn register_handler_accepts_valid_lock_payload_and_unlocks_state() {
+        let request = AbiRegisterRequest {
+            msg: RegisterPublicEventMsg {
+                source: "0xsource".to_string(),
+                event_type: "lock".to_string(),
+                data: cbor_to_vec(&json!({
+                    "owner": "owner",
+                    "tokenId": "1",
+                    "contract": "nft-contract-address",
+                    "network": "eip155:1"
+                }))
+                .expect("encode lock payload"),
+                block_number: 1,
+                transaction_hash: vec![0xaa, 0xbb],
+                transaction_index: 0,
+                log_index: 0,
+            },
+            info: sample_info(),
+            mem: locked_mem(instantiate_mem()),
+        };
+
+        let out = register_handler(&cbor_to_vec(&request).expect("encode register request"))
+            .expect("register handler succeeds");
+        let payload = decode_payload(out);
+        let mem = payload.mem.expect("register returns memory");
+        let response: AbiResponse = cbor_from_slice(&payload.result).expect("decode response");
+
+        assert!(response
+            .attributes
+            .iter()
+            .any(|attr| attr.key == "method" && attr.value == "register"));
+        assert!(response
+            .attributes
+            .iter()
+            .any(|attr| attr.key == "event_type" && attr.value == "lock"));
+
+        let query = AbiQueryRequest {
+            msg: QueryMsg::IsLocked {},
+            mem,
+        };
+        let out = query_handler(&cbor_to_vec(&query).expect("encode query request"))
+            .expect("query handler succeeds");
+        let payload = decode_payload(out);
+        let is_locked: bool = serde_json::from_slice(&payload.result).expect("decode lock state");
+        assert!(!is_locked);
+    }
+
+    #[test]
+    fn encode_public_event_handler_echoes_payload_bytes() {
+        let request = AbiEncodePublicEventRequest {
+            event_type: "lock".to_string(),
+            data: vec![1, 2, 3, 4],
+        };
+
+        let out = encode_public_event_handler(&cbor_to_vec(&request).expect("encode request"))
+            .expect("encode handler succeeds");
+        let payload = decode_payload(out);
+        assert_eq!(payload.result, vec![1, 2, 3, 4]);
+        assert!(payload.mem.is_none());
+    }
+
+    #[test]
+    fn encode_public_event_handler_rejects_empty_event_type() {
+        let request = AbiEncodePublicEventRequest {
+            event_type: String::new(),
+            data: vec![1],
+        };
+
+        let err = encode_public_event_handler(&cbor_to_vec(&request).expect("encode request"))
+            .expect_err("empty type should fail");
+        assert_eq!(err.code.as_deref(), Some("INVALID_EVENT_TYPE"));
+    }
+
+    #[test]
+    fn ingest_handler_returns_not_implemented() {
+        let request = AbiIngestRequest {
+            msg: IngestEventMsg {
+                source: OwnableEventSource {
+                    id: "upstream-ownable".to_string(),
+                    owner: "owner".to_string(),
+                    issuer: "issuer".to_string(),
+                },
+                event_type: "consume".to_string(),
+                attributes: json!({"amount": 1}),
+            },
+            info: sample_info(),
+            mem: sample_mem(),
+        };
+
+        let err = ingest_handler(&cbor_to_vec(&request).expect("encode ingest request"))
+            .expect_err("ingest should not be implemented");
+        assert!(err.message.contains("Method is not implemented"));
+    }
+
+    #[test]
+    fn encode_public_event_msg_uses_camel_case() {
+        let msg = EncodePublicEventMsg {
+            event_type: "lock".to_string(),
+            data: vec![0xde, 0xad],
+        };
+
+        let value = serde_json::to_value(&msg).expect("serialize encode message");
+        assert!(value.get("eventType").is_some());
+        assert!(value.get("event_type").is_none());
+    }
 }

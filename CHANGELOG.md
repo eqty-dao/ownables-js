@@ -1,3 +1,19 @@
+# [0.6.0](https://github.com/eqty-dao/ownables-js/compare/v0.5.0...v0.6.0) (2026-05-25)
+
+
+### Bug Fixes
+
+* release ([aa9b6b8](https://github.com/eqty-dao/ownables-js/commit/aa9b6b8a6adc779089e4f7c2f4c92890b3dc25c2))
+* **release:** fix rust schema generation step ([17b8a74](https://github.com/eqty-dao/ownables-js/commit/17b8a74886daf8208fd224195bef1e8efa3dca5e))
+* tighten eslint config and cleanup lint issues ([e90a7a1](https://github.com/eqty-dao/ownables-js/commit/e90a7a1e192bb8198d5d5f0e5d3df4ab5234ee54))
+
+
+### Features
+
+* add public event support across runtimes ([3bda2b0](https://github.com/eqty-dao/ownables-js/commit/3bda2b0a43359821da695559d0924739f3e3c4d0))
+* **platform-react-native:** add ownable persistence service and docs ([8c85e87](https://github.com/eqty-dao/ownables-js/commit/8c85e875a2c68e38e5c09865cbc7c54b3ce2ceb0))
+* **platform-react-native:** add RN adapters and bridge contract ([2a581fd](https://github.com/eqty-dao/ownables-js/commit/2a581fd089ec914c73a8d94f861389145f8a102c))
+
 ## [0.5.1](https://github.com/eqty-dao/ownables-js/compare/v0.5.0...v0.5.1) (2026-04-06)
 
 

@@ -1,4 +1,12 @@
-import type { IndexedPublicEvent, ReplayDedupedEvents, ReplayFreshnessResult } from "../types/Replay";
+import type EventChainService from "./EventChain.service";
+import type OwnableService from "./Ownable.service";
+import type {
+  IndexedPublicEvent,
+  ReplayAuthorityEvaluateInput,
+  ReplayAuthorityEvaluateResult,
+  ReplayDedupedEvents,
+  ReplayFreshnessResult,
+} from "../types/Replay";
 
 function replaySort(a: IndexedPublicEvent, b: IndexedPublicEvent): number {
   if (a.blockNumber !== b.blockNumber) return a.blockNumber - b.blockNumber;
@@ -45,4 +53,32 @@ export function evaluateReplayFreshness(
     missingReplayKeys,
     ...(latestEvent ? { latestReplayKey: publicEventReplayKey(latestEvent) } : {}),
   };
+}
+
+export interface ReplayAuthorityServiceDeps {
+  eventChains: EventChainService;
+  ownables: OwnableService;
+}
+
+export class ReplayAuthorityService {
+  constructor(private readonly deps: ReplayAuthorityServiceDeps) {}
+
+  async evaluate(input: ReplayAuthorityEvaluateInput): Promise<ReplayAuthorityEvaluateResult> {
+    const anchorVerification = await this.deps.eventChains.verify(input.chain);
+    const replay = await this.deps.ownables.replayIndexedPublicEvents(
+      input.chain.id,
+      input.stateDump,
+      input.indexedPublicEvents
+    );
+    const freshness = evaluateReplayFreshness(input.indexedPublicEvents, replay.appliedReplayKeys);
+    const ownableInfo = await this.deps.ownables.rpc(input.chain.id).query({ get_info: {} }, replay.stateDump);
+
+    return {
+      anchorVerification,
+      replay,
+      freshness,
+      owner: ownableInfo.owner,
+      ownableInfo,
+    };
+  }
 }

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Binary, EventChain } from 'eqty-core';
 
 import OwnableService from '../src/services/Ownable.service';
+import { publicEventReplayKey } from '../src/services/ReplayAuthority.service';
 
 const basePkg = {
   title: 'Pkg',
@@ -785,7 +786,57 @@ describe('OwnableService', () => {
     await service.registerPublicEvent(chain, event);
 
     expect(register).toHaveBeenCalledTimes(1);
-    expect(await stateStore.get(`ownable:${chain.id}.public-event-replays`, `${event.transactionHash}:${event.logIndex}`)).toBe(true);
+    expect(await stateStore.get(`ownable:${chain.id}.public-event-replays`, publicEventReplayKey(event))).toBe(true);
+  });
+
+  it('replays indexed public events with deterministic dedupe order', async () => {
+    const service = createService(
+      {} as any,
+      {} as any,
+      { address: '0xabc' } as any,
+      {} as any
+    );
+    const register = vi
+      .fn()
+      .mockResolvedValueOnce({ state: [['s1', 1]] })
+      .mockResolvedValueOnce({ state: [['s2', 2]] });
+    (service as any)._rpc.set('chain-replay', { register });
+    const indexedEvents = [
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'11'.repeat(4)}`,
+        blockNumber: 12,
+        transactionHash: '0xbbb',
+        transactionIndex: 1,
+        logIndex: 4,
+      },
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'11'.repeat(4)}`,
+        blockNumber: 10,
+        transactionHash: '0xaaa',
+        transactionIndex: 2,
+        logIndex: 8,
+      },
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'11'.repeat(4)}`,
+        blockNumber: 12,
+        transactionHash: '0xbbb',
+        transactionIndex: 1,
+        logIndex: 4,
+      },
+    ];
+
+    const replay = await service.replayIndexedPublicEvents('chain-replay', [] as any, indexedEvents as any);
+
+    expect(register).toHaveBeenCalledTimes(2);
+    expect(replay.appliedReplayKeys).toEqual(['0xaaa:8', '0xbbb:4']);
+    expect(replay.duplicateReplayKeys).toEqual(['0xbbb:4']);
+    expect(replay.stateDump).toEqual([['s2', 2]]);
   });
 
   it('encodes, emits, and registers public events', async () => {

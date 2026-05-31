@@ -16,6 +16,34 @@ export interface NotifyPublisherServiceDeps {
   idGenerator?: () => string;
 }
 
+const EVM_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
+
+function normalizeOwnerAddress(address: string): string {
+  const normalized = address.trim().toLowerCase();
+  if (!EVM_ADDRESS_REGEX.test(normalized)) {
+    throw new Error("Invalid notify target ownerAddress");
+  }
+  return normalized;
+}
+
+function assertNotifyTarget(inputOwnerAddress: string, target: { ownerAddress: string; topic: string }): {
+  ownerAddress: string;
+  topic: string;
+} {
+  const payloadOwner = normalizeOwnerAddress(inputOwnerAddress);
+  const targetOwner = normalizeOwnerAddress(target.ownerAddress);
+  if (payloadOwner !== targetOwner) {
+    throw new Error("Notify target ownerAddress does not match payload ownerAddress");
+  }
+
+  const topic = target.topic.trim();
+  if (!topic) {
+    throw new Error("Invalid notify target topic");
+  }
+
+  return { ownerAddress: targetOwner, topic };
+}
+
 export class NotifyPublisherService {
   private readonly builder: OwnablesNotificationBuilderService;
   private readonly validator: OwnablesNotificationValidatorService;
@@ -58,10 +86,11 @@ export class NotifyPublisherService {
     };
 
     this.validator.assertValid(payload);
+    const target = assertNotifyTarget(input.ownerAddress, input.target);
 
     const envelope = this.builder.build(payload);
     const publishRequest = {
-      target: input.target,
+      target,
       title: envelope.title,
       body: envelope.body,
       payload: envelope.payload,

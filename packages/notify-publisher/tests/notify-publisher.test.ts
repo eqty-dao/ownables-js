@@ -214,6 +214,10 @@ describe("NotifyPublisherService", () => {
     expect(result).toEqual({ transportId: "msg_nft", eventId: "evt_nft" });
     expect(transport.publish).toHaveBeenCalledWith(
       expect.objectContaining({
+        target: {
+          ownerAddress: "0x2222222222222222222222222222222222222222",
+          topic: "wc:topic:nft",
+        },
         payload: expect.objectContaining({
           createdAt: expect.stringMatching(
             /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
@@ -223,5 +227,68 @@ describe("NotifyPublisherService", () => {
         }),
       })
     );
+  });
+
+  it("rejects malformed target ownerAddress", async () => {
+    const service = new NotifyPublisherService({
+      publish: vi.fn().mockResolvedValue({}),
+    } as any);
+
+    await expect(
+      service.publishOwnableAvailable({
+        target: {
+          ownerAddress: "not-an-address",
+          topic: "wc:topic:1",
+        },
+        ownableId: "owb_1",
+        cid: "bafy123",
+        scope: "direct",
+        issuerAddress: "0x1111111111111111111111111111111111111111",
+        ownerAddress: "0x2222222222222222222222222222222222222222",
+        accept: { url: "https://hub.example.com/api/v1/ownables/owb_1/download" },
+      })
+    ).rejects.toThrow("Invalid notify target ownerAddress");
+  });
+
+  it("rejects mismatch between payload and target ownerAddress", async () => {
+    const service = new NotifyPublisherService({
+      publish: vi.fn().mockResolvedValue({}),
+    } as any);
+
+    await expect(
+      service.publishOwnableAvailable({
+        target: {
+          ownerAddress: "0x3333333333333333333333333333333333333333",
+          topic: "wc:topic:1",
+        },
+        ownableId: "owb_1",
+        cid: "bafy123",
+        scope: "direct",
+        issuerAddress: "0x1111111111111111111111111111111111111111",
+        ownerAddress: "0x2222222222222222222222222222222222222222",
+        accept: { url: "https://hub.example.com/api/v1/ownables/owb_1/download" },
+      })
+    ).rejects.toThrow("Notify target ownerAddress does not match payload ownerAddress");
+  });
+
+  it("rejects blank target topic", async () => {
+    const service = new NotifyPublisherService({
+      publish: vi.fn().mockResolvedValue({}),
+    } as any);
+
+    await expect(
+      service.publishOwnableAvailable({
+        target: {
+          ownerAddress: "0x2222222222222222222222222222222222222222",
+          topic: "   ",
+        },
+        ownableId: "owb_1",
+        cid: "bafy123",
+        scope: "direct",
+        issuerAddress: "0x1111111111111111111111111111111111111111",
+        ownerAddress: "0x2222222222222222222222222222222222222222",
+        accept: { url: "https://hub.example.com/api/v1/ownables/owb_1/download" },
+      })
+    ).rejects.toThrow("Invalid notify target topic");
   });
 });

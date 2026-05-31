@@ -22,11 +22,13 @@ import type {
   StateDump,
   StateSnapshot,
 } from "../types/OwnableRuntime";
+import type { IndexedPublicEvent, ReplayAppliedResult } from "../types/Replay";
 import EventChainService from "./EventChain.service";
 import { withProgress } from "../progress";
 import type { LoggerLike } from "../logger";
 import WorkerRPC from "./WorkerRPC.service";
 import { DEFAULT_WORKER_SOURCE } from "./workerSource";
+import { dedupeIndexedPublicEvents, publicEventReplayKey } from "./ReplayAuthority.service";
 
 export default class OwnableService {
   private readonly SNAPSHOT_INTERVAL = 50;
@@ -253,10 +255,6 @@ export default class OwnableService {
     return `ownable:${chainId}${this.PUBLIC_EVENT_REPLAY_STORE_SUFFIX}`;
   }
 
-  private publicEventReplayKey(event: PublicEvent): string {
-    return `${event.transactionHash}:${event.logIndex}`;
-  }
-
   private toRegisterRuntimeEvent(
     event: Omit<PublicEvent, "data"> & { data: string | Uint8Array | Binary }
   ): PublicEvent {
@@ -375,6 +373,40 @@ export default class OwnableService {
     return stateDump;
   }
 
+  async replayIndexedPublicEvents(
+    chainId: string,
+    stateDump: StateDump,
+    indexedPublicEvents: IndexedPublicEvent[]
+  ): Promise<ReplayAppliedResult> {
+    const info: CosmWasmMessageInfo = {
+      sender: this.eqty.address,
+      funds: [],
+    };
+    const { events, duplicateReplayKeys } = dedupeIndexedPublicEvents(indexedPublicEvents);
+    const appliedEvents: IndexedPublicEvent[] = [];
+    const appliedReplayKeys: string[] = [];
+    let nextState = stateDump;
+
+    for (const indexedEvent of events) {
+      const runtimeEvent = this.toRegisterRuntimeEvent(indexedEvent);
+      const { state } = await this.rpc(chainId).register(
+        this.toRegisterRpcPayload(runtimeEvent),
+        info,
+        nextState
+      );
+      nextState = state;
+      appliedEvents.push(indexedEvent);
+      appliedReplayKeys.push(publicEventReplayKey(indexedEvent));
+    }
+
+    return {
+      stateDump: nextState,
+      appliedEvents,
+      appliedReplayKeys,
+      duplicateReplayKeys,
+    };
+  }
+
   async execute(
     chain: EventChain,
     msg: TypedDict,
@@ -412,21 +444,14 @@ export default class OwnableService {
 
     const publicEvent = this.toRegisterRuntimeEvent(event);
     const replayStoreId = this.publicEventReplayStoreId(chain.id);
-    const replayKey = this.publicEventReplayKey(publicEvent);
+    const replayKey = publicEventReplayKey(publicEvent);
 
     if ((await this.stateStore.hasStore(replayStoreId)) && (await this.stateStore.get(replayStoreId, replayKey))) {
       return;
     }
 
-    const info: CosmWasmMessageInfo = {
-      sender: this.eqty.address,
-      funds: [],
-    };
-    const { state: newStateDump } = await this.rpc(chain.id).register(
-      this.toRegisterRpcPayload(publicEvent),
-      info,
-      stateDump
-    );
+    const replay = await this.replayIndexedPublicEvents(chain.id, stateDump, [publicEvent]);
+    const newStateDump = replay.stateDump;
 
     await withProgress(onProgress)("signPublicEvent", () =>
       this.eqty.sign(

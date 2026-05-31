@@ -33,14 +33,14 @@ class WalletConnectPublisherTransport implements NotifyPublisherTransport {
   }) {}
 
   async publish(request: {
-    topic: string;
+    target: { ownerAddress: string; topic: string };
     title: string;
     body: string;
     icon?: string;
     payload: unknown;
   }): Promise<{ transportId?: string }> {
     const result = await this.wcNotifyApi.publish({
-      topic: request.topic,
+      topic: request.target.topic,
       title: request.title,
       body: request.body,
       icon: request.icon,
@@ -56,7 +56,10 @@ const publisher = new NotifyPublisherService(
 );
 
 await publisher.publishOwnableAvailable({
-  topic: "wc:topic:example",
+  target: {
+    ownerAddress: "0x2222222222222222222222222222222222222222",
+    topic: "wc:topic:example",
+  },
   ownableId: "owb_01J...",
   cid: "bafy...",
   scope: "direct",
@@ -90,7 +93,12 @@ class WalletConnectClientTransport implements NotifyClientTransport {
     await this.wcNotifyClient.register();
   }
 
-  async subscribe(params: { account: string; scope?: "all" | "direct" | "nft" }): Promise<void> {
+  async subscribe(params: {
+    account: string;
+    ownerAddress: string;
+    scope?: "all" | "direct" | "nft";
+    target?: { ownerAddress: string; topic: string };
+  }): Promise<void> {
     await this.wcNotifyClient.subscribe(params);
   }
 
@@ -109,7 +117,11 @@ const accept = new NotifyAcceptService();
 
 await client.initialize();
 await client.register();
-await client.subscribe({ account: "0x2222222222222222222222222222222222222222", scope: "all" });
+await client.subscribe({
+  account: "0x2222222222222222222222222222222222222222",
+  ownerAddress: "0x2222222222222222222222222222222222222222",
+  scope: "all",
+});
 
 const stop = client.watchNotifications((message) => {
   const item = inbox.ingest(message);

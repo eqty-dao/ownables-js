@@ -2,8 +2,15 @@
   "name": "@ownables/platform-node",
   "version": "0.6.0",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/platform-node/src/index.js",
+  "types": "dist/platform-node/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/platform-node/src/index.d.ts",
+      "import": "./dist/platform-node/src/index.js",
+      "default": "./dist/platform-node/src/index.js"
+    }
+  },
   "files": [
     "dist"
   ],

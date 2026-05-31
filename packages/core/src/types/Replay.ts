@@ -24,6 +24,17 @@ export interface ReplayAppliedResult {
   duplicateReplayKeys: string[];
 }
 
+export interface ReplayAttemptFailure {
+  replayKey: string;
+  event: IndexedPublicEvent;
+  cause: unknown;
+}
+
+export interface ReplayAttemptResult extends ReplayAppliedResult {
+  complete: boolean;
+  failure?: ReplayAttemptFailure;
+}
+
 export interface ReplayAuthorityEvaluateInput {
   chain: EventChain;
   stateDump: Array<[ArrayLike<number>, ArrayLike<number>]>;
@@ -32,7 +43,7 @@ export interface ReplayAuthorityEvaluateInput {
 
 export interface ReplayAuthorityEvaluateResult {
   anchorVerification: unknown;
-  replay: ReplayAppliedResult;
+  replay: ReplayAttemptResult;
   freshness: ReplayFreshnessResult;
   owner: string;
   ownableInfo: TypedOwnableInfo;

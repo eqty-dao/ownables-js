@@ -22,7 +22,7 @@ import type {
   StateDump,
   StateSnapshot,
 } from "../types/OwnableRuntime.js";
-import type { IndexedPublicEvent, ReplayAppliedResult } from "../types/Replay.js";
+import type { IndexedPublicEvent, ReplayAppliedResult, ReplayAttemptResult } from "../types/Replay.js";
 import EventChainService from "./EventChain.service.js";
 import { withProgress } from "../progress.js";
 import type { LoggerLike } from "../logger.js";
@@ -378,6 +378,22 @@ export default class OwnableService {
     stateDump: StateDump,
     indexedPublicEvents: IndexedPublicEvent[]
   ): Promise<ReplayAppliedResult> {
+    const replay = await this.attemptReplayIndexedPublicEvents(chainId, stateDump, indexedPublicEvents);
+    if (!replay.complete) {
+      if (replay.failure?.cause instanceof Error) {
+        throw replay.failure.cause;
+      }
+      throw new Error(`Failed to replay indexed public event ${replay.failure?.replayKey ?? "unknown"}`);
+    }
+
+    return replay;
+  }
+
+  async attemptReplayIndexedPublicEvents(
+    chainId: string,
+    stateDump: StateDump,
+    indexedPublicEvents: IndexedPublicEvent[]
+  ): Promise<ReplayAttemptResult> {
     const info: CosmWasmMessageInfo = {
       sender: this.eqty.address,
       funds: [],
@@ -389,17 +405,34 @@ export default class OwnableService {
 
     for (const indexedEvent of events) {
       const runtimeEvent = this.toRegisterRuntimeEvent(indexedEvent);
-      const { state } = await this.rpc(chainId).register(
-        this.toRegisterRpcPayload(runtimeEvent),
-        info,
-        nextState
-      );
-      nextState = state;
-      appliedEvents.push(indexedEvent);
-      appliedReplayKeys.push(publicEventReplayKey(indexedEvent));
+      const replayKey = publicEventReplayKey(indexedEvent);
+      try {
+        const { state } = await this.rpc(chainId).register(
+          this.toRegisterRpcPayload(runtimeEvent),
+          info,
+          nextState
+        );
+        nextState = state;
+        appliedEvents.push(indexedEvent);
+        appliedReplayKeys.push(replayKey);
+      } catch (cause) {
+        return {
+          complete: false,
+          stateDump: nextState,
+          appliedEvents,
+          appliedReplayKeys,
+          duplicateReplayKeys,
+          failure: {
+            replayKey,
+            event: indexedEvent,
+            cause,
+          },
+        };
+      }
     }
 
     return {
+      complete: true,
       stateDump: nextState,
       appliedEvents,
       appliedReplayKeys,

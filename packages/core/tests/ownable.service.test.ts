@@ -839,6 +839,69 @@ describe('OwnableService', () => {
     expect(replay.stateDump).toEqual([['s2', 2]]);
   });
 
+  it('preserves partial replay progress on replay attempts and keeps fail-fast replay API', async () => {
+    const service = createService(
+      {} as any,
+      {} as any,
+      { address: '0xabc' } as any,
+      {} as any
+    );
+    const replayFailure = new Error('missing private event');
+    const register = vi
+      .fn()
+      .mockResolvedValueOnce({ state: [['s1', 1]] })
+      .mockRejectedValue(replayFailure);
+    (service as any)._rpc.set('chain-replay-failure', { register });
+    const indexedEvents = [
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'11'.repeat(4)}`,
+        blockNumber: 10,
+        transactionHash: '0xaaa',
+        transactionIndex: 2,
+        logIndex: 8,
+      },
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'22'.repeat(4)}`,
+        blockNumber: 12,
+        transactionHash: '0xbbb',
+        transactionIndex: 1,
+        logIndex: 4,
+      },
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'22'.repeat(4)}`,
+        blockNumber: 12,
+        transactionHash: '0xbbb',
+        transactionIndex: 1,
+        logIndex: 4,
+      },
+    ];
+
+    const attempt = await service.attemptReplayIndexedPublicEvents(
+      'chain-replay-failure',
+      [] as any,
+      indexedEvents as any
+    );
+
+    expect(attempt.complete).toBe(false);
+    expect(attempt.appliedReplayKeys).toEqual(['0xaaa:8']);
+    expect(attempt.duplicateReplayKeys).toEqual(['0xbbb:4']);
+    expect(attempt.stateDump).toEqual([['s1', 1]]);
+    expect(attempt.failure?.replayKey).toBe('0xbbb:4');
+    expect(attempt.failure?.event).toEqual(indexedEvents[1]);
+    expect(attempt.failure?.cause).toBe(replayFailure);
+
+    await expect(
+      service.replayIndexedPublicEvents('chain-replay-failure', [] as any, indexedEvents as any)
+    ).rejects.toThrow('missing private event');
+    expect(register).toHaveBeenCalledTimes(3);
+  });
+
   it('encodes, emits, and registers public events', async () => {
     const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
     const eqty = {

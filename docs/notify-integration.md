@@ -94,7 +94,6 @@ class WalletConnectClientTransport implements NotifyClientTransport {
   }
 
   async subscribe(params: {
-    account: string;
     ownerAddress: string;
     scope?: "all" | "direct" | "nft";
     target?: { ownerAddress: string; topic: string };
@@ -118,7 +117,6 @@ const accept = new NotifyAcceptService();
 await client.initialize();
 await client.register();
 await client.subscribe({
-  account: "0x2222222222222222222222222222222222222222",
   ownerAddress: "0x2222222222222222222222222222222222222222",
   scope: "all",
 });

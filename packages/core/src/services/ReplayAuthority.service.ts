@@ -65,7 +65,7 @@ export class ReplayAuthorityService {
 
   async evaluate(input: ReplayAuthorityEvaluateInput): Promise<ReplayAuthorityEvaluateResult> {
     const anchorVerification = await this.deps.eventChains.verify(input.chain);
-    const replay = await this.deps.ownables.replayIndexedPublicEvents(
+    const replay = await this.deps.ownables.attemptReplayIndexedPublicEvents(
       input.chain.id,
       input.stateDump,
       input.indexedPublicEvents

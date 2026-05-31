@@ -1,5 +1,5 @@
-import type { PublicEvent } from "./OwnableRuntime";
-import type { TypedOwnableInfo } from "./TypedOwnableInfo";
+import type { PublicEvent } from "./OwnableRuntime.js";
+import type { TypedOwnableInfo } from "./TypedOwnableInfo.js";
 import type { EventChain } from "eqty-core";
 
 export interface IndexedPublicEvent extends PublicEvent {

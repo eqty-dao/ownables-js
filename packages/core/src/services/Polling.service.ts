@@ -1,6 +1,6 @@
-import type { KVStore } from "../interfaces/core";
-import type { RelayPollingClient } from "../types/Polling";
-import type { LoggerLike } from "../logger";
+import type { KVStore } from "../interfaces/core.js";
+import type { RelayPollingClient } from "../types/Polling.js";
+import type { LoggerLike } from "../logger.js";
 
 /**
  * @deprecated Relay polling is legacy and will be removed in a future major version.

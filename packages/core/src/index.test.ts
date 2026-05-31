@@ -4,7 +4,7 @@ import {
   dedupeIndexedPublicEvents,
   evaluateReplayFreshness,
   publicEventReplayKey,
-} from './index';
+} from './index.js';
 
 describe('core package', () => {
   it('has test harness', () => {

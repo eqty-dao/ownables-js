@@ -1,9 +1,9 @@
 import { Binary, EventChain, IEventChainJSON } from "eqty-core";
-import type { AnchorProvider, KVStore, StateStore } from "../interfaces/core";
-import type { StateDump } from "../types/OwnableRuntime";
-import type TypedDict from "../types/TypedDict";
-import type { StoredChainInfo } from "../types/EventChainStore";
-import type { LoggerLike } from "../logger";
+import type { AnchorProvider, KVStore, StateStore } from "../interfaces/core.js";
+import type { StateDump } from "../types/OwnableRuntime.js";
+import type TypedDict from "../types/TypedDict.js";
+import type { StoredChainInfo } from "../types/EventChainStore.js";
+import type { LoggerLike } from "../logger.js";
 
 export default class EventChainService {
   constructor(

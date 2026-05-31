@@ -1,12 +1,12 @@
-import type EventChainService from "./EventChain.service";
-import type OwnableService from "./Ownable.service";
+import type EventChainService from "./EventChain.service.js";
+import type OwnableService from "./Ownable.service.js";
 import type {
   IndexedPublicEvent,
   ReplayAuthorityEvaluateInput,
   ReplayAuthorityEvaluateResult,
   ReplayDedupedEvents,
   ReplayFreshnessResult,
-} from "../types/Replay";
+} from "../types/Replay.js";
 
 function replaySort(a: IndexedPublicEvent, b: IndexedPublicEvent): number {
   if (a.blockNumber !== b.blockNumber) return a.blockNumber - b.blockNumber;

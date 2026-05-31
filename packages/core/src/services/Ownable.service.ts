@@ -1,6 +1,6 @@
 import { EventChain, Event, Binary } from "eqty-core";
 import { encode } from "cbor-x";
-import type TypedDict from "../types/TypedDict";
+import type TypedDict from "../types/TypedDict.js";
 import type {
   AnchorProvider,
   PackageAssetIO,
@@ -8,10 +8,10 @@ import type {
   RuntimeSourceProvider,
   StateStore,
   LogProgress,
-} from "../interfaces/core";
+} from "../interfaces/core.js";
 import JSZip from "jszip";
-import type { TypedPackage } from "../types/TypedPackage";
-import type { TypedOwnableInfo } from "../types/TypedOwnableInfo";
+import type { TypedPackage } from "../types/TypedPackage.js";
+import type { TypedOwnableInfo } from "../types/TypedOwnableInfo.js";
 import type {
   CosmWasmMessageInfo,
   CosmWasmEvent,
@@ -21,14 +21,14 @@ import type {
   RuntimePublicEvent,
   StateDump,
   StateSnapshot,
-} from "../types/OwnableRuntime";
-import type { IndexedPublicEvent, ReplayAppliedResult } from "../types/Replay";
-import EventChainService from "./EventChain.service";
-import { withProgress } from "../progress";
-import type { LoggerLike } from "../logger";
-import WorkerRPC from "./WorkerRPC.service";
-import { DEFAULT_WORKER_SOURCE } from "./workerSource";
-import { dedupeIndexedPublicEvents, publicEventReplayKey } from "./ReplayAuthority.service";
+} from "../types/OwnableRuntime.js";
+import type { IndexedPublicEvent, ReplayAppliedResult } from "../types/Replay.js";
+import EventChainService from "./EventChain.service.js";
+import { withProgress } from "../progress.js";
+import type { LoggerLike } from "../logger.js";
+import WorkerRPC from "./WorkerRPC.service.js";
+import { DEFAULT_WORKER_SOURCE } from "./workerSource.js";
+import { dedupeIndexedPublicEvents, publicEventReplayKey } from "./ReplayAuthority.service.js";
 
 export default class OwnableService {
   private readonly SNAPSHOT_INTERVAL = 50;

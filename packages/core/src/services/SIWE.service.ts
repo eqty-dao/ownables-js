@@ -1,5 +1,5 @@
 import { ViemSigner } from "eqty-core";
-import type { SIWEMessage, SIWEAuthResult, SIWEClientDeps } from "../types/SIWE";
+import type { SIWEMessage, SIWEAuthResult, SIWEClientDeps } from "../types/SIWE.js";
 
 export class SIWEClient {
   private readonly domain: string;

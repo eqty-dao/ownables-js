@@ -1,4 +1,4 @@
-import type TypedDict from '../types/TypedDict';
+import type TypedDict from '../types/TypedDict.js';
 import type {
   CosmWasmEvent,
   CosmWasmMessageInfo,
@@ -7,7 +7,7 @@ import type {
   PublicEvent,
   RuntimePublicEvent,
   StateDump,
-} from '../types/OwnableRuntime';
+} from '../types/OwnableRuntime.js';
 import { decode, encode } from 'cbor-x';
 
 interface HostAbiEnvelope {

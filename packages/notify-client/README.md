@@ -30,6 +30,7 @@ const accept = new NotifyAcceptService();
 ```
 
 Provide your own `NotifyClientTransport` implementation and inject it.
+`subscribe()` now uses `ownerAddress` and may include an opaque transport `target`.
 
 ## Development
 
@@ -37,4 +38,3 @@ Provide your own `NotifyClientTransport` implementation and inject it.
 yarn workspace @ownables/notify-client run build
 yarn workspace @ownables/notify-client run typecheck
 ```
-

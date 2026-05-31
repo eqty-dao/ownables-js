@@ -1,8 +1,9 @@
-import type { OwnablesNotifyAvailableV1 } from "@ownables/notify-core";
+import type { NotifyRegistrationTarget, OwnablesNotifyAvailableV1 } from "@ownables/notify-core";
 
 export interface NotifySubscriptionParams {
-  account: string;
+  ownerAddress: string;
   scope?: "all" | "direct" | "nft";
+  target?: NotifyRegistrationTarget;
 }
 
 export interface NotifyRawMessage {

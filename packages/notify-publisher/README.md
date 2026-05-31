@@ -26,6 +26,7 @@ await publisher.publishOwnableAvailable(payload);
 ```
 
 Provide your own `NotifyPublisherTransport` implementation and inject it.
+The transport request carries an opaque `target` object with `ownerAddress` and `topic`.
 
 ## Development
 
@@ -33,4 +34,3 @@ Provide your own `NotifyPublisherTransport` implementation and inject it.
 yarn workspace @ownables/notify-publisher run build
 yarn workspace @ownables/notify-publisher run typecheck
 ```
-

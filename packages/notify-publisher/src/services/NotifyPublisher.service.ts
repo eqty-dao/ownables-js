@@ -61,7 +61,7 @@ export class NotifyPublisherService {
 
     const envelope = this.builder.build(payload);
     const publishRequest = {
-      topic: input.topic,
+      target: input.target,
       title: envelope.title,
       body: envelope.body,
       payload: envelope.payload,

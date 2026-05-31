@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
 
 import BucketArchiveService from '../src/services/BucketArchive.service';
+import { OwnablePackageCidCalculator } from '../src/services/OwnablePackageCid.service';
 
 class InMemoryBucket {
   private readonly map = new Map<string, Uint8Array>();
@@ -120,5 +121,25 @@ describe('BucketArchiveService', () => {
     await expect(service.readChain('cid-string')).resolves.toEqual({
       events: [{ parsedData: { ok: true } }],
     });
+  });
+
+  it('calculates deterministic package cids with shared helper', async () => {
+    const calculator = new OwnablePackageCidCalculator();
+    const cidA = await calculator.calculate(
+      new Map([
+        ['a.txt', Uint8Array.from([1])],
+        ['b.txt', Uint8Array.from([2])],
+      ])
+    );
+    const cidB = await calculator.calculate(
+      new Map([
+        ['a.txt', Uint8Array.from([1])],
+        ['b.txt', Uint8Array.from([2])],
+        ['chain.json', Uint8Array.from([3])],
+        ['timestamp.txt', Uint8Array.from([4])],
+      ])
+    );
+
+    expect(cidA).toBe(cidB);
   });
 });

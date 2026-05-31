@@ -12,6 +12,7 @@ yarn add @ownables/platform-node
 
 - `BucketStateStore`
 - `BucketArchiveService`
+- `OwnablePackageCidCalculator`
 - `NodeSandboxOwnableRPC`
 - `NodePackageAssetIO`
 - `PlatformNode` types
@@ -27,4 +28,3 @@ yarn add @ownables/platform-node
 yarn workspace @ownables/platform-node run build
 yarn workspace @ownables/platform-node run typecheck
 ```
-

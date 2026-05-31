@@ -1019,8 +1019,10 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@ownables/core@workspace:packages/core"
   dependencies:
+    blockstore-core: "npm:^6.1.2"
     cbor-x: "npm:^1.6.0"
     eqty-core: "npm:^1.0.2"
+    ipfs-unixfs-importer: "npm:^16.1.4"
     jszip: "npm:^3.10.1"
   languageName: unknown
   linkType: soft

@@ -18,7 +18,10 @@ describe("NotifyPublisherService", () => {
     });
 
     const result = await service.publishOwnableAvailable({
-      topic: "wc:topic:1",
+      target: {
+        ownerAddress: "0x2222222222222222222222222222222222222222",
+        topic: "wc:topic:1",
+      },
       ownableId: "owb_1",
       cid: "bafy123",
       scope: "direct",
@@ -32,7 +35,10 @@ describe("NotifyPublisherService", () => {
     expect(transport.publish).toHaveBeenCalledTimes(1);
     expect(transport.publish).toHaveBeenCalledWith(
       expect.objectContaining({
-        topic: "wc:topic:1",
+        target: {
+          ownerAddress: "0x2222222222222222222222222222222222222222",
+          topic: "wc:topic:1",
+        },
         title: "Lunar Passport available",
       })
     );
@@ -50,7 +56,10 @@ describe("NotifyPublisherService", () => {
 
     await expect(
       service.publishOwnableAvailable({
-        topic: "wc:topic:1",
+        target: {
+          ownerAddress: "0x2222222222222222222222222222222222222222",
+          topic: "wc:topic:1",
+        },
         ownableId: "owb_1",
         cid: "bafy123",
         scope: "direct",
@@ -74,7 +83,10 @@ describe("NotifyPublisherService", () => {
     });
 
     const result = await service.publishOwnableAvailable({
-      topic: "wc:topic:1",
+      target: {
+        ownerAddress: "0x2222222222222222222222222222222222222222",
+        topic: "wc:topic:1",
+      },
       ownableId: "owb_1",
       cid: "bafy123",
       scope: "direct",
@@ -121,7 +133,10 @@ describe("NotifyPublisherService", () => {
     });
 
     const result = await service.publishOwnableAvailable({
-      topic: "wc:topic:dep",
+      target: {
+        ownerAddress: "0x2222222222222222222222222222222222222222",
+        topic: "wc:topic:dep",
+      },
       ownableId: "owb_1",
       cid: "bafy123",
       scope: "direct",
@@ -150,7 +165,10 @@ describe("NotifyPublisherService", () => {
       });
 
       const result = await service.publishOwnableAvailable({
-        topic: "wc:topic:auto",
+        target: {
+          ownerAddress: "0x2222222222222222222222222222222222222222",
+          topic: "wc:topic:auto",
+        },
         ownableId: "owb_1",
         cid: "bafy123",
         scope: "direct",
@@ -175,7 +193,10 @@ describe("NotifyPublisherService", () => {
 
     const service = new NotifyPublisherService(transport as any);
     const result = await service.publishOwnableAvailable({
-      topic: "wc:topic:nft",
+      target: {
+        ownerAddress: "0x2222222222222222222222222222222222222222",
+        topic: "wc:topic:nft",
+      },
       ownableId: "owb_1",
       cid: "bafy123",
       scope: "nft",

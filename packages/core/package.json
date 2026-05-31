@@ -8,8 +8,10 @@
     "dist"
   ],
   "dependencies": {
+    "blockstore-core": "^6.1.2",
     "cbor-x": "^1.6.0",
     "eqty-core": "^1.0.2",
+    "ipfs-unixfs-importer": "^16.1.4",
     "jszip": "^3.10.1"
   },
   "scripts": {

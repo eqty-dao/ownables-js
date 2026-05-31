@@ -37,6 +37,11 @@ export interface OwnablesNotificationEnvelope {
   payload: OwnablesNotifyAvailableV1;
 }
 
+export interface NotifyRegistrationTarget {
+  ownerAddress: string;
+  topic: string;
+}
+
 export interface OwnablesNotificationValidationResult {
   valid: boolean;
   errors: string[];

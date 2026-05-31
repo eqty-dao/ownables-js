@@ -11,11 +11,14 @@ export * from './types/SIWE';
 export * from './types/EventChainStore';
 export * from './types/Polling';
 export * from './types/Authority';
+export * from './types/Replay';
 export { default as TypedDict } from './types/TypedDict';
 export { default as ownableErrorMessage } from './ownableErrorMessage';
 
 export * from './services/SIWE.service';
 export { PollingService } from './services/Polling.service';
+export * from './services/ReplayAuthority.service';
+export * from './services/OwnablePackageCid.service';
 export { default as EventChainService } from './services/EventChain.service';
 export { default as OwnableService } from './services/Ownable.service';
 export { default as WorkerRPC } from './services/WorkerRPC.service';

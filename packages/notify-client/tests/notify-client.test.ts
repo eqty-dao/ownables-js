@@ -40,11 +40,11 @@ describe("NotifyClientService", () => {
     const service = new NotifyClientService(transport);
     await service.initialize();
     await service.register();
-    await service.subscribe({ account: "0xabc" });
+    await service.subscribe({ ownerAddress: "0xabc" });
 
     expect(transport.initialize).toHaveBeenCalledTimes(1);
     expect(transport.register).toHaveBeenCalledTimes(1);
-    expect(transport.subscribe).toHaveBeenCalledWith({ account: "0xabc" });
+    expect(transport.subscribe).toHaveBeenCalledWith({ ownerAddress: "0xabc" });
   });
 
   it("forwards watch handlers to transport", () => {

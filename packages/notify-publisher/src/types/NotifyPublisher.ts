@@ -1,7 +1,7 @@
-import type { OwnablesNotifyAvailableV1 } from "@ownables/notify-core";
+import type { NotifyRegistrationTarget, OwnablesNotifyAvailableV1 } from "@ownables/notify-core";
 
 export interface OwnablesNotificationPublishRequest {
-  topic: string;
+  target: NotifyRegistrationTarget;
   title: string;
   body: string;
   icon?: string;
@@ -22,5 +22,5 @@ export interface NotifyPublisherTransport {
 export type PublishOwnableAvailableInput = Omit<OwnablesNotifyAvailableV1, "type" | "eventId" | "createdAt"> & {
   eventId?: string;
   createdAt?: string;
-  topic: string;
+  target: NotifyRegistrationTarget;
 };

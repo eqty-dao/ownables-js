@@ -1,2 +1,2 @@
-export * from "./types/NotifyPublisher";
-export { NotifyPublisherService } from "./services/NotifyPublisher.service";
+export * from "./types/NotifyPublisher.js";
+export { NotifyPublisherService } from "./services/NotifyPublisher.service.js";

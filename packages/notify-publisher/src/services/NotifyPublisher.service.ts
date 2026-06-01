@@ -7,7 +7,7 @@ import type {
   NotifyPublisherTransport,
   OwnablesNotificationPublishResult,
   PublishOwnableAvailableInput,
-} from "../types/NotifyPublisher";
+} from "../types/NotifyPublisher.js";
 
 export interface NotifyPublisherServiceDeps {
   builder?: OwnablesNotificationBuilderService;

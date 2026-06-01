@@ -7,7 +7,10 @@
   "files": [
     "dist"
   ],
-  "dependencies": {
+  "peerDependencies": {
+    "@ownables/notify-core": "^0.6.0"
+  },
+  "devDependencies": {
     "@ownables/notify-core": "0.6.0"
   },
   "scripts": {

@@ -1,3 +1,3 @@
-export * from "./types/Notify";
-export { OwnablesNotificationBuilderService } from "./services/OwnablesNotificationBuilder.service";
-export { OwnablesNotificationValidatorService } from "./services/OwnablesNotificationValidator.service";
+export * from "./types/Notify.js";
+export { OwnablesNotificationBuilderService } from "./services/OwnablesNotificationBuilder.service.js";
+export { OwnablesNotificationValidatorService } from "./services/OwnablesNotificationValidator.service.js";

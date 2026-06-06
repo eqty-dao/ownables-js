@@ -7,19 +7,23 @@ export class NotifyInboxService {
   private readonly items = new Map<string, OwnablesInboxItem>();
 
   ingest(message: NotifyRawMessage): OwnablesInboxItem {
-    const existing = this.items.get(message.payload.eventId);
+    const existing = this.items.get(message.id);
     if (existing) {
       return existing;
     }
 
     const item: OwnablesInboxItem = {
       id: message.id,
-      eventId: message.payload.eventId,
-      receivedAt: message.receivedAt,
-      payload: message.payload,
+      title: message.title,
+      body: message.body,
+      url: message.url,
+      type: message.type,
+      receivedAt: message.receivedAt ?? message.sentAt ?? new Date().toISOString(),
+      isRead: message.isRead ?? false,
+      ...(message.sentAt ? { sentAt: message.sentAt } : {}),
     };
 
-    this.items.set(item.eventId, item);
+    this.items.set(item.id, item);
     return item;
   }
 
@@ -29,17 +33,18 @@ export class NotifyInboxService {
     );
   }
 
-  markRead(eventId: string, readAt: string = new Date().toISOString()): void {
-    const item = this.items.get(eventId);
+  markRead(id: string, readAt: string = new Date().toISOString()): void {
+    const item = this.items.get(id);
     if (!item) {
       return;
     }
 
     const next: OwnablesInboxItem = {
       ...item,
+      isRead: true,
       readAt,
     };
 
-    this.items.set(eventId, next);
+    this.items.set(id, next);
   }
 }

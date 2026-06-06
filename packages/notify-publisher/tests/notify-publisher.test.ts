@@ -19,15 +19,15 @@ describe("NotifyPublisherService", () => {
 
     const result = await service.publishOwnableAvailable({
       target: {
-        ownerAddress: "0x2222222222222222222222222222222222222222",
-        topic: "wc:topic:1",
+        account: "eip155:1:0x2222222222222222222222222222222222222222",
       },
       ownableId: "owb_1",
       cid: "bafy123",
       scope: "direct",
       issuerAddress: "0x1111111111111111111111111111111111111111",
+      ownerAccount: "eip155:1:0x2222222222222222222222222222222222222222",
       ownerAddress: "0x2222222222222222222222222222222222222222",
-      accept: { url: "https://hub.example.com/api/v1/ownables/owb_1/download" },
+      url: "https://hub.example.com/api/v1/ownables/owb_1/download",
       metadata: { name: "Lunar Passport", icon: "https://cdn.example.com/icon.png" },
     });
 
@@ -35,11 +35,9 @@ describe("NotifyPublisherService", () => {
     expect(transport.publish).toHaveBeenCalledTimes(1);
     expect(transport.publish).toHaveBeenCalledWith(
       expect.objectContaining({
-        target: {
-          ownerAddress: "0x2222222222222222222222222222222222222222",
-          topic: "wc:topic:1",
-        },
+        account: "eip155:1:0x2222222222222222222222222222222222222222",
         title: "Lunar Passport available",
+        url: "https://hub.example.com/api/v1/ownables/owb_1/download",
       })
     );
   });
@@ -57,15 +55,15 @@ describe("NotifyPublisherService", () => {
     await expect(
       service.publishOwnableAvailable({
         target: {
-          ownerAddress: "0x2222222222222222222222222222222222222222",
-          topic: "wc:topic:1",
+          account: "eip155:1:0x2222222222222222222222222222222222222222",
         },
         ownableId: "owb_1",
         cid: "bafy123",
         scope: "direct",
         issuerAddress: "not-an-address",
+        ownerAccount: "eip155:1:0x2222222222222222222222222222222222222222",
         ownerAddress: "0x2222222222222222222222222222222222222222",
-        accept: { url: "https://hub.example.com/api/v1/ownables/owb_1/download" },
+        url: "https://hub.example.com/api/v1/ownables/owb_1/download",
       })
     ).rejects.toThrow("Invalid ownables notification payload");
 
@@ -84,15 +82,15 @@ describe("NotifyPublisherService", () => {
 
     const result = await service.publishOwnableAvailable({
       target: {
-        ownerAddress: "0x2222222222222222222222222222222222222222",
-        topic: "wc:topic:1",
+        account: "eip155:1:0x2222222222222222222222222222222222222222",
       },
       ownableId: "owb_1",
       cid: "bafy123",
       scope: "direct",
       issuerAddress: "0x1111111111111111111111111111111111111111",
+      ownerAccount: "eip155:1:0x2222222222222222222222222222222222222222",
       ownerAddress: "0x2222222222222222222222222222222222222222",
-      accept: { url: "https://hub.example.com/api/v1/ownables/owb_1/download" },
+      url: "https://hub.example.com/api/v1/ownables/owb_1/download",
       eventId: "evt_custom",
       createdAt: "2026-03-18T12:00:00.000Z",
     });
@@ -116,8 +114,9 @@ describe("NotifyPublisherService", () => {
           cid: "bafy123",
           scope: "direct",
           issuerAddress: "0x1111111111111111111111111111111111111111",
+          ownerAccount: "eip155:1:0x2222222222222222222222222222222222222222",
           ownerAddress: "0x2222222222222222222222222222222222222222",
-          accept: { url: "https://hub.example.com/api/v1/ownables/owb_1/download" },
+          url: "https://hub.example.com/api/v1/ownables/owb_1/download",
         },
       }),
     } as unknown as OwnablesNotificationBuilderService;
@@ -134,15 +133,15 @@ describe("NotifyPublisherService", () => {
 
     const result = await service.publishOwnableAvailable({
       target: {
-        ownerAddress: "0x2222222222222222222222222222222222222222",
-        topic: "wc:topic:dep",
+        account: "eip155:1:0x2222222222222222222222222222222222222222",
       },
       ownableId: "owb_1",
       cid: "bafy123",
       scope: "direct",
       issuerAddress: "0x1111111111111111111111111111111111111111",
+      ownerAccount: "eip155:1:0x2222222222222222222222222222222222222222",
       ownerAddress: "0x2222222222222222222222222222222222222222",
-      accept: { url: "https://hub.example.com/api/v1/ownables/owb_1/download" },
+      url: "https://hub.example.com/api/v1/ownables/owb_1/download",
     });
 
     expect(result).toEqual({ transportId: "msg_dep", eventId: "evt_dep" });
@@ -166,15 +165,15 @@ describe("NotifyPublisherService", () => {
 
       const result = await service.publishOwnableAvailable({
         target: {
-          ownerAddress: "0x2222222222222222222222222222222222222222",
-          topic: "wc:topic:auto",
+          account: "eip155:1:0x2222222222222222222222222222222222222222",
         },
         ownableId: "owb_1",
         cid: "bafy123",
         scope: "direct",
         issuerAddress: "0x1111111111111111111111111111111111111111",
+        ownerAccount: "eip155:1:0x2222222222222222222222222222222222222222",
         ownerAddress: "0x2222222222222222222222222222222222222222",
-        accept: { url: "https://hub.example.com/api/v1/ownables/owb_1/download" },
+        url: "https://hub.example.com/api/v1/ownables/owb_1/download",
       });
 
       expect(result.eventId).toMatch(/^evt_20260318120000000_/);
@@ -194,15 +193,15 @@ describe("NotifyPublisherService", () => {
     const service = new NotifyPublisherService(transport as any);
     const result = await service.publishOwnableAvailable({
       target: {
-        ownerAddress: "0x2222222222222222222222222222222222222222",
-        topic: "wc:topic:nft",
+        account: "eip155:1:0x2222222222222222222222222222222222222222",
       },
       ownableId: "owb_1",
       cid: "bafy123",
       scope: "nft",
       issuerAddress: "0x1111111111111111111111111111111111111111",
+      ownerAccount: "eip155:1:0x2222222222222222222222222222222222222222",
       ownerAddress: "0x2222222222222222222222222222222222222222",
-      accept: { url: "https://hub.example.com/api/v1/ownables/owb_1/download" },
+      url: "https://hub.example.com/api/v1/ownables/owb_1/download",
       eventId: "evt_nft",
       nft: {
         network: "base",
@@ -214,10 +213,7 @@ describe("NotifyPublisherService", () => {
     expect(result).toEqual({ transportId: "msg_nft", eventId: "evt_nft" });
     expect(transport.publish).toHaveBeenCalledWith(
       expect.objectContaining({
-        target: {
-          ownerAddress: "0x2222222222222222222222222222222222222222",
-          topic: "wc:topic:nft",
-        },
+        account: "eip155:1:0x2222222222222222222222222222222222222222",
         payload: expect.objectContaining({
           createdAt: expect.stringMatching(
             /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
@@ -237,20 +233,20 @@ describe("NotifyPublisherService", () => {
     await expect(
       service.publishOwnableAvailable({
         target: {
-          ownerAddress: "not-an-address",
-          topic: "wc:topic:1",
+          account: "not-an-account",
         },
         ownableId: "owb_1",
         cid: "bafy123",
         scope: "direct",
         issuerAddress: "0x1111111111111111111111111111111111111111",
+        ownerAccount: "eip155:1:0x2222222222222222222222222222222222222222",
         ownerAddress: "0x2222222222222222222222222222222222222222",
-        accept: { url: "https://hub.example.com/api/v1/ownables/owb_1/download" },
+        url: "https://hub.example.com/api/v1/ownables/owb_1/download",
       })
-    ).rejects.toThrow("Invalid notify target ownerAddress");
+    ).rejects.toThrow("Invalid notify target account");
   });
 
-  it("rejects mismatch between payload and target ownerAddress", async () => {
+  it("rejects mismatch between payload and target ownerAccount", async () => {
     const service = new NotifyPublisherService({
       publish: vi.fn().mockResolvedValue({}),
     } as any);
@@ -258,20 +254,20 @@ describe("NotifyPublisherService", () => {
     await expect(
       service.publishOwnableAvailable({
         target: {
-          ownerAddress: "0x3333333333333333333333333333333333333333",
-          topic: "wc:topic:1",
+          account: "eip155:1:0x3333333333333333333333333333333333333333",
         },
         ownableId: "owb_1",
         cid: "bafy123",
         scope: "direct",
         issuerAddress: "0x1111111111111111111111111111111111111111",
+        ownerAccount: "eip155:1:0x2222222222222222222222222222222222222222",
         ownerAddress: "0x2222222222222222222222222222222222222222",
-        accept: { url: "https://hub.example.com/api/v1/ownables/owb_1/download" },
+        url: "https://hub.example.com/api/v1/ownables/owb_1/download",
       })
-    ).rejects.toThrow("Notify target ownerAddress does not match payload ownerAddress");
+    ).rejects.toThrow("Notify target account does not match payload ownerAccount");
   });
 
-  it("rejects blank target topic", async () => {
+  it("rejects payload ownerAddress that disagrees with ownerAccount", async () => {
     const service = new NotifyPublisherService({
       publish: vi.fn().mockResolvedValue({}),
     } as any);
@@ -279,16 +275,39 @@ describe("NotifyPublisherService", () => {
     await expect(
       service.publishOwnableAvailable({
         target: {
-          ownerAddress: "0x2222222222222222222222222222222222222222",
-          topic: "   ",
+          account: "eip155:1:0x3333333333333333333333333333333333333333",
         },
         ownableId: "owb_1",
         cid: "bafy123",
         scope: "direct",
         issuerAddress: "0x1111111111111111111111111111111111111111",
+        ownerAccount: "eip155:1:0x3333333333333333333333333333333333333333",
         ownerAddress: "0x2222222222222222222222222222222222222222",
-        accept: { url: "https://hub.example.com/api/v1/ownables/owb_1/download" },
+        url: "https://hub.example.com/api/v1/ownables/owb_1/download",
       })
-    ).rejects.toThrow("Invalid notify target topic");
+    ).rejects.toThrow(
+      "Invalid ownables notification payload: ownerAddress must match the EVM address in ownerAccount"
+    );
+  });
+
+  it("rejects malformed payload ownerAccount before publishing", async () => {
+    const service = new NotifyPublisherService({
+      publish: vi.fn().mockResolvedValue({}),
+    } as any);
+
+    await expect(
+      service.publishOwnableAvailable({
+        target: {
+          account: "eip155:1:0x2222222222222222222222222222222222222222",
+        },
+        ownableId: "owb_1",
+        cid: "bafy123",
+        scope: "direct",
+        issuerAddress: "0x1111111111111111111111111111111111111111",
+        ownerAccount: "bad",
+        ownerAddress: "0x2222222222222222222222222222222222222222",
+        url: "https://hub.example.com/api/v1/ownables/owb_1/download",
+      })
+    ).rejects.toThrow("Invalid ownables notification payload");
   });
 });

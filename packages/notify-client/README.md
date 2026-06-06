@@ -30,7 +30,7 @@ const accept = new NotifyAcceptService();
 ```
 
 Provide your own `NotifyClientTransport` implementation and inject it.
-`subscribe()` now uses `ownerAddress` and may include an opaque transport `target`.
+`subscribe()` now uses a CAIP-10 `account` and optional `domain`, and inbox messages are expected to look like Web3Inbox notifications with `id`, `title`, `body`, `url`, `type`, and optional `sentAt` / `receivedAt` / `isRead`.
 
 ## Development
 

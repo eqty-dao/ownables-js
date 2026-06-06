@@ -1,23 +1,30 @@
-import type { NotifyRegistrationTarget, OwnablesNotifyAvailableV1 } from "@ownables/notify-core";
-
 export interface NotifySubscriptionParams {
-  ownerAddress: string;
+  account: string;
   scope?: "all" | "direct" | "nft";
-  target?: NotifyRegistrationTarget;
+  domain?: string;
 }
 
 export interface NotifyRawMessage {
   id: string;
-  receivedAt: string;
-  payload: OwnablesNotifyAvailableV1;
+  title: string;
+  body: string;
+  url: string;
+  type: string;
+  sentAt?: string;
+  receivedAt?: string;
+  isRead?: boolean;
 }
 
 export interface OwnablesInboxItem {
   id: string;
-  eventId: string;
+  title: string;
+  body: string;
+  url: string;
+  type: string;
+  sentAt?: string;
   receivedAt: string;
+  isRead: boolean;
   readAt?: string;
-  payload: OwnablesNotifyAvailableV1;
 }
 
 export interface NotifyAcceptResult {

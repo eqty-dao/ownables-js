@@ -2,10 +2,21 @@ import type {
   OwnablesNotificationValidationResult,
   OwnablesNotifyAvailableV1,
 } from "../types/Notify";
-
-const EVM_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
+import {
+  normalizeCaip10Account,
+  normalizeEvmAddress,
+  parseCaip10Account,
+} from "./NotifyAccount.service.js";
 
 const isIsoDate = (value: string): boolean => !Number.isNaN(Date.parse(value));
+const isValidUrl = (value: string): boolean => {
+  try {
+    const url = new URL(value);
+    return Boolean(url.protocol && url.host);
+  } catch {
+    return false;
+  }
+};
 
 export class OwnablesNotificationValidatorService {
   validate(payload: OwnablesNotifyAvailableV1): OwnablesNotificationValidationResult {
@@ -31,16 +42,53 @@ export class OwnablesNotificationValidatorService {
       errors.push("cid is required");
     }
 
-    if (!EVM_ADDRESS_REGEX.test(payload.issuerAddress)) {
+    if (!payload.ownerAccount) {
+      errors.push("ownerAccount is required");
+    } else {
+      try {
+        normalizeCaip10Account(payload.ownerAccount);
+      } catch {
+        errors.push("ownerAccount must be a valid CAIP-10 account");
+      }
+    }
+
+    if (!payload.issuerAddress) {
       errors.push("issuerAddress must be a valid EVM address");
+    } else {
+      try {
+        normalizeEvmAddress(payload.issuerAddress, "issuerAddress must be a valid EVM address");
+      } catch {
+        errors.push("issuerAddress must be a valid EVM address");
+      }
     }
 
-    if (!EVM_ADDRESS_REGEX.test(payload.ownerAddress)) {
+    if (!payload.ownerAddress) {
       errors.push("ownerAddress must be a valid EVM address");
+    } else {
+      try {
+        normalizeEvmAddress(payload.ownerAddress, "ownerAddress must be a valid EVM address");
+      } catch {
+        errors.push("ownerAddress must be a valid EVM address");
+      }
     }
 
-    if (!payload.accept?.url) {
-      errors.push("accept.url is required");
+    if (payload.ownerAccount && payload.ownerAddress) {
+      try {
+        const ownerAccount = parseCaip10Account(payload.ownerAccount);
+        const ownerAddress = normalizeEvmAddress(
+          payload.ownerAddress,
+          "ownerAddress must be a valid EVM address"
+        );
+        if (ownerAccount.namespace === "eip155" && ownerAccount.address !== ownerAddress) {
+          errors.push("ownerAddress must match the EVM address in ownerAccount");
+        }
+      } catch {
+        // account/address-specific errors are already recorded above
+      }
+    }
+
+    if (!payload.url || !isValidUrl(payload.url)) {
+      errors.push("url must be a valid absolute URL");
     }
 
     if (payload.scope === "nft") {
@@ -50,8 +98,17 @@ export class OwnablesNotificationValidatorService {
         if (!payload.nft.network) {
           errors.push("nft.network is required for scope=nft");
         }
-        if (!payload.nft.contract || !EVM_ADDRESS_REGEX.test(payload.nft.contract)) {
+        if (!payload.nft.contract) {
           errors.push("nft.contract must be a valid EVM address for scope=nft");
+        } else {
+          try {
+            normalizeEvmAddress(
+              payload.nft.contract,
+              "nft.contract must be a valid EVM address for scope=nft"
+            );
+          } catch {
+            errors.push("nft.contract must be a valid EVM address for scope=nft");
+          }
         }
         if (!payload.nft.tokenId) {
           errors.push("nft.tokenId is required for scope=nft");

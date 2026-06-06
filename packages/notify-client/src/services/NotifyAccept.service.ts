@@ -18,9 +18,8 @@ export class NotifyAcceptService {
   }
 
   async accept(item: OwnablesInboxItem): Promise<NotifyAcceptResult> {
-    const method = item.payload.accept.method ?? "GET";
-    const response = await this.fetchFn(item.payload.accept.url, {
-      method,
+    const response = await this.fetchFn(item.url, {
+      method: "GET",
     });
 
     return {

@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   OwnablesNotificationBuilderService,
   OwnablesNotificationValidatorService,
+  normalizeCaip10Account,
+  parseCaip10Account,
   type OwnablesNotifyAvailableV1,
 } from "../src";
 
@@ -14,8 +16,9 @@ const basePayload: OwnablesNotifyAvailableV1 = {
   cid: "bafy123",
   scope: "direct",
   issuerAddress: "0x1111111111111111111111111111111111111111",
+  ownerAccount: "eip155:1:0x2222222222222222222222222222222222222222",
   ownerAddress: "0x2222222222222222222222222222222222222222",
-  accept: { url: "https://hub.example.com/api/v1/ownables/owb_1/download" },
+  url: "https://hub.example.com/api/v1/ownables/owb_1/download",
 };
 
 describe("OwnablesNotificationBuilderService", () => {
@@ -28,7 +31,7 @@ describe("OwnablesNotificationBuilderService", () => {
 
     expect(envelope.title).toBe("Lunar Passport available");
     expect(envelope.body).toBe(
-      "Issued by 0x1111...1111. Review and accept to download."
+      "Issued by 0x1111...1111. Open to review and download."
     );
   });
 
@@ -46,7 +49,7 @@ describe("OwnablesNotificationBuilderService", () => {
 
     expect(envelope.title).toBe("New Ownable available");
     expect(envelope.body).toBe(
-      "Issued by 0x1111...1111 for NFT #77. Review and accept to download."
+      "Issued by 0x1111...1111 for NFT #77. Open to review and download."
     );
   });
 
@@ -66,7 +69,7 @@ describe("OwnablesNotificationBuilderService", () => {
 
     expect(envelope.title).toBe("New Ownable available");
     expect(envelope.body).toBe(
-      "Issued by 0x1234 for NFT #. Review and accept to download."
+      "Issued by 0x1234 for NFT #. Open to review and download."
     );
   });
 
@@ -82,8 +85,27 @@ describe("OwnablesNotificationBuilderService", () => {
     });
 
     expect(envelope.body).toBe(
-      "Issued by 0x1111...1111 for NFT #?. Review and accept to download."
+      "Issued by 0x1111...1111 for NFT #?. Open to review and download."
     );
+  });
+});
+
+describe("notify account helpers", () => {
+  it("normalizes and parses CAIP-10 EVM accounts", () => {
+    expect(normalizeCaip10Account(" EIP155:1:0xABCDEFabcdefABCDEFabcdefABCDEFabcdefABCD ")).toBe(
+      "eip155:1:0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+    );
+    expect(parseCaip10Account("eip155:8453:0x2222222222222222222222222222222222222222")).toEqual({
+      namespace: "eip155",
+      reference: "8453",
+      chainId: "eip155:8453",
+      address: "0x2222222222222222222222222222222222222222",
+      account: "eip155:8453:0x2222222222222222222222222222222222222222",
+    });
+  });
+
+  it("rejects malformed CAIP-10 accounts", () => {
+    expect(() => normalizeCaip10Account("not-an-account")).toThrow("Invalid CAIP-10 account");
   });
 });
 
@@ -118,8 +140,9 @@ describe("OwnablesNotificationValidatorService", () => {
       eventId: "",
       ownableId: "",
       cid: "",
+      ownerAccount: "bad",
       ownerAddress: "bad",
-      accept: { url: "" },
+      url: "",
       scope: "direct",
       nft: {
         network: "base",
@@ -131,6 +154,7 @@ describe("OwnablesNotificationValidatorService", () => {
     expect(result.valid).toBe(false);
     expect(result.errors).toContain("type must be ownables.v1.available");
     expect(result.errors).toContain("createdAt must be a valid ISO-8601 date string");
+    expect(result.errors).toContain("ownerAccount must be a valid CAIP-10 account");
     expect(result.errors).toContain("nft payload must be omitted for scope=direct");
     expect(() => validator.assertValid({ ...basePayload, ownerAddress: "bad" } as any)).toThrow(
       "Invalid ownables notification payload"
@@ -153,5 +177,18 @@ describe("OwnablesNotificationValidatorService", () => {
     expect(result.errors).toContain("nft.network is required for scope=nft");
     expect(result.errors).toContain("nft.contract must be a valid EVM address for scope=nft");
     expect(result.errors).toContain("nft.tokenId is required for scope=nft");
+  });
+
+  it("rejects mismatched ownerAccount and ownerAddress and blank urls", () => {
+    const validator = new OwnablesNotificationValidatorService();
+    const result = validator.validate({
+      ...basePayload,
+      ownerAccount: "eip155:1:0x3333333333333333333333333333333333333333",
+      url: "   ",
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("ownerAddress must match the EVM address in ownerAccount");
+    expect(result.errors).toContain("url must be a valid absolute URL");
   });
 });

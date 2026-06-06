@@ -12,9 +12,16 @@ export interface OwnablesNotificationNftRef {
   tokenId: string;
 }
 
-export interface OwnablesNotificationAccept {
-  url: string;
-  method?: "GET" | "POST";
+export interface NotifyAccountTarget {
+  account: string;
+}
+
+export interface ParsedCaip10Account {
+  namespace: string;
+  reference: string;
+  chainId: string;
+  address: string;
+  account: string;
 }
 
 export interface OwnablesNotifyAvailableV1 {
@@ -25,8 +32,9 @@ export interface OwnablesNotifyAvailableV1 {
   cid: string;
   scope: OwnablesNotificationScope;
   issuerAddress: string;
+  ownerAccount: string;
   ownerAddress: string;
-  accept: OwnablesNotificationAccept;
+  url: string;
   metadata?: OwnablesNotificationMetadata;
   nft?: OwnablesNotificationNftRef;
 }
@@ -35,11 +43,6 @@ export interface OwnablesNotificationEnvelope {
   title: string;
   body: string;
   payload: OwnablesNotifyAvailableV1;
-}
-
-export interface NotifyRegistrationTarget {
-  ownerAddress: string;
-  topic: string;
 }
 
 export interface OwnablesNotificationValidationResult {

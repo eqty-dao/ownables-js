@@ -20,8 +20,8 @@ export class OwnablesNotificationBuilderService {
 
     const body =
       payload.scope === "nft"
-        ? `Issued by ${shortIssuer} for NFT #${payload.nft?.tokenId ?? "?"}. Review and accept to download.`
-        : `Issued by ${shortIssuer}. Review and accept to download.`;
+        ? `Issued by ${shortIssuer} for NFT #${payload.nft?.tokenId ?? "?"}. Open to review and download.`
+        : `Issued by ${shortIssuer}. Open to review and download.`;
 
     return {
       title,

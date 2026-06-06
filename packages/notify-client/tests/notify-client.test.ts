@@ -8,23 +8,14 @@ import {
   type NotifyRawMessage,
 } from "../src";
 
-const makeMessage = (eventId: string, receivedAt: string): NotifyRawMessage => ({
-  id: `msg_${eventId}`,
-  receivedAt,
-  payload: {
-    type: "ownables.v1.available",
-    eventId,
-    createdAt: "2026-03-18T10:00:00.000Z",
-    ownableId: "owb_1",
-    cid: "bafy123",
-    scope: "direct",
-    issuerAddress: "0x1111111111111111111111111111111111111111",
-    ownerAddress: "0x2222222222222222222222222222222222222222",
-    accept: {
-      url: "https://hub.example.com/api/v1/ownables/owb_1/download",
-      method: "POST",
-    },
-  },
+const makeMessage = (id: string, receivedAt?: string): NotifyRawMessage => ({
+  id,
+  title: "Lunar Passport available",
+  body: "Issued by 0x1111...1111. Open to review and download.",
+  url: "https://hub.example.com/api/v1/ownables/owb_1/download",
+  type: "ownables.v1.available",
+  sentAt: "2026-03-18T10:00:00.000Z",
+  ...(receivedAt ? { receivedAt } : {}),
 });
 
 describe("NotifyClientService", () => {
@@ -40,11 +31,14 @@ describe("NotifyClientService", () => {
     const service = new NotifyClientService(transport);
     await service.initialize();
     await service.register();
-    await service.subscribe({ ownerAddress: "0xabc" });
+    await service.subscribe({ account: "eip155:1:0xabc", domain: "app.example.com" });
 
     expect(transport.initialize).toHaveBeenCalledTimes(1);
     expect(transport.register).toHaveBeenCalledTimes(1);
-    expect(transport.subscribe).toHaveBeenCalledWith({ ownerAddress: "0xabc" });
+    expect(transport.subscribe).toHaveBeenCalledWith({
+      account: "eip155:1:0xabc",
+      domain: "app.example.com",
+    });
   });
 
   it("forwards watch handlers to transport", () => {
@@ -69,59 +63,44 @@ describe("NotifyClientService", () => {
 });
 
 describe("NotifyInboxService", () => {
-  it("dedupes by eventId and marks as read", () => {
+  it("dedupes by transport notification id and marks as read", () => {
     const inbox = new NotifyInboxService();
-    const first = inbox.ingest(makeMessage("evt_1", "2026-03-18T10:00:00.000Z"));
-    const second = inbox.ingest(makeMessage("evt_1", "2026-03-18T10:10:00.000Z"));
+    const first = inbox.ingest(makeMessage("msg_1", "2026-03-18T10:00:00.000Z"));
+    const second = inbox.ingest(makeMessage("msg_1", "2026-03-18T10:10:00.000Z"));
 
     expect(first).toEqual(second);
     expect(inbox.list()).toHaveLength(1);
 
-    inbox.markRead("evt_1", "2026-03-18T11:00:00.000Z");
+    inbox.markRead("msg_1", "2026-03-18T11:00:00.000Z");
     expect(inbox.list()[0]?.readAt).toBe("2026-03-18T11:00:00.000Z");
+    expect(inbox.list()[0]?.isRead).toBe(true);
   });
 
-  it("sorts inbox descending and ignores unknown markRead", () => {
+  it("sorts inbox descending and falls back to sentAt when receivedAt is missing", () => {
     const inbox = new NotifyInboxService();
-    inbox.ingest(makeMessage("evt_2", "2026-03-18T09:00:00.000Z"));
-    inbox.ingest(makeMessage("evt_1", "2026-03-18T10:00:00.000Z"));
+    inbox.ingest(makeMessage("msg_2", "2026-03-18T09:00:00.000Z"));
+    inbox.ingest(makeMessage("msg_1"));
     inbox.markRead("missing");
 
-    expect(inbox.list().map((i) => i.eventId)).toEqual(["evt_1", "evt_2"]);
+    expect(inbox.list().map((i) => i.id)).toEqual(["msg_1", "msg_2"]);
   });
 });
 
 describe("NotifyAcceptService", () => {
-  it("posts to accept url and returns status", async () => {
-    const fetchFn = vi.fn().mockResolvedValue({ ok: true, status: 201 });
+  it("gets the notification url and returns status", async () => {
+    const fetchFn = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     const service = new NotifyAcceptService({ fetchFn });
     const result = await service.accept({
       id: "msg_1",
-      eventId: "evt_1",
+      title: "Lunar Passport available",
+      body: "Issued by 0x1111...1111. Open to review and download.",
+      url: "https://hub.example.com/api/v1/ownables/owb_1/download",
+      type: "ownables.v1.available",
       receivedAt: "2026-03-18T10:00:00.000Z",
-      payload: makeMessage("evt_1", "2026-03-18T10:00:00.000Z").payload,
+      isRead: false,
     });
 
-    expect(result).toEqual({ ok: true, status: 201 });
-    expect(fetchFn).toHaveBeenCalledWith(
-      "https://hub.example.com/api/v1/ownables/owb_1/download",
-      { method: "POST" }
-    );
-  });
-
-  it("defaults accept method to GET", async () => {
-    const fetchFn = vi.fn().mockResolvedValue({ ok: true, status: 200 });
-    const service = new NotifyAcceptService({ fetchFn });
-    const payload = makeMessage("evt_2", "2026-03-18T10:00:00.000Z").payload;
-    delete (payload as any).accept.method;
-
-    await service.accept({
-      id: "msg_2",
-      eventId: "evt_2",
-      receivedAt: "2026-03-18T10:00:00.000Z",
-      payload,
-    });
-
+    expect(result).toEqual({ ok: true, status: 200 });
     expect(fetchFn).toHaveBeenCalledWith(
       "https://hub.example.com/api/v1/ownables/owb_1/download",
       { method: "GET" }
@@ -137,9 +116,12 @@ describe("NotifyAcceptService", () => {
       const service = new NotifyAcceptService();
       const result = await service.accept({
         id: "msg_3",
-        eventId: "evt_3",
+        title: "Lunar Passport available",
+        body: "Issued by 0x1111...1111. Open to review and download.",
+        url: "https://hub.example.com/api/v1/ownables/owb_1/download",
+        type: "ownables.v1.available",
         receivedAt: "2026-03-18T10:00:00.000Z",
-        payload: makeMessage("evt_3", "2026-03-18T10:00:00.000Z").payload,
+        isRead: false,
       });
 
       expect(result).toEqual({ ok: false, status: 503 });

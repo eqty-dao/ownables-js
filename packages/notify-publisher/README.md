@@ -26,7 +26,7 @@ await publisher.publishOwnableAvailable(payload);
 ```
 
 Provide your own `NotifyPublisherTransport` implementation and inject it.
-The transport request carries an opaque `target` object with `ownerAddress` and `topic`.
+The transport request carries the explicit fields a Reown-style adapter needs: `account`, `title`, `body`, `url`, optional `icon`, and optional validated `payload`.
 
 ## Development
 

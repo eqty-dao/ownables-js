@@ -1,6 +1,9 @@
 import {
   OwnablesNotificationBuilderService,
   OwnablesNotificationValidatorService,
+  normalizeCaip10Account,
+  normalizeEvmAddress,
+  parseCaip10Account,
   type OwnablesNotifyAvailableV1,
 } from "@ownables/notify-core";
 import type {
@@ -16,32 +19,38 @@ export interface NotifyPublisherServiceDeps {
   idGenerator?: () => string;
 }
 
-const EVM_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
+function assertNotifyTarget(inputOwnerAccount: string, inputOwnerAddress: string, target: { account: string }): string {
+  let payloadOwnerAccount: string;
+  let targetAccount: string;
 
-function normalizeOwnerAddress(address: string): string {
-  const normalized = address.trim().toLowerCase();
-  if (!EVM_ADDRESS_REGEX.test(normalized)) {
-    throw new Error("Invalid notify target ownerAddress");
-  }
-  return normalized;
-}
-
-function assertNotifyTarget(inputOwnerAddress: string, target: { ownerAddress: string; topic: string }): {
-  ownerAddress: string;
-  topic: string;
-} {
-  const payloadOwner = normalizeOwnerAddress(inputOwnerAddress);
-  const targetOwner = normalizeOwnerAddress(target.ownerAddress);
-  if (payloadOwner !== targetOwner) {
-    throw new Error("Notify target ownerAddress does not match payload ownerAddress");
+  try {
+    payloadOwnerAccount = normalizeCaip10Account(inputOwnerAccount);
+  } catch {
+    throw new Error("Invalid notify payload ownerAccount");
   }
 
-  const topic = target.topic.trim();
-  if (!topic) {
-    throw new Error("Invalid notify target topic");
+  try {
+    targetAccount = normalizeCaip10Account(target.account);
+  } catch {
+    throw new Error("Invalid notify target account");
   }
 
-  return { ownerAddress: targetOwner, topic };
+  if (payloadOwnerAccount !== targetAccount) {
+    throw new Error("Notify target account does not match payload ownerAccount");
+  }
+
+  const targetAddress = parseCaip10Account(targetAccount);
+  if (targetAddress.namespace === "eip155") {
+    const payloadOwnerAddress = normalizeEvmAddress(
+      inputOwnerAddress,
+      "Invalid notify payload ownerAddress"
+    );
+    if (targetAddress.address !== payloadOwnerAddress) {
+      throw new Error("Notify target account does not match payload ownerAddress");
+    }
+  }
+
+  return targetAccount;
 }
 
 export class NotifyPublisherService {
@@ -76,8 +85,9 @@ export class NotifyPublisherService {
       cid: input.cid,
       scope: input.scope,
       issuerAddress: input.issuerAddress,
+      ownerAccount: input.ownerAccount,
       ownerAddress: input.ownerAddress,
-      accept: input.accept,
+      url: input.url,
     };
     const payload: OwnablesNotifyAvailableV1 = {
       ...payloadBase,
@@ -86,13 +96,14 @@ export class NotifyPublisherService {
     };
 
     this.validator.assertValid(payload);
-    const target = assertNotifyTarget(input.ownerAddress, input.target);
+    const account = assertNotifyTarget(input.ownerAccount, input.ownerAddress, input.target);
 
     const envelope = this.builder.build(payload);
     const publishRequest = {
-      target,
+      account,
       title: envelope.title,
       body: envelope.body,
+      url: payload.url,
       payload: envelope.payload,
       ...(payload.metadata?.icon ? { icon: payload.metadata.icon } : {}),
     };

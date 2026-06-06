@@ -1015,7 +1015,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@ownables/core@workspace:*, @ownables/core@workspace:packages/core":
+"@ownables/core@npm:0.6.0, @ownables/core@workspace:*, @ownables/core@workspace:packages/core":
   version: 0.0.0-use.local
   resolution: "@ownables/core@workspace:packages/core"
   dependencies:
@@ -1046,6 +1046,8 @@ __metadata:
   resolution: "@ownables/notify-publisher@workspace:packages/notify-publisher"
   dependencies:
     "@ownables/notify-core": "npm:0.6.0"
+  peerDependencies:
+    "@ownables/notify-core": ^0.6.0
   languageName: unknown
   linkType: soft
 
@@ -1069,11 +1071,13 @@ __metadata:
   resolution: "@ownables/platform-node@workspace:packages/platform-node"
   dependencies:
     "@babel/core": "npm:^7.28.4"
-    "@ownables/core": "workspace:*"
+    "@ownables/core": "npm:0.6.0"
     any-bucket: "npm:^0.1.6"
     babel-plugin-remove-import-export: "npm:^1.1.1"
     cbor-x: "npm:^1.6.0"
     jszip: "npm:^3.10.1"
+  peerDependencies:
+    "@ownables/core": ^0.6.0
   languageName: unknown
   linkType: soft
 

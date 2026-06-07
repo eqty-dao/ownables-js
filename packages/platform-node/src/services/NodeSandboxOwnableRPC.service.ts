@@ -66,7 +66,10 @@ export default class NodeSandboxOwnableRPC implements OwnableRPC {
   }
 
   async initialize(_js: string, wasm: Uint8Array): Promise<void> {
-    const instance = (await WebAssembly.instantiate(wasm, {})) as WebAssembly.Instance;
+    const instantiateResult = (await WebAssembly.instantiate(wasm, {})) as
+      | WebAssembly.Instance
+      | WebAssembly.WebAssemblyInstantiatedSource;
+    const instance = 'instance' in instantiateResult ? instantiateResult.instance : instantiateResult;
     const exportsRef = instance.exports as AbiExports;
 
     if (

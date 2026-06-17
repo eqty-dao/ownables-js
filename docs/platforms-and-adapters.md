@@ -137,5 +137,5 @@ This package remains for temporary compatibility. New integrations should migrat
 
 ## Integration direction
 
-- New integrations should prefer hub + notify flows for delivery signaling.
+- New integrations should prefer Hub-backed discovery and import flows for delivery signaling.
 - Keep Relay support only for compatibility/migration windows.

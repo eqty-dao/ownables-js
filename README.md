@@ -20,9 +20,6 @@ Use these packages to validate, execute, and interact with Ownables in both brow
 - `@ownables/adapter-ethers`: ethers/EVM adapter services.
 - `@ownables/builder`: ownable build/deploy orchestration for browser and Node.
 - `@ownables/builder-client`: deprecated obuilder API client (compatibility only).
-- `@ownables/notify-core`: shared Ownables notification types, validation, and message building.
-- `@ownables/notify-client`: DI services for notification subscribe/inbox/accept flows.
-- `@ownables/notify-publisher`: DI service for publishing Ownables notification events.
 
 ## Requirements
 
@@ -52,7 +49,6 @@ yarn install
 - Docs index and scope: [docs/temporary-docs.md](./docs/temporary-docs.md)
 - Core runtime quickstart: [docs/core-runtime-quickstart.md](./docs/core-runtime-quickstart.md)
 - Platform and adapter quickstart: [docs/platforms-and-adapters.md](./docs/platforms-and-adapters.md)
-- Notify integration guide: [docs/notify-integration.md](./docs/notify-integration.md)
 
 ## Monorepo layout
 
@@ -65,9 +61,6 @@ packages/
   adapter-ethers/
   builder/
   builder-client/
-  notify-core/
-  notify-client/
-  notify-publisher/
 ```
 
 ## Release

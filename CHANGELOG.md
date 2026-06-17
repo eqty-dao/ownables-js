@@ -1,3 +1,10 @@
+## [0.6.1](https://github.com/eqty-dao/ownables-js/compare/v0.6.0...v0.6.1) (2026-05-25)
+
+
+### Bug Fixes
+
+* yarn ([c7c66b5](https://github.com/eqty-dao/ownables-js/commit/c7c66b5a71a082c0340dd2919105f4b29c2bacb0))
+
 # [0.6.0](https://github.com/eqty-dao/ownables-js/compare/v0.5.0...v0.6.0) (2026-05-25)
 
 

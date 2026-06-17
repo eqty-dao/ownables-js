@@ -1,6 +1,6 @@
 {
   "name": "@ownables/platform-node",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "type": "module",
   "main": "dist/platform-node/src/index.js",
   "types": "dist/platform-node/src/index.d.ts",

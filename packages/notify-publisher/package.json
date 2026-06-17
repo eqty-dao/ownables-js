@@ -1,6 +1,6 @@
 {
   "name": "@ownables/notify-publisher",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "type": "module",
   "main": "dist/notify-publisher/src/index.js",
   "types": "dist/notify-publisher/src/index.d.ts",
@@ -15,10 +15,10 @@
     "dist"
   ],
   "peerDependencies": {
-    "@ownables/notify-core": "^0.6.0"
+    "@ownables/notify-core": "^0.6.1"
   },
   "devDependencies": {
-    "@ownables/notify-core": "0.6.0"
+    "@ownables/notify-core": "^0.6.1"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

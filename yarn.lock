@@ -1015,18 +1015,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@ownables/core@npm:0.6.0":
-  version: 0.6.0
-  resolution: "@ownables/core@npm:0.6.0"
-  dependencies:
-    cbor-x: "npm:^1.6.0"
-    eqty-core: "npm:^1.0.2"
-    jszip: "npm:^3.10.1"
-  checksum: 10c0/6971a31980a4087c86c97cda74491c3d6acebb43e5272bdc84e3c513ba3c17c3001531d48b7081da085ca88e79367e286406920b1424440c8a5d1f986e305364
-  languageName: node
-  linkType: hard
-
-"@ownables/core@workspace:*, @ownables/core@workspace:packages/core":
+"@ownables/core@npm:^0.6.0, @ownables/core@workspace:*, @ownables/core@workspace:packages/core":
   version: 0.0.0-use.local
   resolution: "@ownables/core@workspace:packages/core"
   dependencies:
@@ -1058,7 +1047,7 @@ __metadata:
   resolution: "@ownables/platform-node@workspace:packages/platform-node"
   dependencies:
     "@babel/core": "npm:^7.28.4"
-    "@ownables/core": "npm:0.6.0"
+    "@ownables/core": "npm:^0.6.0"
     any-bucket: "npm:^0.1.6"
     babel-plugin-remove-import-export: "npm:^1.1.1"
     cbor-x: "npm:^1.6.0"

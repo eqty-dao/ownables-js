@@ -25,7 +25,7 @@
     "@ownables/core": "^0.6.0"
   },
   "devDependencies": {
-    "@ownables/core": "0.6.0"
+    "@ownables/core": "^0.6.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

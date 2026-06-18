@@ -1,6 +1,6 @@
 {
   "name": "@ownables/platform-node",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "type": "module",
   "main": "dist/platform-node/src/index.js",
   "types": "dist/platform-node/src/index.d.ts",
@@ -22,10 +22,10 @@
     "jszip": "^3.10.1"
   },
   "peerDependencies": {
-    "@ownables/core": "^0.6.0"
+    "@ownables/core": "^0.7.0"
   },
   "devDependencies": {
-    "@ownables/core": "^0.6.0"
+    "@ownables/core": "^0.7.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

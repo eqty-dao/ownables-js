@@ -1,3 +1,23 @@
+# [0.7.0](https://github.com/eqty-dao/ownables-js/compare/v0.6.1...v0.7.0) (2026-06-18)
+
+
+### Bug Fixes
+
+* add authority API and QC remediations ([3be265b](https://github.com/eqty-dao/ownables-js/commit/3be265b8162e584424b5365fdd44ecc78f9bf671))
+* **core:** make package-root ESM imports node24-resolvable ([0bead1a](https://github.com/eqty-dao/ownables-js/commit/0bead1a8ecc0b8c9d7f03bf88a3573b404a18210))
+* **core:** preserve partial replay progress for stale classification ([fbb3ba9](https://github.com/eqty-dao/ownables-js/commit/fbb3ba9d944531504cb25342acad02ac718dadfc))
+* **notify-core:** use explicit js export specifiers for esm ([7a80046](https://github.com/eqty-dao/ownables-js/commit/7a800467aff3d2aac52bcb702cb14e65240fb347))
+* **notify-publisher:** align package root exports with built output ([1760196](https://github.com/eqty-dao/ownables-js/commit/176019664681ddf749947f1c915cd174c5c67fef))
+* **notify-publisher:** make notify-core a peer dependency ([08a9cd0](https://github.com/eqty-dao/ownables-js/commit/08a9cd0d32580c3ffdb8e2c4f3424887acefed45))
+* **platform-node:** make core dependency consumable via portal ([51bc397](https://github.com/eqty-dao/ownables-js/commit/51bc3972fed8e90f78ce1ac5107e2bffb9a5779d))
+* **platform-node:** restore package-root consumability ([4521552](https://github.com/eqty-dao/ownables-js/commit/452155267ad12b6b1a0c4f6eac033b300a150207))
+
+
+### Features
+
+* add replay, cid, and notify hub contracts ([b8edc55](https://github.com/eqty-dao/ownables-js/commit/b8edc554ea9d985e9302ff023b26f6f3b8010791))
+* **notify:** target Reown accounts and urls ([10e13d2](https://github.com/eqty-dao/ownables-js/commit/10e13d299cdc21375a5883706f0d146692b7d9f5))
+
 ## [0.6.1](https://github.com/eqty-dao/ownables-js/compare/v0.6.0...v0.6.1) (2026-05-25)
 
 

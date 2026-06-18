@@ -2,18 +2,30 @@
   "name": "@ownables/platform-node",
   "version": "0.6.1",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/platform-node/src/index.js",
+  "types": "dist/platform-node/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/platform-node/src/index.d.ts",
+      "import": "./dist/platform-node/src/index.js",
+      "default": "./dist/platform-node/src/index.js"
+    }
+  },
   "files": [
     "dist"
   ],
   "dependencies": {
     "@babel/core": "^7.28.4",
-    "@ownables/core": "workspace:*",
     "any-bucket": "^0.1.6",
     "babel-plugin-remove-import-export": "^1.1.1",
     "cbor-x": "^1.6.0",
     "jszip": "^3.10.1"
+  },
+  "peerDependencies": {
+    "@ownables/core": "^0.6.0"
+  },
+  "devDependencies": {
+    "@ownables/core": "^0.6.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

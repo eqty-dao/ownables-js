@@ -8,7 +8,6 @@ They cover practical usage of the current packages in this repository until a fu
 
 - [Core and runtime quickstart](./core-runtime-quickstart.md)
 - [Platform and adapter quickstart](./platforms-and-adapters.md)
-- [Notify integration guide](./notify-integration.md)
 
 ## What is intentionally not covered yet
 

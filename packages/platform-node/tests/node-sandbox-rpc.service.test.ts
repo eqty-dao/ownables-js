@@ -128,6 +128,13 @@ function buildMockExports() {
   };
 }
 
+function makeInstantiatedSource(exportsRef: ReturnType<typeof buildMockExports>['exports']) {
+  return {
+    module: {} as WebAssembly.Module,
+    instance: { exports: exportsRef } as unknown as WebAssembly.Instance,
+  } satisfies WebAssembly.WebAssemblyInstantiatedSource;
+}
+
 describe('NodeSandboxOwnableRPC', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -135,7 +142,7 @@ describe('NodeSandboxOwnableRPC', () => {
 
   it('initializes wasm and executes instantiate/execute/register/ingest/query flow', async () => {
     const mock = buildMockExports();
-    vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue({ exports: mock.exports } as any);
+    vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue(makeInstantiatedSource(mock.exports));
 
     const rpc = new NodeSandboxOwnableRPC('ownable-1');
     await rpc.initialize('', Uint8Array.from([0, 97, 115, 109]));
@@ -199,15 +206,25 @@ describe('NodeSandboxOwnableRPC', () => {
   });
 
   it('throws for invalid wasm exports', async () => {
-    vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue({ exports: { memory: new WebAssembly.Memory({ initial: 1 }) } } as any);
+    vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue(
+      makeInstantiatedSource({ memory: new WebAssembly.Memory({ initial: 1 }) } as any)
+    );
 
     const rpc = new NodeSandboxOwnableRPC('ownable-1');
     await expect(rpc.initialize('', Uint8Array.from([0, 97, 115, 109]))).rejects.toThrow('Invalid ownable runtime exports');
   });
 
+  it('accepts a direct WebAssembly.Instance return shape', async () => {
+    const mock = buildMockExports();
+    vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue({ exports: mock.exports } as WebAssembly.Instance);
+
+    const rpc = new NodeSandboxOwnableRPC('ownable-1');
+    await expect(rpc.initialize('', Uint8Array.from([0, 97, 115, 109]))).resolves.toBeUndefined();
+  });
+
   it('supports terminate and widget methods', async () => {
     const mock = buildMockExports();
-    vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue({ exports: mock.exports } as any);
+    vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue(makeInstantiatedSource(mock.exports));
 
     const rpc = new NodeSandboxOwnableRPC('ownable-1');
     await rpc.initialize('', Uint8Array.from([0, 97, 115, 109]));

@@ -1,4 +1,4 @@
-import type TypedDict from './TypedDict';
+import type TypedDict from './TypedDict.js';
 
 export type StateDump = Array<[ArrayLike<number>, ArrayLike<number>]>;
 

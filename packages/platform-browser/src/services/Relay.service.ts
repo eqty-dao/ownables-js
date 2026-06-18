@@ -45,7 +45,7 @@ export class RelayService {
     if (!RelayService.didWarnDeprecated) {
       RelayService.didWarnDeprecated = true;
       (options.logger ?? console).warn(
-        "[@ownables/platform-browser] RelayService is deprecated and will be removed in a future major version. Prefer hub + notify flows."
+        "[@ownables/platform-browser] RelayService is deprecated and will be removed in a future major version. Prefer Hub-backed discovery and import flows."
       );
     }
 

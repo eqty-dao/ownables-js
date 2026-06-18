@@ -26,15 +26,6 @@ export default defineConfig({
       '@ownables/platform-react-native': fileURLToPath(
         new URL('./packages/platform-react-native/src/index.ts', import.meta.url)
       ),
-      '@ownables/notify-core': fileURLToPath(
-        new URL('./packages/notify-core/src/index.ts', import.meta.url)
-      ),
-      '@ownables/notify-client': fileURLToPath(
-        new URL('./packages/notify-client/src/index.ts', import.meta.url)
-      ),
-      '@ownables/notify-publisher': fileURLToPath(
-        new URL('./packages/notify-publisher/src/index.ts', import.meta.url)
-      ),
       '@ownables/authority': fileURLToPath(
         new URL('./packages/authority/src/index.ts', import.meta.url)
       ),

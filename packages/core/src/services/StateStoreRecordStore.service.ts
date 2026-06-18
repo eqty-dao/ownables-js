@@ -1,5 +1,5 @@
-import type { RecordStore, BridgedOwnableRecord, NftRef } from '../types/Authority';
-import type { StateStore } from '../interfaces/core';
+import type { RecordStore, BridgedOwnableRecord, NftRef } from '../types/Authority.js';
+import type { StateStore } from '../interfaces/core.js';
 
 const STORE_BY_CID = 'records:by-cid';
 const STORE_BY_NFT = 'records:index:nft';

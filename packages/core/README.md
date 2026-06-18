@@ -12,7 +12,8 @@ yarn add @ownables/core
 
 - Interfaces: `AnchorProvider`, `StateStore`, `PackageAssetIO`, `RuntimeSourceProvider`
 - Services: `EventChainService`, `OwnableService`, `WorkerRPC`, `StateStoreRecordStore`, `PollingService` (legacy)
-- Types: `TypedPackage`, `TypedOwnableInfo`, `OwnableRuntime`, `MessageInfo`, `SIWE`, `Authority`, and related runtime types
+- Services: `calculateOwnablePackageCid`, replay helpers (`publicEventReplayKey`, `dedupeIndexedPublicEvents`, `evaluateReplayFreshness`)
+- Types: `TypedPackage`, `TypedOwnableInfo`, `OwnableRuntime`, `MessageInfo`, `SIWE`, `Authority`, `Replay`, and related runtime types
 
 ## Quick start
 

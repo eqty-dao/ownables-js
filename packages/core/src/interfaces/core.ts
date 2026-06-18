@@ -1,7 +1,7 @@
 import type { Event, Message } from 'eqty-core';
-import type { TypedPackage } from '../types/TypedPackage';
-import type { OwnableRPC } from '../types/OwnableRuntime';
-import type { PublicEvent } from '../types/OwnableRuntime';
+import type { TypedPackage } from '../types/TypedPackage.js';
+import type { OwnableRPC } from '../types/OwnableRuntime.js';
+import type { PublicEvent } from '../types/OwnableRuntime.js';
 
 export type LogProgress = (step: string, meta?: Record<string, unknown>) => void;
 

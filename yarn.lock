@@ -1015,35 +1015,15 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@ownables/core@workspace:*, @ownables/core@workspace:packages/core":
+"@ownables/core@npm:^0.6.0, @ownables/core@workspace:*, @ownables/core@workspace:packages/core":
   version: 0.0.0-use.local
   resolution: "@ownables/core@workspace:packages/core"
   dependencies:
+    blockstore-core: "npm:^6.1.2"
     cbor-x: "npm:^1.6.0"
     eqty-core: "npm:^1.0.2"
+    ipfs-unixfs-importer: "npm:^16.1.4"
     jszip: "npm:^3.10.1"
-  languageName: unknown
-  linkType: soft
-
-"@ownables/notify-client@workspace:packages/notify-client":
-  version: 0.0.0-use.local
-  resolution: "@ownables/notify-client@workspace:packages/notify-client"
-  dependencies:
-    "@ownables/notify-core": "npm:0.6.0"
-  languageName: unknown
-  linkType: soft
-
-"@ownables/notify-core@npm:0.6.0, @ownables/notify-core@workspace:packages/notify-core":
-  version: 0.0.0-use.local
-  resolution: "@ownables/notify-core@workspace:packages/notify-core"
-  languageName: unknown
-  linkType: soft
-
-"@ownables/notify-publisher@workspace:packages/notify-publisher":
-  version: 0.0.0-use.local
-  resolution: "@ownables/notify-publisher@workspace:packages/notify-publisher"
-  dependencies:
-    "@ownables/notify-core": "npm:0.6.0"
   languageName: unknown
   linkType: soft
 
@@ -1067,11 +1047,13 @@ __metadata:
   resolution: "@ownables/platform-node@workspace:packages/platform-node"
   dependencies:
     "@babel/core": "npm:^7.28.4"
-    "@ownables/core": "workspace:*"
+    "@ownables/core": "npm:^0.6.0"
     any-bucket: "npm:^0.1.6"
     babel-plugin-remove-import-export: "npm:^1.1.1"
     cbor-x: "npm:^1.6.0"
     jszip: "npm:^3.10.1"
+  peerDependencies:
+    "@ownables/core": ^0.6.0
   languageName: unknown
   linkType: soft
 

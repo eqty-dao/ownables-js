@@ -1,6 +1,6 @@
 # dossier contract
 
-Shared static ownable contract for browser-first builder flows.
+Dossier ownable contract with generic attachment and close support.
 
 ## Build artifacts
 
@@ -12,7 +12,7 @@ Run:
 
 This generates:
 
-- `artifacts/ownable-static.wasm`
+- `artifacts/ownable-dossier.wasm`
 - `artifacts/code-hash-manifest.json`
 - `schema/*.json`
 

@@ -18,6 +18,8 @@ describe('PackageService', () => {
     isDynamic: false,
     hasMetadata: false,
     hasWidgetState: false,
+    hasAttachments: false,
+    isClosable: false,
     isConsumable: false,
     isConsumer: false,
     isTransferable: false,
@@ -36,6 +38,8 @@ describe('PackageService', () => {
                 isDynamic: false,
                 hasMetadata: false,
                 hasWidgetState: false,
+                hasAttachments: false,
+                isClosable: false,
                 isConsumable: false,
                 isConsumer: false,
                 isTransferable: false,
@@ -294,8 +298,40 @@ describe('PackageService', () => {
       isDynamic: true,
       hasMetadata: true,
       hasWidgetState: true,
+      hasAttachments: false,
+      isClosable: false,
       isConsumable: true,
       isConsumer: true,
+      isTransferable: true,
+    });
+  });
+
+  it('computes dossier capabilities without widget state', async () => {
+    const service = createService({} as any, {} as any, { get: () => [], set: () => undefined } as any);
+
+    vi.spyOn(service as any, 'getPackageJson')
+      .mockResolvedValueOnce({
+        oneOf: [{ required: ['get_info', 'get_metadata', 'get_attachments', 'is_closed'] }],
+      })
+      .mockResolvedValueOnce({
+        oneOf: [{ required: ['attach', 'close', 'transfer'] }],
+      });
+
+    const dynamicCaps = await (service as any).getCapabilities([
+      new File(['{}'], 'package.json'),
+      new File(['wasm'], 'ownable_bg.wasm'),
+      new File(['{}'], 'query_msg.json'),
+      new File(['{}'], 'execute_msg.json'),
+    ]);
+
+    expect(dynamicCaps).toEqual({
+      isDynamic: true,
+      hasMetadata: true,
+      hasWidgetState: false,
+      hasAttachments: true,
+      isClosable: true,
+      isConsumable: false,
+      isConsumer: false,
       isTransferable: true,
     });
   });

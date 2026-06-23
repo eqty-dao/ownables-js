@@ -12,6 +12,8 @@ const basePkg = {
   isDynamic: false,
   hasMetadata: false,
   hasWidgetState: false,
+  hasAttachments: false,
+  isClosable: false,
   isConsumable: false,
   isConsumer: false,
   isTransferable: false,

@@ -4,7 +4,6 @@ import {
   buildInstantiateMsg,
   deploy,
   estimateCost,
-  FIXED_OWNABLE_TYPE,
   prepareOwnable,
 } from "../src";
 
@@ -19,6 +18,8 @@ describe("@ownables/builder", () => {
         isDynamic: false,
         hasMetadata: false,
         hasWidgetState: false,
+        hasAttachments: false,
+        isClosable: false,
         isConsumable: false,
         isConsumer: false,
         isTransferable: false,
@@ -38,6 +39,35 @@ describe("@ownables/builder", () => {
     expect(packageService.processPackage).toHaveBeenCalledTimes(1);
   });
 
+  it("prepareOwnable allows zero-file dossier issuance when package service resolves a package", async () => {
+    const packageService = {
+      processPackage: vi.fn().mockResolvedValue({
+        cid: "bafy-empty",
+        title: "Dossier",
+        name: "dossier",
+        versions: [],
+        isDynamic: true,
+        hasMetadata: true,
+        hasWidgetState: false,
+        hasAttachments: true,
+        isClosable: true,
+        isConsumable: false,
+        isConsumer: false,
+        isTransferable: true,
+      }),
+    };
+
+    const result = await prepareOwnable({
+      name: "Dossier",
+      description: "A living file dossier",
+      files: [],
+      packageService,
+    });
+
+    expect(result.packageCid).toBe("bafy-empty");
+    expect(packageService.processPackage).toHaveBeenCalledWith([]);
+  });
+
   it("buildInstantiateMsg builds payload with fixed ownable type", () => {
     const payload = buildInstantiateMsg({
       name: "Name",
@@ -52,7 +82,7 @@ describe("@ownables/builder", () => {
       description: "Desc",
       package: "bafy-test",
       network_id: 84,
-      ownable_type: FIXED_OWNABLE_TYPE,
+      ownable_type: "dossier",
       keywords: ["a"],
     });
   });

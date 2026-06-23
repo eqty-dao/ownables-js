@@ -1,6 +1,6 @@
 import type { TypedPackage } from "@ownables/core";
 
-export const FIXED_OWNABLE_TYPE = "static_image";
+export const FIXED_OWNABLE_TYPE = "dossier";
 
 export interface OwnableMetadataInput {
   name: string;

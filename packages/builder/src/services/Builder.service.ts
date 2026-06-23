@@ -22,10 +22,6 @@ const normalize = (value: string, field: string): string => {
 export const prepareOwnable = async (
   input: PrepareOwnableInput
 ): Promise<PreparedOwnable> => {
-  if (input.files.length === 0) {
-    throw new Error("At least one asset file is required");
-  }
-
   const name = normalize(input.name, "name");
   const description = normalize(input.description, "description");
 

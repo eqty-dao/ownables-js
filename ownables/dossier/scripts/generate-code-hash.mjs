@@ -15,7 +15,7 @@ const wasm = readFileSync(absoluteWasmPath);
 const sha256 = createHash("sha256").update(wasm).digest("hex");
 
 const manifest = {
-  contractName: "ownable-static",
+  contractName: "ownable-dossier",
   artifact: basename(absoluteWasmPath),
   algorithm: "sha256",
   codeHash: `0x${sha256}`,

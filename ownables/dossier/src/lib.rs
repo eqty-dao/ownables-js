@@ -4,7 +4,7 @@ use std::fmt::Display;
 use std::panic::UnwindSafe;
 
 use cosmwasm_std::{MessageInfo, Response};
-use ownable_std::{create_lto_env, IdbStateDump, load_lto_deps};
+use ownable_std::{create_env, IdbStateDump, load_owned_deps};
 use serde::{Deserialize, Serialize};
 
 use msg::{ExecuteMsg, IngestEventMsg, InstantiateMsg, QueryMsg, RegisterPublicEventMsg};
@@ -292,9 +292,9 @@ where
 
 fn instantiate_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
     let request: AbiInstantiateRequest = cbor_from_slice(input)?;
-    let mut deps = load_lto_deps(None);
+    let mut deps = load_owned_deps(None);
 
-    let response = contract::instantiate(deps.as_mut(), create_lto_env(), request.info, request.msg)
+    let response = contract::instantiate(deps.as_mut(), create_env(), request.info, request.msg)
         .map_err(HostAbiError::from_display)?;
 
     let payload = AbiResultPayload {
@@ -307,9 +307,9 @@ fn instantiate_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
 
 fn execute_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
     let request: AbiExecuteRequest = cbor_from_slice(input)?;
-    let mut deps = load_lto_deps(Some(request.mem));
+    let mut deps = load_owned_deps(Some(request.mem));
 
-    let response = contract::execute(deps.as_mut(), create_lto_env(), request.info, request.msg)
+    let response = contract::execute(deps.as_mut(), create_env(), request.info, request.msg)
         .map_err(HostAbiError::from_display)?;
 
     let payload = AbiResultPayload {
@@ -322,9 +322,9 @@ fn execute_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
 
 fn query_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
     let request: AbiQueryRequest = cbor_from_slice(input)?;
-    let deps = load_lto_deps(Some(request.mem));
+    let deps = load_owned_deps(Some(request.mem));
 
-    let response = contract::query(deps.as_ref(), create_lto_env(), request.msg)
+    let response = contract::query(deps.as_ref(), create_env(), request.msg)
         .map_err(HostAbiError::from_display)?;
 
     let payload = AbiResultPayload {
@@ -337,7 +337,7 @@ fn query_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
 
 fn register_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
     let request: AbiRegisterRequest = cbor_from_slice(input)?;
-    let mut deps = load_lto_deps(Some(request.mem));
+    let mut deps = load_owned_deps(Some(request.mem));
 
     let response =
         contract::register(request.info, deps.as_mut(), request.msg).map_err(HostAbiError::from_display)?;
@@ -352,7 +352,7 @@ fn register_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
 
 fn ingest_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
     let request: AbiIngestRequest = cbor_from_slice(input)?;
-    let mut deps = load_lto_deps(Some(request.mem));
+    let mut deps = load_owned_deps(Some(request.mem));
 
     let response =
         contract::ingest(request.info, deps.as_mut(), request.msg).map_err(HostAbiError::from_display)?;
@@ -383,42 +383,42 @@ fn encode_public_event_handler(input: &[u8]) -> Result<Vec<u8>, HostAbiError> {
     cbor_to_vec(&payload)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ownable_alloc(len: u32) -> u32 {
     alloc(len)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ownable_free(ptr: u32, len: u32) {
     unsafe { free(ptr, len) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ownable_instantiate(ptr: u32, len: u32) -> u64 {
     dispatch(ptr, len, instantiate_handler)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ownable_execute(ptr: u32, len: u32) -> u64 {
     dispatch(ptr, len, execute_handler)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ownable_query(ptr: u32, len: u32) -> u64 {
     dispatch(ptr, len, query_handler)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ownable_register(ptr: u32, len: u32) -> u64 {
     dispatch(ptr, len, register_handler)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ownable_ingest(ptr: u32, len: u32) -> u64 {
     dispatch(ptr, len, ingest_handler)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ownable_encode_public_event(ptr: u32, len: u32) -> u64 {
     dispatch(ptr, len, encode_public_event_handler)
 }
@@ -433,7 +433,7 @@ mod tests {
     use super::*;
     use crate::msg::{EncodePublicEventMsg, ExecuteMsg, IngestEventMsg, OwnableEventSource, RegisterPublicEventMsg};
     use cosmwasm_std::{Addr, Uint128};
-    use ownable_std::NFT;
+    use ownable_std::{AttachmentInput, GetAttachmentsResponse, NFT};
     use std::collections::HashMap;
     use serde_json::json;
 
@@ -487,6 +487,18 @@ mod tests {
 
         let out = execute_handler(&cbor_to_vec(&request).expect("encode execute request"))
             .expect("execute lock succeeds");
+        decode_payload(out).mem.expect("execute returns memory")
+    }
+
+    fn closed_mem(mem: IdbStateDump) -> IdbStateDump {
+        let request = AbiExecuteRequest {
+            msg: ExecuteMsg::Close {},
+            info: sample_info(),
+            mem,
+        };
+
+        let out = execute_handler(&cbor_to_vec(&request).expect("encode execute request"))
+            .expect("execute close succeeds");
         decode_payload(out).mem.expect("execute returns memory")
     }
 
@@ -616,5 +628,74 @@ mod tests {
         let value = serde_json::to_value(&msg).expect("serialize encode message");
         assert!(value.get("eventType").is_some());
         assert!(value.get("event_type").is_none());
+    }
+
+    #[test]
+    fn attach_and_query_attachments_round_trip() {
+        let request = AbiExecuteRequest {
+            msg: ExecuteMsg::Attach {
+                attachments: vec![
+                    AttachmentInput {
+                        name: "passport.pdf".to_string(),
+                        cid: "bafy-v1".to_string(),
+                    },
+                    AttachmentInput {
+                        name: "passport.pdf".to_string(),
+                        cid: "bafy-v2".to_string(),
+                    },
+                ],
+            },
+            info: sample_info(),
+            mem: instantiate_mem(),
+        };
+
+        let out = execute_handler(&cbor_to_vec(&request).expect("encode execute request"))
+            .expect("execute attach succeeds");
+        let mem = decode_payload(out).mem.expect("execute returns memory");
+
+        let query = AbiQueryRequest {
+            msg: QueryMsg::GetAttachments {},
+            mem,
+        };
+        let out = query_handler(&cbor_to_vec(&query).expect("encode query request"))
+            .expect("query handler succeeds");
+        let payload = decode_payload(out);
+        let attachments: GetAttachmentsResponse =
+            serde_json::from_slice(&payload.result).expect("decode attachments");
+
+        assert_eq!(attachments.attachments.len(), 2);
+        assert_eq!(attachments.attachments[0].name, "passport.pdf");
+        assert_eq!(attachments.attachments[0].cid, "bafy-v1");
+        assert_eq!(attachments.attachments[1].cid, "bafy-v2");
+    }
+
+    #[test]
+    fn close_sets_closed_flag_and_blocks_future_attachments() {
+        let mem = closed_mem(instantiate_mem());
+
+        let query = AbiQueryRequest {
+            msg: QueryMsg::IsClosed {},
+            mem: mem.clone(),
+        };
+        let out = query_handler(&cbor_to_vec(&query).expect("encode query request"))
+            .expect("query handler succeeds");
+        let payload = decode_payload(out);
+        let is_closed: bool = serde_json::from_slice(&payload.result).expect("decode closed state");
+        assert!(is_closed);
+
+        let request = AbiExecuteRequest {
+            msg: ExecuteMsg::Attach {
+                attachments: vec![AttachmentInput {
+                    name: "passport.pdf".to_string(),
+                    cid: "bafy-v1".to_string(),
+                }],
+            },
+            info: sample_info(),
+            mem,
+        };
+
+        let err = execute_handler(&cbor_to_vec(&request).expect("encode execute request"))
+            .expect_err("attach should fail once closed");
+        assert!(err.message.contains("already closed"));
     }
 }

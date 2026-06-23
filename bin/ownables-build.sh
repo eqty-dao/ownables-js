@@ -100,7 +100,11 @@ build_package() {
       }' > "$dir/pkg/package.json"
 
     (cd "$dir" && cargo run --example schema)
-    zip -r -j "./ownables/$name.zip" "$dir/assets/" "$dir/pkg/ownable_bg.wasm" "$dir/pkg/package.json" "$dir/schema/"*.json
+    local zip_inputs=("$dir/pkg/ownable_bg.wasm" "$dir/pkg/package.json" "$dir/schema/"*.json)
+    if [ -d "$dir/assets" ]; then
+      zip_inputs=("$dir/assets/" "${zip_inputs[@]}")
+    fi
+    zip -r -j "./ownables/$name.zip" "${zip_inputs[@]}"
   else
     zip -r -j "./ownables/$name.zip" "$dir/"*
   fi

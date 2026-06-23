@@ -1,6 +1,6 @@
 {
-  "contractName": "ownable-static",
-  "artifact": "ownable-static.wasm",
+  "contractName": "ownable-dossier",
+  "artifact": "ownable-dossier.wasm",
   "algorithm": "sha256",
   "codeHash": "0x9dca5318bfdb544250bbb0cd6f451d3f84b9936c8706b6f190bc7593cfa1b2c5",
   "generatedAt": "2026-03-30T17:15:21.204Z"

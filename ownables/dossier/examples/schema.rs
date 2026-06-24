@@ -4,7 +4,8 @@ use std::fs::create_dir_all;
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
 use ownable_dossier::msg::{
-    EncodePublicEventMsg, ExecuteMsg, IngestEventMsg, InstantiateMsg, QueryMsg, RegisterPublicEventMsg,
+    EncodePublicEventMsg, ExecuteMsg, IngestEventMsg, InstantiateMsg, QueryMsg,
+    RegisterPublicEventMsg,
 };
 use ownable_std::{GetAttachmentsResponse, InfoResponse, Metadata};
 

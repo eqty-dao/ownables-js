@@ -57,6 +57,41 @@ describe('PackageService', () => {
     expect(list.map((pkg) => pkg.name)).toEqual(['example', 'stored']);
   });
 
+  it('omits internal packages from shared listing while preserving stored metadata', async () => {
+    const localPackages: any[] = [
+      {
+        title: 'Visible',
+        name: 'visible',
+        cid: 'cid-visible',
+        keywords: [],
+        versions: [{ date: new Date(), cid: 'cid-visible' }],
+        ...capabilities,
+      },
+      {
+        title: 'Hidden',
+        name: 'hidden',
+        cid: 'cid-hidden',
+        keywords: ['internal'],
+        versions: [{ date: new Date(), cid: 'cid-hidden' }],
+        ...capabilities,
+      },
+    ];
+    const service = createService(
+      {} as any,
+      {} as any,
+      {
+        get: () => localPackages,
+        set: () => undefined,
+      } as any,
+      {
+        examples: [{ title: 'Internal Example', name: 'internal-example', stub: true, keywords: ['internal'] }],
+      }
+    );
+
+    expect(service.list().map((pkg) => pkg.name)).toEqual(['visible']);
+    expect(service.info('hidden').keywords).toEqual(['internal']);
+  });
+
   it('throws when downloading example without URL', async () => {
     const service = createService({} as any, {} as any, { get: () => [], set: () => undefined } as any, {
       exampleUrl: '',
@@ -153,6 +188,7 @@ describe('PackageService', () => {
 
     const pkg = await service.processPackage([{ name: 'package.json' }] as any);
     expect(pkg?.cid).toBe('cid-1');
+    expect(pkg?.keywords).toEqual(['k1']);
     expect(localStorage.set).toHaveBeenCalled();
   });
 

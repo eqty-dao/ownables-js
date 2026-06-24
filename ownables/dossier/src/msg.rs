@@ -1,13 +1,12 @@
 use cosmwasm_std::Addr;
-use schemars::JsonSchema;
-use serde_json::Value;
-use serde::{Deserialize, Serialize};
-use ownable_std_macros::{
-    ownables_attach, ownables_close, ownables_transfer, ownables_lock,
-    ownables_query_info, ownables_query_locked, ownables_query_metadata,
-    ownables_query_attachments, ownables_query_closed, ownables_instantiate_msg
-};
 use ownable_std::{AttachmentInput, NFT};
+use ownable_std_macros::{
+    ownables_attach, ownables_close, ownables_instantiate_msg, ownables_query_attachments,
+    ownables_query_closed, ownables_query_info, ownables_query_metadata, ownables_transfer,
+};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[ownables_instantiate_msg]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -18,7 +17,6 @@ pub struct InstantiateMsg {
 }
 
 #[ownables_transfer]
-#[ownables_lock]
 #[ownables_attach]
 #[ownables_close]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -26,7 +24,6 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {}
 
 #[ownables_query_info]
-#[ownables_query_locked]
 #[ownables_query_metadata]
 #[ownables_query_attachments]
 #[ownables_query_closed]

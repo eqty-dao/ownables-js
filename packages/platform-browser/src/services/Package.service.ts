@@ -25,6 +25,9 @@ const capabilitiesStaticOwnable = {
   isTransferable: false,
 };
 
+const isInternalPackage = (pkg: TypedPackage | TypedPackageStub): boolean =>
+  Array.isArray(pkg.keywords) && pkg.keywords.includes("internal");
+
 export default class PackageService {
   private readonly exampleUrl: string | undefined;
   private readonly examples: TypedPackageStub[];
@@ -67,7 +70,9 @@ export default class PackageService {
       [...this.examples, ...local].map((pkg) => [pkg.name, pkg])
     ).values();
 
-    return Array.from(set).sort((a, b) => (a.title >= b.title ? 1 : -1));
+    return Array.from(set)
+      .filter((pkg) => !isInternalPackage(pkg))
+      .sort((a, b) => (a.title >= b.title ? 1 : -1));
   }
 
   info(nameOrCid: string, uniqueMessageHash?: string): TypedPackage {

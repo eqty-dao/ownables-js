@@ -18,6 +18,10 @@ const baseDir = resolve("ownables", pkg);
 const manifestPath = resolve(baseDir, "artifacts", "code-hash-manifest.json");
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 
+const includesRequired = (schema, method) =>
+  Array.isArray(schema.oneOf) &&
+  schema.oneOf.some((entry) => Array.isArray(entry.required) && entry.required.includes(method));
+
 if (!manifest.codeHash || !/^0x[0-9a-fA-F]{64}$/.test(manifest.codeHash)) {
   throw new Error(
     `Invalid code hash manifest at ${manifestPath}: expected 0x-prefixed 64-byte hash`
@@ -58,21 +62,32 @@ if (pkg === "dossier") {
     throw new Error("Dossier package must not include index.html");
   }
 
+  const packageJsonText = await zip.file("package.json")?.async("string");
   const querySchemaText = await zip.file("query_msg.json")?.async("string");
   const executeSchemaText = await zip.file("execute_msg.json")?.async("string");
 
-  if (!querySchemaText || !executeSchemaText) {
-    throw new Error("Dossier package zip must include query_msg.json and execute_msg.json");
+  if (!packageJsonText || !querySchemaText || !executeSchemaText) {
+    throw new Error("Dossier package zip must include package.json, query_msg.json, and execute_msg.json");
   }
 
+  const packageJson = JSON.parse(packageJsonText);
   const querySchema = JSON.parse(querySchemaText);
   const executeSchema = JSON.parse(executeSchemaText);
-  const includesRequired = (schema, method) =>
-    Array.isArray(schema.oneOf) &&
-    schema.oneOf.some((entry) => Array.isArray(entry.required) && entry.required.includes(method));
 
   if (includesRequired(querySchema, "get_widget_state")) {
     throw new Error("Dossier query schema must not expose get_widget_state");
+  }
+
+  for (const method of ["is_locked"]) {
+    if (includesRequired(querySchema, method)) {
+      throw new Error(`Dossier query schema must not expose ${method}`);
+    }
+  }
+
+  for (const method of ["lock"]) {
+    if (includesRequired(executeSchema, method)) {
+      throw new Error(`Dossier execute schema must not expose ${method}`);
+    }
   }
 
   for (const method of ["get_attachments", "is_closed"]) {
@@ -85,6 +100,12 @@ if (pkg === "dossier") {
     if (!includesRequired(executeSchema, method)) {
       throw new Error(`Dossier execute schema must expose ${method}`);
     }
+  }
+
+  if (JSON.stringify(packageJson.keywords ?? []) !== JSON.stringify(["internal"])) {
+    throw new Error(
+      `Dossier package.json must contain keywords ["internal"], got ${JSON.stringify(packageJson.keywords ?? [])}`
+    );
   }
 }
 
@@ -120,6 +141,14 @@ if (pkg === "dossier") {
 
   if (queryMethods.includes("get_widget_state")) {
     throw new Error("Dossier query schema must not expose get_widget_state");
+  }
+
+  if (queryMethods.includes("is_locked")) {
+    throw new Error("Dossier query schema must not expose is_locked");
+  }
+
+  if (executeMethods.includes("lock")) {
+    throw new Error("Dossier execute schema must not expose lock");
   }
 }
 

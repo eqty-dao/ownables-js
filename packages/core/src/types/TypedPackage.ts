@@ -29,6 +29,7 @@ export interface TypedPackageStub {
   title: string;
   name: string;
   description?: string;
+  keywords?: string[];
   stub: true;
   isNotLocal?: boolean;
 }

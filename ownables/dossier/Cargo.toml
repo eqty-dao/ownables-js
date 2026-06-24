@@ -44,6 +44,9 @@ optimize = """docker run --rm -v "$(pwd)":/code \
   cosmwasm/rust-optimizer:0.12.6
 """
 
+[package.metadata.ownables.package]
+keywords = ["internal"]
+
 [dependencies]
 log = "0.4"
 cosmwasm-std = "3"

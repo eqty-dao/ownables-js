@@ -6,6 +6,7 @@ import type {
   DeployResult,
   EstimateCostInput,
   InstantiateMsgPayload,
+  PrepareDossierInput,
   PreparedOwnable,
   PrepareOwnableInput,
 } from "../types/Builder";
@@ -39,6 +40,31 @@ export const prepareOwnable = async (
       ...(input.keywords !== undefined ? { keywords: input.keywords } : {}),
     },
   };
+};
+
+export const DOSSIER_BUNDLE_URL = new URL("../dossier.zip", import.meta.url).toString();
+
+export const prepareDossier = async (
+  input: PrepareDossierInput
+): Promise<PreparedOwnable> => {
+  const fetchFn = input.fetchFn ?? ((resource: string, init?: RequestInit) => fetch(resource, init));
+  const response = await fetchFn(input.bundleUrl ?? DOSSIER_BUNDLE_URL);
+  if (!response.ok) {
+    throw new Error(`Failed to load bundled dossier package: ${response.status} ${response.statusText}`);
+  }
+
+  const zipFile = new File([await response.blob()], "dossier.zip", {
+    type: "application/zip",
+  });
+  const files = await input.packageService.extractAssets(zipFile);
+
+  return await prepareOwnable({
+    name: input.name,
+    description: input.description,
+    packageService: input.packageService,
+    files,
+    ...(input.keywords !== undefined ? { keywords: input.keywords } : {}),
+  });
 };
 
 export const buildInstantiateMsg = (

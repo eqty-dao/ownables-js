@@ -6,15 +6,16 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
-    "ownable_bg.wasm"
+    "ownable_bg.wasm",
+    "dossier.zip"
   ],
   "dependencies": {
     "@ownables/core": "workspace:*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "clean": "rm -rf dist ownable_bg.wasm",
-    "prepack": "bash ./bin/ensure-wasm.sh",
+    "clean": "rm -rf dist ownable_bg.wasm dossier.zip",
+    "prepack": "bash ./bin/ensure-wasm.sh && bash ./bin/ensure-dossier-zip.sh",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "publishConfig": {

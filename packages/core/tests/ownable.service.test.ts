@@ -16,6 +16,7 @@ const basePkg = {
   isClosable: false,
   isConsumable: false,
   isConsumer: false,
+  isLockable: false,
   isTransferable: false,
 };
 
@@ -589,6 +590,50 @@ describe('OwnableService', () => {
     expect(eqty.sign).toHaveBeenCalledTimes(1);
     expect(eqty.anchor).toHaveBeenCalledTimes(1);
     expect(eqty.submitAnchors).toHaveBeenCalledTimes(1);
+    createSpy.mockRestore();
+  });
+
+  it('includes dossier metadata in the instantiate event payload', async () => {
+    const fakeChain = {
+      id: 'chain-create',
+      state: { hex: '0xstate' },
+      latestHash: { hex: `0x${'1'.repeat(64)}` },
+      add: vi.fn(),
+      startingWith: vi.fn().mockReturnValue({ anchorMap: [] }),
+    } as any;
+    const createSpy = vi.spyOn(EventChain, 'create').mockReturnValue(fakeChain);
+    const eqty = {
+      address: '0x1111111111111111111111111111111111111111',
+      chainId: 84532,
+      sign: vi.fn().mockResolvedValue(undefined),
+      anchor: vi.fn().mockResolvedValue(undefined),
+      submitAnchors: vi.fn(),
+    };
+    const service = createService(
+      {} as any,
+      { anchoring: false } as any,
+      eqty as any,
+      {} as any
+    );
+
+    await service.create({
+      ...basePkg,
+      isDynamic: true,
+      title: 'Dossier',
+      description: 'A living file dossier',
+      keywords: ['internal'],
+    } as any);
+
+    const signedEvent = eqty.sign.mock.calls[0]?.[0];
+    expect(signedEvent?.parsedData).toEqual({
+      '@context': 'instantiate_msg.json',
+      ownable_id: 'chain-create',
+      package: 'cid-1',
+      network_id: 84532,
+      keywords: ['internal'],
+      name: 'Dossier',
+      description: 'A living file dossier',
+    });
     createSpy.mockRestore();
   });
 

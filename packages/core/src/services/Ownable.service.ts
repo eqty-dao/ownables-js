@@ -120,6 +120,8 @@ export default class OwnableService {
         package: pkg.cid,
         network_id: networkId,
         keywords: pkg.keywords ?? [],
+        ...(pkg.title ? { name: pkg.title } : {}),
+        ...(pkg.description ? { description: pkg.description } : {}),
       };
 
       await withProgress(onProgress)("signEvent", () =>

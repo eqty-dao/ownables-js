@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   buildInstantiateMsg,
+  DOSSIER_BUNDLE_URL,
   deploy,
   estimateCost,
+  prepareDossier,
   prepareOwnable,
 } from "../src";
 
@@ -66,6 +68,46 @@ describe("@ownables/builder", () => {
 
     expect(result.packageCid).toBe("bafy-empty");
     expect(packageService.processPackage).toHaveBeenCalledWith([]);
+  });
+
+  it("prepareDossier loads the bundled dossier zip through the builder package", async () => {
+    const extractAssets = vi.fn().mockResolvedValue([] as File[]);
+    const packageService = {
+      extractAssets,
+      processPackage: vi.fn().mockResolvedValue({
+        cid: "bafy-dossier",
+        title: "Dossier",
+        name: "dossier",
+        versions: [],
+        isDynamic: true,
+        hasMetadata: true,
+        hasWidgetState: false,
+        hasAttachments: true,
+        isClosable: true,
+        isConsumable: false,
+        isConsumer: false,
+        isLockable: false,
+        isTransferable: true,
+      }),
+    };
+    const fetchFn = vi.fn().mockResolvedValue(
+      new Response(new Blob(["zip-bytes"], { type: "application/zip" }), {
+        status: 200,
+        statusText: "OK",
+      })
+    );
+
+    const result = await prepareDossier({
+      name: "Dossier",
+      description: "A living file dossier",
+      packageService,
+      fetchFn,
+    });
+
+    expect(fetchFn).toHaveBeenCalledWith(DOSSIER_BUNDLE_URL);
+    expect(extractAssets).toHaveBeenCalledWith(expect.any(File));
+    expect(packageService.processPackage).toHaveBeenCalledWith([]);
+    expect(result.packageCid).toBe("bafy-dossier");
   });
 
   it("buildInstantiateMsg builds payload with fixed ownable type", () => {

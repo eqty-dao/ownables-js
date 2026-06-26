@@ -1,6 +1,10 @@
 export { default as IDBService } from './services/IDB.service';
 export { default as LocalStorageService } from './services/LocalStorage.service';
 export { default as PackageService } from './services/Package.service';
+export {
+  AVAILABLE_OWNABLES_UNAVAILABLE_MESSAGE,
+  default as HubService,
+} from './services/Hub.service';
 /**
  * @deprecated Relay transport is legacy and will be removed in a future major version.
  * Prefer hub upload/download with WalletConnect Notify packages.

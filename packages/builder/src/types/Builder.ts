@@ -15,6 +15,15 @@ export interface PrepareOwnableInput extends OwnableMetadataInput {
   };
 }
 
+export interface PrepareDossierInput extends OwnableMetadataInput {
+  packageService: {
+    extractAssets(zipFile: File, chain?: boolean): Promise<File[]>;
+    processPackage(files: File[]): Promise<TypedPackage | null | undefined>;
+  };
+  bundleUrl?: string;
+  fetchFn?: (input: string, init?: RequestInit) => Promise<Response>;
+}
+
 export interface PreparedOwnable {
   packageCid: string;
   pkg: TypedPackage;

@@ -102,6 +102,29 @@ function createFakeIndexedDb() {
               queueMicrotask(emit);
               return req;
             },
+            openKeyCursor() {
+              const req: FakeRequest = {};
+              const entries = Array.from(target.keys());
+              let idx = 0;
+              const emit = () => {
+                if (idx >= entries.length) {
+                  req.result = null;
+                  req.onsuccess?.({ target: req } as unknown as Event);
+                  return;
+                }
+                const key = entries[idx]!;
+                req.result = {
+                  primaryKey: key,
+                  continue: () => {
+                    idx += 1;
+                    queueMicrotask(emit);
+                  },
+                };
+                req.onsuccess?.({ target: req } as unknown as Event);
+              };
+              queueMicrotask(emit);
+              return req;
+            },
             getAllKeys() {
               return mkReq(() => Array.from(target.keys()));
             },
@@ -170,6 +193,26 @@ describe('IDBService', () => {
     const a = await IDBService.main(api);
     const b = await IDBService.main(api);
     expect(a).toBe(b);
+  });
+
+  it('caches package instance and supports prefix helpers', async () => {
+    const { api } = createFakeIndexedDb();
+    const a = await IDBService.packages(api);
+    const b = await IDBService.packages(api);
+    expect(a).toBe(b);
+
+    await a.set('package-assets', 'cid-1:file-a', { ok: true });
+    await a.set('package-assets', 'cid-1:file-b', { ok: false });
+    await a.set('package-assets', 'cid-2:file-c', { ok: true });
+
+    await expect(a.keysByPrefix('package-assets', 'cid-1:')).resolves.toEqual([
+      'cid-1:file-a',
+      'cid-1:file-b',
+    ]);
+    await expect(a.getAllByPrefix('package-assets', 'cid-1:')).resolves.toEqual([
+      { ok: true },
+      { ok: false },
+    ]);
   });
 
   it('supports CRUD and map/list helpers', async () => {

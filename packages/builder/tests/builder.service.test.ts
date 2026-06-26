@@ -1,3 +1,9 @@
+import { execFile } from "node:child_process";
+import { access, readFile } from "node:fs/promises";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { promisify } from "node:util";
+
+import type * as BuilderModule from "../src";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -8,6 +14,10 @@ import {
   prepareDossier,
   prepareOwnable,
 } from "../src";
+
+const execFileAsync = promisify(execFile);
+const REPO_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
+const BUILT_INDEX_PATH = `${REPO_ROOT}/packages/builder/dist/builder/src/index.js`;
 
 describe("@ownables/builder", () => {
   it("prepareOwnable validates metadata and returns package cid", async () => {
@@ -108,6 +118,57 @@ describe("@ownables/builder", () => {
     expect(extractAssets).toHaveBeenCalledWith(expect.any(File));
     expect(packageService.processPackage).toHaveBeenCalledWith([]);
     expect(result.packageCid).toBe("bafy-dossier");
+  });
+
+  it("prepareDossier works through the built package bundle path", async () => {
+    await execFileAsync("yarn", ["workspace", "@ownables/builder", "build"], {
+      cwd: REPO_ROOT,
+    });
+
+    const builtBuilder = (await import(pathToFileURL(BUILT_INDEX_PATH).href)) as typeof BuilderModule;
+    const bundlePath = fileURLToPath(builtBuilder.DOSSIER_BUNDLE_URL);
+    await access(bundlePath);
+
+    const extractAssets = vi.fn().mockResolvedValue([] as File[]);
+    const packageService = {
+      extractAssets,
+      processPackage: vi.fn().mockResolvedValue({
+        cid: "bafy-built-dossier",
+        title: "Dossier",
+        name: "dossier",
+        versions: [],
+        isDynamic: true,
+        hasMetadata: true,
+        hasWidgetState: false,
+        hasAttachments: true,
+        isClosable: true,
+        isConsumable: false,
+        isConsumer: false,
+        isLockable: false,
+        isTransferable: true,
+      }),
+    };
+    const fetchFn = vi.fn(async (resource: string) => {
+      const bytes = await readFile(fileURLToPath(resource));
+      return new Response(new Blob([bytes], { type: "application/zip" }), {
+        status: 200,
+        statusText: "OK",
+        headers: { "content-type": "application/zip" },
+      });
+    });
+
+    const result = await builtBuilder.prepareDossier({
+      name: "Dossier",
+      description: "A living file dossier",
+      packageService,
+      fetchFn,
+    });
+
+    expect(bundlePath).toMatch(/packages\/builder\/dist\/builder\/src\/dossier\.zip$/);
+    expect(fetchFn).toHaveBeenCalledWith(builtBuilder.DOSSIER_BUNDLE_URL);
+    expect(extractAssets).toHaveBeenCalledWith(expect.any(File));
+    expect(packageService.processPackage).toHaveBeenCalledWith([]);
+    expect(result.packageCid).toBe("bafy-built-dossier");
   });
 
   it("buildInstantiateMsg builds payload with fixed ownable type", () => {

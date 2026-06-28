@@ -2,8 +2,11 @@ export interface TypedPackageCapabilities {
   isDynamic: boolean;
   hasMetadata: boolean;
   hasWidgetState: boolean;
+  hasAttachments: boolean;
+  isClosable: boolean;
   isConsumable: boolean;
   isConsumer: boolean;
+  isLockable: boolean;
   isTransferable: boolean;
 }
 
@@ -27,6 +30,7 @@ export interface TypedPackageStub {
   title: string;
   name: string;
   description?: string;
+  keywords?: string[];
   stub: true;
   isNotLocal?: boolean;
 }

@@ -1,13 +1,12 @@
 use cosmwasm_std::Addr;
-use schemars::JsonSchema;
-use serde_json::Value;
-use serde::{Deserialize, Serialize};
+use ownable_std::{AttachmentInput, NFT};
 use ownable_std_macros::{
-    ownables_transfer, ownables_lock,
-    ownables_query_info, ownables_query_locked, ownables_query_metadata,
-    ownables_query_widget_state, ownables_instantiate_msg
+    ownables_attach, ownables_close, ownables_instantiate_msg, ownables_query_attachments,
+    ownables_query_closed, ownables_query_info, ownables_query_metadata, ownables_transfer,
 };
-use ownable_std::NFT;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[ownables_instantiate_msg]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -18,15 +17,16 @@ pub struct InstantiateMsg {
 }
 
 #[ownables_transfer]
-#[ownables_lock]
+#[ownables_attach]
+#[ownables_close]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {}
 
 #[ownables_query_info]
-#[ownables_query_locked]
 #[ownables_query_metadata]
-#[ownables_query_widget_state]
+#[ownables_query_attachments]
+#[ownables_query_closed]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {}

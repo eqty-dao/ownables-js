@@ -1,17 +1,20 @@
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, IngestEventMsg, InstantiateMsg, QueryMsg, RegisterPublicEventMsg};
-#[cfg(not(feature = "library"))]
-use cosmwasm_std::{Addr, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
-use cosmwasm_std::{Binary, to_json_binary};
+use crate::state::{
+    ATTACHMENTS, CLOSED, METADATA, NETWORK_ID, NFT_ITEM, OWNABLE_INFO, PACKAGE_CID,
+};
+use cosmwasm_std::{
+    Addr, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, to_json_binary,
+};
 use cw2::set_contract_version;
-use crate::state::{NFT_ITEM, CONFIG, METADATA, LOCKED, PACKAGE_CID, OWNABLE_INFO, NETWORK_ID};
-use ownable_std::{InfoResponse, Metadata, OwnableInfo};
-use serde_json::Value;
+use ownable_std::{
+    Attachment, AttachmentInput, GetAttachmentsResponse, InfoResponse, Metadata, OwnableInfo,
+    ensure_owner,
+};
 
-// version info for migration info
-const CONTRACT_NAME: &str = "crates.io:ownable-static";
+const CONTRACT_NAME: &str = "crates.io:ownable-dossier";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
-const OWNABLE_TYPE: &str = "static_image";
+const OWNABLE_TYPE: &str = "dossier";
 
 pub fn instantiate(
     deps: DepsMut,
@@ -35,23 +38,24 @@ pub fn instantiate(
         name: Some(msg.name),
         background_color: None,
         animation_url: None,
-        youtube_url: None
+        youtube_url: None,
     };
 
     NETWORK_ID.save(deps.storage, &msg.network_id)?;
-    CONFIG.save(deps.storage, &None)?;
     if let Some(nft) = msg.nft {
         NFT_ITEM.save(deps.storage, &nft)?;
     }
     METADATA.save(deps.storage, &metadata)?;
-    LOCKED.save(deps.storage, &false)?;
+    CLOSED.save(deps.storage, &false)?;
+    ATTACHMENTS.save(deps.storage, &Vec::new())?;
     OWNABLE_INFO.save(deps.storage, &ownable_info)?;
     PACKAGE_CID.save(deps.storage, &msg.package)?;
 
     Ok(Response::new()
         .add_attribute("method", "instantiate")
-        .add_attribute("owner", ownable_info.owner.clone())
-        .add_attribute("issuer", ownable_info.issuer.clone()))
+        .add_attribute("owner", ownable_info.owner.to_string())
+        .add_attribute("issuer", ownable_info.issuer.to_string())
+        .add_attribute("ownable_type", OWNABLE_TYPE))
 }
 
 pub fn execute(
@@ -62,186 +66,123 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::Transfer { to } => try_transfer(info, deps, to),
-        ExecuteMsg::Lock {} => try_lock(info, deps),
+        ExecuteMsg::Attach { attachments } => try_attach(info, deps, attachments),
+        ExecuteMsg::Close {} => try_close(info, deps),
     }
-}
-
-pub fn try_lock(info: MessageInfo, deps: DepsMut) -> Result<Response, ContractError> {
-    // only ownable owner can lock it
-    let ownership = OWNABLE_INFO.load(deps.storage)?;
-    if info.sender.to_string() != ownership.owner {
-        return Err(ContractError::Unauthorized {
-            val: "Unauthorized".into(),
-        });
-    }
-
-    let is_locked = LOCKED.update(
-        deps.storage,
-        |mut is_locked| -> Result<_, ContractError> {
-            if is_locked {
-                return Err(
-                    ContractError::LockError { val: "Already locked".to_string() }
-                );
-            }
-            is_locked = true;
-            Ok(is_locked)
-        }
-    )?;
-
-    Ok(Response::new()
-        .add_attribute("method", "try_lock")
-        .add_attribute("is_locked", is_locked.to_string())
-    )
 }
 
 pub fn try_transfer(info: MessageInfo, deps: DepsMut, to: Addr) -> Result<Response, ContractError> {
-    let address = info.sender.to_string();
-
     OWNABLE_INFO.update(deps.storage, |mut config| -> Result<_, ContractError> {
-        if address != config.owner {
-            return Err(ContractError::Unauthorized {
-                val: "Unauthorized transfer attempt".to_string(),
-            });
-        }
-        if address == to {
+        ensure_owner(&config, &info.sender, || ContractError::Unauthorized {
+            val: "Unauthorized transfer attempt".to_string(),
+        })?;
+
+        if info.sender == to {
             return Err(ContractError::CustomError {
                 val: "Unable to transfer: Recipient address is current owner".to_string(),
             });
         }
+
         config.owner = to.clone();
         Ok(config)
     })?;
+
     Ok(Response::new()
         .add_attribute("method", "try_transfer")
-        .add_attribute("new_owner", to.to_string())
-    )
+        .add_attribute("new_owner", to.to_string()))
+}
+
+pub fn try_attach(
+    info: MessageInfo,
+    deps: DepsMut,
+    attachments: Vec<AttachmentInput>,
+) -> Result<Response, ContractError> {
+    let ownership = OWNABLE_INFO.load(deps.storage)?;
+    ensure_owner(&ownership, &info.sender, || ContractError::Unauthorized {
+        val: "Unauthorized".into(),
+    })?;
+
+    if attachments.is_empty() {
+        return Err(ContractError::CustomError {
+            val: "At least one attachment is required".to_string(),
+        });
+    }
+
+    if CLOSED.load(deps.storage)? {
+        return Err(ContractError::ClosedError {
+            val: "Dossier is already closed".to_string(),
+        });
+    }
+
+    let added = attachments.len();
+    ATTACHMENTS.update(deps.storage, |mut existing| -> Result<_, ContractError> {
+        existing.extend(attachments.into_iter().map(|attachment| Attachment {
+            name: attachment.name,
+            cid: attachment.cid,
+        }));
+        Ok(existing)
+    })?;
+
+    Ok(Response::new()
+        .add_attribute("method", "try_attach")
+        .add_attribute("attachments_added", added.to_string()))
+}
+
+pub fn try_close(info: MessageInfo, deps: DepsMut) -> Result<Response, ContractError> {
+    let ownership = OWNABLE_INFO.load(deps.storage)?;
+    ensure_owner(&ownership, &info.sender, || ContractError::Unauthorized {
+        val: "Unauthorized".into(),
+    })?;
+
+    let is_closed = CLOSED.update(deps.storage, |is_closed| -> Result<_, ContractError> {
+        if is_closed {
+            return Err(ContractError::ClosedError {
+                val: "Dossier is already closed".to_string(),
+            });
+        }
+        Ok(true)
+    })?;
+
+    Ok(Response::new()
+        .add_attribute("method", "try_close")
+        .add_attribute("is_closed", is_closed.to_string()))
 }
 
 pub fn register(
-    info: MessageInfo,
-    deps: DepsMut,
+    _info: MessageInfo,
+    _deps: DepsMut,
     event: RegisterPublicEventMsg,
 ) -> Result<Response, ContractError> {
-    let mut response = Response::new().add_attribute("method", "register");
-
-    match event.event_type.as_str() {
-        "lock" => {
-            try_register_lock(info, deps, event)?;
-            response = response.add_attribute("event_type", "lock");
-        }
-        _ => return Err(ContractError::MatchEventError { val: event.event_type }),
-    };
-
-    Ok(response)
+    Err(ContractError::MatchEventError {
+        val: event.event_type,
+    })
 }
 
-pub fn ingest(_info: MessageInfo, _deps: DepsMut, _event: IngestEventMsg) -> Result<Response, ContractError> {
+pub fn ingest(
+    _info: MessageInfo,
+    _deps: DepsMut,
+    _event: IngestEventMsg,
+) -> Result<Response, ContractError> {
     Err(ContractError::NotImplemented {})
 }
-
-fn try_release(_info: MessageInfo, deps: DepsMut, to: Addr) -> Result<Response, ContractError> {
-    let mut is_locked = LOCKED.load(deps.storage)?;
-    if !is_locked {
-        return Err(ContractError::LockError { val: "Not locked".to_string() });
-    }
-
-    // transfer ownership and unlock
-    let mut ownership = OWNABLE_INFO.load(deps.storage)?;
-    ownership.owner = to;
-    is_locked = false;
-
-    OWNABLE_INFO.save(deps.storage, &ownership)?;
-    LOCKED.save(deps.storage, &is_locked)?;
-
-    Ok(Response::new()
-        .add_attribute("method", "try_release")
-        .add_attribute("is_locked", is_locked.to_string())
-        .add_attribute("owner", ownership.owner.to_string())
-    )
-}
-
-fn try_register_lock(
-    info: MessageInfo,
-    deps: DepsMut,
-    event: RegisterPublicEventMsg,
-) -> Result<Response, ContractError> {
-    let payload: Value = ciborium::de::from_reader(event.data.as_slice())
-        .map_err(|_| ContractError::InvalidExternalEventArgs {})?;
-    let owner = payload.get("owner").and_then(Value::as_str).unwrap_or_default();
-    let nft_id = payload
-        .get("token_id")
-        .or_else(|| payload.get("tokenId"))
-        .and_then(|value| {
-            value.as_str().map(ToString::to_string).or_else(|| {
-                if value.is_number() {
-                    Some(value.to_string())
-                } else {
-                    None
-                }
-            })
-        })
-        .unwrap_or_default();
-    let contract_addr = payload.get("contract").and_then(Value::as_str).unwrap_or_default();
-    let event_network = payload.get("network").and_then(Value::as_str).unwrap_or_default();
-
-    if owner.is_empty() || nft_id.is_empty() || contract_addr.is_empty() || event_network.is_empty() {
-        return Err(ContractError::InvalidExternalEventArgs {});
-    }
-
-    let nft = NFT_ITEM.load(deps.storage).unwrap();
-    if nft.id.to_string() != nft_id {
-        return Err(ContractError::LockError {
-            val: "nft_id mismatch".to_string()
-        });
-    } else if nft.address != contract_addr {
-        return Err(ContractError::LockError {
-            val: "locking contract mismatch".to_string()
-        });
-    }
-
-    if event_network != nft.network {
-        return Err(ContractError::LockError {
-            val: "network mismatch".to_string()
-        });
-    }
-
-    let caip_2_fields: Vec<&str> = event_network.split(":").collect();
-    let namespace = caip_2_fields.get(0).unwrap();
-
-    match *namespace {
-        "eip155" => {
-            let address = info.sender.clone();
-            // assert that owner address is the info.sender
-            if address.to_string() != owner {
-                return Err(ContractError::Unauthorized {
-                    val: "Only the owner can release an ownable".to_string(),
-                });
-            }
-
-            Ok(try_release(info, deps, address)?)
-        }
-        _ => return Err(ContractError::MatchChainIdError { val: event_network.to_string() }),
-    }
-}
-
 
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::GetInfo {} => query_ownable_info(deps),
         QueryMsg::GetMetadata {} => query_ownable_metadata(deps),
-        QueryMsg::GetWidgetState {} => query_ownable_widget_state(deps),
-        QueryMsg::IsLocked {} => query_lock_state(deps),
+        QueryMsg::GetAttachments {} => query_attachments(deps),
+        QueryMsg::IsClosed {} => query_closed_state(deps),
     }
 }
 
-fn query_ownable_widget_state(deps: Deps) -> StdResult<Binary> {
-    let widget_config = CONFIG.load(deps.storage)?;
-    to_json_binary(&widget_config)
+fn query_closed_state(deps: Deps) -> StdResult<Binary> {
+    let is_closed = CLOSED.load(deps.storage)?;
+    to_json_binary(&is_closed)
 }
 
-fn query_lock_state(deps: Deps) -> StdResult<Binary> {
-    let is_locked = LOCKED.load(deps.storage)?;
-    to_json_binary(&is_locked)
+fn query_attachments(deps: Deps) -> StdResult<Binary> {
+    let attachments = ATTACHMENTS.load(deps.storage)?;
+    to_json_binary(&GetAttachmentsResponse { attachments })
 }
 
 fn query_ownable_info(deps: Deps) -> StdResult<Binary> {
@@ -256,15 +197,173 @@ fn query_ownable_info(deps: Deps) -> StdResult<Binary> {
 }
 
 fn query_ownable_metadata(deps: Deps) -> StdResult<Binary> {
-    let cw721 = METADATA.load(deps.storage)?;
-    to_json_binary(&Metadata {
-        image: cw721.image,
-        image_data: cw721.image_data,
-        external_url: cw721.external_url,
-        description: cw721.description,
-        name: cw721.name,
-        background_color: cw721.background_color,
-        animation_url: cw721.animation_url,
-        youtube_url: cw721.youtube_url,
-    })
+    let metadata = METADATA.load(deps.storage)?;
+    to_json_binary(&metadata)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cosmwasm_std::from_json;
+    use cosmwasm_std::testing::{mock_dependencies, mock_env};
+    use cosmwasm_std::{Addr, MessageInfo};
+    use ownable_std::NFT;
+
+    fn mock_info(sender: &str) -> MessageInfo {
+        MessageInfo {
+            sender: Addr::unchecked(sender),
+            funds: Vec::new(),
+        }
+    }
+
+    fn instantiate_dossier(deps: DepsMut) {
+        instantiate(
+            deps,
+            mock_env(),
+            mock_info("owner"),
+            InstantiateMsg {
+                name: "Dossier".to_string(),
+                description: "A living file dossier".to_string(),
+                ownable_id: "dossier-1".to_string(),
+                ownable_type: Some("static_image".to_string()),
+                network_id: 1,
+                package: "bafy-package".to_string(),
+                nft: Some(NFT {
+                    network: "eip155:1".to_string(),
+                    id: 1u128.into(),
+                    address: "nft-contract-address".to_string(),
+                    lock_service: None,
+                }),
+            },
+        )
+        .expect("instantiate dossier");
+    }
+
+    #[test]
+    fn instantiate_pins_dossier_type_and_empty_attachment_state() {
+        let mut deps = mock_dependencies();
+        instantiate_dossier(deps.as_mut());
+
+        let info: InfoResponse =
+            from_json(query(deps.as_ref(), mock_env(), QueryMsg::GetInfo {}).expect("query info"))
+                .expect("decode info");
+        let attachments: GetAttachmentsResponse = from_json(
+            query(deps.as_ref(), mock_env(), QueryMsg::GetAttachments {})
+                .expect("query attachments"),
+        )
+        .expect("decode attachments");
+        let is_closed: bool = from_json(
+            query(deps.as_ref(), mock_env(), QueryMsg::IsClosed {}).expect("query closed"),
+        )
+        .expect("decode closed");
+
+        assert_eq!(info.ownable_type.as_deref(), Some("dossier"));
+        assert!(attachments.attachments.is_empty());
+        assert!(!is_closed);
+    }
+
+    #[test]
+    fn register_rejects_lock_events_for_non_lockable_dossier() {
+        let mut deps = mock_dependencies();
+        instantiate_dossier(deps.as_mut());
+
+        let error = register(
+            mock_info("owner"),
+            deps.as_mut(),
+            RegisterPublicEventMsg {
+                source: "0xsource".to_string(),
+                event_type: "lock".to_string(),
+                data: vec![1, 2, 3],
+                block_number: 1,
+                transaction_hash: vec![0xaa],
+                transaction_index: 0,
+                log_index: 0,
+            },
+        )
+        .expect_err("dossier must reject lock register events");
+
+        match error {
+            ContractError::MatchEventError { val } => assert_eq!(val, "lock"),
+            other => panic!("expected unknown event error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn attaches_flat_rows_and_preserves_versions_by_name() {
+        let mut deps = mock_dependencies();
+        instantiate_dossier(deps.as_mut());
+
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("owner"),
+            ExecuteMsg::Attach {
+                attachments: vec![
+                    AttachmentInput {
+                        name: "passport.pdf".to_string(),
+                        cid: "bafy-v1".to_string(),
+                    },
+                    AttachmentInput {
+                        name: "passport.pdf".to_string(),
+                        cid: "bafy-v2".to_string(),
+                    },
+                ],
+            },
+        )
+        .expect("attach versions");
+
+        let response: GetAttachmentsResponse = from_json(
+            query(deps.as_ref(), mock_env(), QueryMsg::GetAttachments {})
+                .expect("query attachments"),
+        )
+        .expect("decode attachments");
+
+        assert_eq!(
+            response.attachments,
+            vec![
+                Attachment {
+                    name: "passport.pdf".to_string(),
+                    cid: "bafy-v1".to_string(),
+                },
+                Attachment {
+                    name: "passport.pdf".to_string(),
+                    cid: "bafy-v2".to_string(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn close_prevents_new_attachments() {
+        let mut deps = mock_dependencies();
+        instantiate_dossier(deps.as_mut());
+
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("owner"),
+            ExecuteMsg::Close {},
+        )
+        .expect("close dossier");
+
+        let error = execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("owner"),
+            ExecuteMsg::Attach {
+                attachments: vec![AttachmentInput {
+                    name: "passport.pdf".to_string(),
+                    cid: "bafy-v1".to_string(),
+                }],
+            },
+        )
+        .expect_err("closed dossier rejects new attachments");
+
+        match error {
+            ContractError::ClosedError { val } => {
+                assert!(val.contains("already closed"));
+            }
+            other => panic!("expected closed error, got {other:?}"),
+        }
+    }
 }

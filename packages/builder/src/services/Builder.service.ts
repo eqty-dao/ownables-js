@@ -6,6 +6,8 @@ import type {
   DeployResult,
   EstimateCostInput,
   InstantiateMsgPayload,
+  OwnableMetadataInput,
+  PrepareDossierInput,
   PreparedOwnable,
   PrepareOwnableInput,
 } from "../types/Builder";
@@ -19,13 +21,35 @@ const normalize = (value: string, field: string): string => {
   return trimmed;
 };
 
+const withPreparedMetadata = (
+  pkg: PreparedOwnable["pkg"],
+  input: OwnableMetadataInput
+): PreparedOwnable["pkg"] => ({
+  ...pkg,
+  title: input.name,
+  description: input.description,
+  ...(input.keywords !== undefined ? { keywords: input.keywords } : {}),
+});
+
+const withOptionalThumbnail = (files: File[], thumbnail?: File): File[] => {
+  if (!thumbnail) {
+    return files;
+  }
+
+  const stagedThumbnail = new File([thumbnail], "thumbnail.webp", {
+    type: thumbnail.type || "image/webp",
+    lastModified: thumbnail.lastModified,
+  });
+
+  return [
+    ...files.filter((file) => file.name !== stagedThumbnail.name),
+    stagedThumbnail,
+  ];
+};
+
 export const prepareOwnable = async (
   input: PrepareOwnableInput
 ): Promise<PreparedOwnable> => {
-  if (input.files.length === 0) {
-    throw new Error("At least one asset file is required");
-  }
-
   const name = normalize(input.name, "name");
   const description = normalize(input.description, "description");
 
@@ -42,6 +66,45 @@ export const prepareOwnable = async (
       description: pkg.description || description,
       ...(input.keywords !== undefined ? { keywords: input.keywords } : {}),
     },
+  };
+};
+
+export const DOSSIER_BUNDLE_URL = new URL("../dossier.zip", import.meta.url).toString();
+
+export const prepareDossier = async (
+  input: PrepareDossierInput
+): Promise<PreparedOwnable> => {
+  const name = normalize(input.name, "name");
+  const description = normalize(input.description, "description");
+  const fetchFn = input.fetchFn ?? ((resource: string, init?: RequestInit) => fetch(resource, init));
+  const response = await fetchFn(input.bundleUrl ?? DOSSIER_BUNDLE_URL);
+  if (!response.ok) {
+    throw new Error(`Failed to load bundled dossier package: ${response.status} ${response.statusText}`);
+  }
+
+  const zipFile = new File([await response.blob()], "dossier.zip", {
+    type: "application/zip",
+  });
+  const files = withOptionalThumbnail(
+    await input.packageService.extractAssets(zipFile),
+    input.thumbnail
+  );
+
+  const prepared = await prepareOwnable({
+    name,
+    description,
+    packageService: input.packageService,
+    files,
+    ...(input.keywords !== undefined ? { keywords: input.keywords } : {}),
+  });
+
+  return {
+    ...prepared,
+    pkg: withPreparedMetadata(prepared.pkg, {
+      name,
+      description,
+      ...(input.keywords !== undefined ? { keywords: input.keywords } : {}),
+    }),
   };
 };
 

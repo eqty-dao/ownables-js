@@ -14,14 +14,23 @@ import { EventChain } from "eqty-core";
 const getMimeType = (filename: string): string | null | undefined =>
   (mime as any)?.getType?.(filename);
 
+const PACKAGE_ASSET_STORE = "package-assets";
+const ATTACHMENT_PREFIX = "attachment:";
+
 const capabilitiesStaticOwnable = {
   isDynamic: false,
   hasMetadata: false,
   hasWidgetState: false,
+  hasAttachments: false,
+  isClosable: false,
   isConsumable: false,
   isConsumer: false,
+  isLockable: false,
   isTransferable: false,
 };
+
+const isInternalPackage = (pkg: TypedPackage | TypedPackageStub): boolean =>
+  Array.isArray(pkg.keywords) && pkg.keywords.includes("internal");
 
 export default class PackageService {
   private readonly exampleUrl: string | undefined;
@@ -30,6 +39,7 @@ export default class PackageService {
   private readonly fetchFn: (input: string, init?: RequestInit) => Promise<Response>;
   private readonly fileReaderFactory: () => FileReader;
   private readonly logger: Pick<Console, "debug" | "info" | "warn" | "error">;
+  private readonly legacyIdb: IDBService | undefined;
 
   constructor(
     private idb: IDBService,
@@ -42,6 +52,7 @@ export default class PackageService {
       fetchFn?: (input: string, init?: RequestInit) => Promise<Response>;
       fileReaderFactory?: () => FileReader;
       logger?: Pick<Console, "debug" | "info" | "warn" | "error">;
+      legacyIdb?: IDBService;
     } = {}
   ) {
     this.exampleUrl = options.exampleUrl;
@@ -50,6 +61,7 @@ export default class PackageService {
     this.fetchFn = options.fetchFn ?? ((input, init) => fetch(input, init));
     this.fileReaderFactory = options.fileReaderFactory ?? (() => new FileReader());
     this.logger = options.logger ?? console;
+    this.legacyIdb = options.legacyIdb;
   }
 
   list(): Array<TypedPackage | TypedPackageStub> {
@@ -65,23 +77,29 @@ export default class PackageService {
       [...this.examples, ...local].map((pkg) => [pkg.name, pkg])
     ).values();
 
-    return Array.from(set).sort((a, b) => (a.title >= b.title ? 1 : -1));
+    return Array.from(set)
+      .filter((pkg) => !isInternalPackage(pkg))
+      .sort((a, b) => (a.title >= b.title ? 1 : -1));
   }
 
   info(nameOrCid: string, uniqueMessageHash?: string): TypedPackage {
+    const found = this.maybeInfo(nameOrCid, uniqueMessageHash);
+
+    if (!found) throw new Error(`Package not found: ${nameOrCid}`);
+    return found;
+  }
+
+  maybeInfo(nameOrCid: string, uniqueMessageHash?: string): TypedPackage | undefined {
     const packages = (this.localStorage.get("packages") ||
       []) as TypedPackage[];
 
-    const found = packages.find(
+    return packages.find(
       (pkg) =>
         (pkg.name === nameOrCid ||
           pkg.versions.some((v: { cid: string }) => v.cid === nameOrCid)) &&
         (!uniqueMessageHash ||
           pkg.versions.some((v: { uniqueMessageHash?: string }) => v.uniqueMessageHash === uniqueMessageHash))
     );
-
-    if (!found) throw new Error(`Package not found: ${nameOrCid}`);
-    return found;
   }
 
   private storePackageInfo(
@@ -182,7 +200,7 @@ export default class PackageService {
   }
 
   private async storeAssets(cid: string, files: File[]): Promise<void> {
-    const storeName = `package:${cid}`;
+    const storeName = PACKAGE_ASSET_STORE;
     
     try {
       if (!(await this.idb.hasStore(storeName))) {
@@ -191,11 +209,11 @@ export default class PackageService {
 
       await this.idb.setAll(
         storeName,
-        Object.fromEntries(files.map((file) => [file.name, file]))
+        Object.fromEntries(files.map((file) => [this.assetKey(cid, file.name), file]))
       );
 
       // Verify store exists and has data
-      await this.verifyStoreExists(storeName, files.length);
+      await this.verifyPackageAssets(cid, files.length);
     } catch (error) {
       // Check for quota errors
       if (error instanceof Error) {
@@ -208,6 +226,69 @@ export default class PackageService {
         }
       }
       throw error;
+    }
+  }
+
+  private assetPrefix(cid: string): string {
+    return `${cid}:`;
+  }
+
+  private assetKey(cid: string, filename: string): string {
+    return `${this.assetPrefix(cid)}${filename}`;
+  }
+
+  private attachmentKey(cid: string): string {
+    return `${ATTACHMENT_PREFIX}${cid}`;
+  }
+
+  private async hasPackageAssets(cid: string): Promise<boolean> {
+    if (await this.idb.hasStore(PACKAGE_ASSET_STORE)) {
+      const keys = await this.idb.keysByPrefix(PACKAGE_ASSET_STORE, this.assetPrefix(cid));
+      if (keys.length > 0) {
+        return true;
+      }
+    }
+
+    return this.legacyIdb ? this.legacyIdb.hasStore(`package:${cid}`) : false;
+  }
+
+  private async verifyPackageAssets(cid: string, expectedFileCount: number): Promise<void> {
+    try {
+      const keys = await this.idb.keysByPrefix(PACKAGE_ASSET_STORE, this.assetPrefix(cid));
+      if (keys.length < expectedFileCount) {
+        throw new Error(
+          `Store verification failed: expected ${expectedFileCount} files, found ${keys.length}`
+        );
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === "QuotaExceededError") {
+        throw new Error(
+          `Device storage quota exceeded. Please free up space and try again.`
+        );
+      }
+      throw error;
+    }
+  }
+
+  private async retryPackageVerification(
+    cid: string,
+    expectedFileCount: number,
+    maxRetries: number = 3,
+    delay: number = 1000
+  ): Promise<void> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await this.verifyPackageAssets(cid, expectedFileCount);
+        return;
+      } catch (error) {
+        this.logger.warn(`Store verification attempt ${attempt}/${maxRetries} failed:`, error);
+
+        if (attempt < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, delay * attempt));
+        } else {
+          throw error;
+        }
+      }
     }
   }
 
@@ -322,8 +403,11 @@ export default class PackageService {
       isDynamic: true,
       hasMetadata: hasMethod(query, "get_metadata"),
       hasWidgetState: hasMethod(query, "get_widget_state"),
+      hasAttachments: hasMethod(query, "get_attachments") && hasMethod(execute, "attach"),
+      isClosable: hasMethod(query, "is_closed") && hasMethod(execute, "close"),
       isConsumable: hasMethod(execute, "consume"),
       isConsumer: hasMethod(query, "is_consumer_of"),
+      isLockable: hasMethod(execute, "lock"),
       isTransferable: hasMethod(execute, "transfer"),
     };
   }
@@ -355,19 +439,42 @@ export default class PackageService {
   ) {
     let chainJson: any;
     let files: File[];
-    let packageJson: TypedDict;
 
     //Extract files
     if (isNotLocal) {
       files = await this.extractAssets(message.data.buffer, false);
-      packageJson = await this.getPackageJson("package.json", files);
       chainJson = await this.getChainJson("chain.json", message.data.buffer);
     } else {
       files = message; // Local files
-      packageJson = await this.getPackageJson("package.json", files);
     }
 
-    //Check for required JSON files
+    return this.finalizeImportedPackage(
+      files,
+      chainJson,
+      uniqueMessageHash,
+      isNotLocal
+    );
+  }
+
+  async importFromHub(packageZipFile: File, chainJson: unknown): Promise<TypedPackage> {
+    const files = await this.extractAssets(packageZipFile);
+    const pkg = await this.finalizeImportedPackage(files, chainJson, undefined, true);
+
+    if (!pkg?.chain) {
+      throw new Error("Hub notification package did not include chain state");
+    }
+
+    return pkg;
+  }
+
+  private async finalizeImportedPackage(
+    files: File[],
+    chainJson?: any,
+    uniqueMessageHash?: string,
+    isNotLocal = false
+  ) {
+    const packageJson: TypedDict = await this.getPackageJson("package.json", files);
+
     if (!packageJson) {
       throw new Error("Missing package.json in extracted assets");
     }
@@ -375,18 +482,15 @@ export default class PackageService {
       throw new Error("Missing chain.json for relay package");
     }
 
-    //Calculate CID
     const cid = await this.calculateCidFn(files);
 
-    //Check for duplicates
-    if (await this.idb.hasStore(`package:${cid}`)) {
+    if (await this.hasPackageAssets(cid)) {
       if (isNotLocal && chainJson && !(await this.isCurrentEvent(chainJson))) {
         this.logger.warn(`Package with CID ${cid} is already current or newer.`);
         return null;
       }
     }
 
-    //Prepare metadata
     const name = packageJson.name || "Unnamed Package";
     const title = name
       .replace(/^ownable-|-ownable$/, "")
@@ -441,12 +545,11 @@ export default class PackageService {
     }
 
     // Verify store exists after import
-    const storeName = `package:${pkg.cid}`;
-    const hasStore = await this.idb.hasStore(storeName);
+    const hasStore = await this.hasPackageAssets(pkg.cid);
     
     if (!hasStore) {
       // Retry verification in background (non-blocking)
-      this.retryStoreVerification(storeName, files.length, 3, 1000)
+      this.retryPackageVerification(pkg.cid, files.length, 3, 1000)
         .catch((error) => {
           this.logger.error(`Background store verification failed after retries:`, error);
           // Optionally notify user or log to error tracking service
@@ -457,11 +560,11 @@ export default class PackageService {
     } else {
       // Store exists, verify data integrity
       try {
-        await this.verifyStoreExists(storeName, files.length);
+        await this.verifyPackageAssets(pkg.cid, files.length);
       } catch (error) {
         // If verification fails, start background retry
         this.logger.warn(`Initial store verification failed, retrying in background:`, error);
-        this.retryStoreVerification(storeName, files.length, 3, 1000)
+        this.retryPackageVerification(pkg.cid, files.length, 3, 1000)
           .catch((retryError) => {
             this.logger.error(`Background store verification failed after retries:`, retryError);
           });
@@ -523,7 +626,7 @@ export default class PackageService {
 
             if (!pkg) return;
 
-            if (await this.idb.hasStore(`package:${pkg.cid}`)) {
+            if (await this.hasPackageAssets(pkg.cid)) {
               triggerRefresh = true;
             }
 
@@ -599,25 +702,47 @@ export default class PackageService {
   ): Promise<string | ArrayBuffer> {
     return new Promise((resolve, reject) => {
       const fileReader = this.fileReaderFactory();
-      this.idb.get(`package:${cid}`, name).then(
-        (mediaFile: File) => {
-          if (!mediaFile) {
-            reject(`Asset "${name}" is not in package ${cid}`);
+      void (async () => {
+        if (await this.idb.hasStore(PACKAGE_ASSET_STORE)) {
+          const mediaFile = await this.idb.get(
+            PACKAGE_ASSET_STORE,
+            this.assetKey(cid, name)
+          );
+
+          if (mediaFile) {
+            fileReader.onload = (event) => {
+              const result = event.target?.result;
+              if (result === null || result === undefined) {
+                reject(new Error(`Failed to read asset "${name}" from package ${cid}`));
+                return;
+              }
+              resolve(result);
+            };
+
+            read(fileReader, mediaFile);
+            return;
           }
+        }
 
-          fileReader.onload = (event) => {
-            const result = event.target?.result;
-            if (result === null || result === undefined) {
-              reject(new Error(`Failed to read asset "${name}" from package ${cid}`));
-              return;
-            }
-            resolve(result);
-          };
+        if (this.legacyIdb && (await this.legacyIdb.hasStore(`package:${cid}`))) {
+          const legacyFile = await this.legacyIdb.get(`package:${cid}`, name);
+          if (legacyFile) {
+            fileReader.onload = (event) => {
+              const result = event.target?.result;
+              if (result === null || result === undefined) {
+                reject(new Error(`Failed to read asset "${name}" from package ${cid}`));
+                return;
+              }
+              resolve(result);
+            };
 
-          read(fileReader, mediaFile);
-        },
-        (error) => reject(error)
-      );
+            read(fileReader, legacyFile);
+            return;
+          }
+        }
+
+        reject(`Asset "${name}" is not in package ${cid}`);
+      })().catch((error) => reject(error));
     });
   }
 
@@ -633,11 +758,37 @@ export default class PackageService {
     return this.getAsset(cid, name, read) as Promise<string>;
   }
 
+  async storeAttachment(cid: string, file: File): Promise<void> {
+    if (!(await this.idb.hasStore(PACKAGE_ASSET_STORE))) {
+      await this.idb.createStore(PACKAGE_ASSET_STORE);
+    }
+
+    await this.idb.set(PACKAGE_ASSET_STORE, this.attachmentKey(cid), file);
+  }
+
+  async getAttachment(cid: string): Promise<File> {
+    const file = await this.idb.get(PACKAGE_ASSET_STORE, this.attachmentKey(cid));
+    if (!file) {
+      throw new Error(`Attachment ${cid} is not stored locally`);
+    }
+    return file as File;
+  }
+
   async zip(cid: string): Promise<JSZip> {
     const zip = new JSZip();
-    const files = await this.idb.getAll(`package:${cid}`);
+    const files =
+      (await this.idb.hasStore(PACKAGE_ASSET_STORE))
+        ? await this.idb.getAllByPrefix(PACKAGE_ASSET_STORE, this.assetPrefix(cid))
+        : [];
 
-    for (const file of files) {
+    const packageFiles =
+      files.length > 0
+        ? files
+        : (this.legacyIdb && (await this.legacyIdb.hasStore(`package:${cid}`)))
+          ? await this.legacyIdb.getAll(`package:${cid}`)
+          : [];
+
+    for (const file of packageFiles) {
       zip.file(file.name, file);
     }
     return zip;

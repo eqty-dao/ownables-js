@@ -15,6 +15,9 @@ pub enum ContractError {
     #[error("Lock error: {val:?}")]
     LockError { val: String },
 
+    #[error("Closed error: {val:?}")]
+    ClosedError { val: String },
+
     #[error("Unknown event type: {val:?}")]
     MatchEventError { val: String },
 

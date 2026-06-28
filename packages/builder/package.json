@@ -2,19 +2,28 @@
   "name": "@ownables/builder",
   "version": "0.7.0",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/builder/src/index.js",
+  "types": "dist/builder/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/builder/src/index.d.ts",
+      "default": "./dist/builder/src/index.js"
+    },
+    "./dossier.zip": "./dossier.zip",
+    "./ownable_bg.wasm": "./ownable_bg.wasm"
+  },
   "files": [
     "dist",
-    "ownable_bg.wasm"
+    "ownable_bg.wasm",
+    "dossier.zip"
   ],
   "dependencies": {
     "@ownables/core": "workspace:*"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "clean": "rm -rf dist ownable_bg.wasm",
-    "prepack": "bash ./bin/ensure-wasm.sh",
+    "build": "bash ./bin/ensure-dossier-zip.sh && tsc -p tsconfig.build.json && bash ./bin/stage-dossier-zip.sh",
+    "clean": "rm -rf dist ownable_bg.wasm dossier.zip",
+    "prepack": "bash ./bin/ensure-wasm.sh && bash ./bin/ensure-dossier-zip.sh && bash ./bin/stage-dossier-zip.sh",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "publishConfig": {

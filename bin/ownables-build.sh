@@ -66,16 +66,24 @@ build_package() {
     local package_name
     local package_version
     local package_description
+    local package_keywords
     local crate_name
     local wasm_path
 
     package_name="$(awk -F '\"' '/^name = /{print $2; exit}' "$dir/Cargo.toml")"
     package_version="$(awk -F '\"' '/^version = /{print $2; exit}' "$dir/Cargo.toml")"
     package_description="$(awk -F '\"' '/^description = /{print $2; exit}' "$dir/Cargo.toml" || true)"
+    package_keywords="$(
+      cargo metadata --format-version 1 --no-deps --manifest-path "$dir/Cargo.toml" \
+        | jq --arg name "$package_name" -c '
+            (.packages[] | select(.name == $name) | .metadata.ownables.package.keywords) // []
+          '
+    )"
     crate_name="${package_name//-/_}"
     wasm_path="./ownables/target/wasm32-unknown-unknown/release/${crate_name}.wasm"
 
     rm -rf "$dir/pkg/"
+    rm -f "./ownables/$name.zip"
     mkdir -p "$dir/pkg/"
 
     (
@@ -91,17 +99,24 @@ build_package() {
       --arg description "$package_description" \
       --arg ownablesAbi "1" \
       --arg wireFormat "cbor" \
+      --argjson keywords "$package_keywords" \
       '{
         name: $name,
         version: $version,
         description: $description,
+        keywords: $keywords,
         ownablesAbi: $ownablesAbi,
         wireFormat: $wireFormat
       }' > "$dir/pkg/package.json"
 
     (cd "$dir" && cargo run --example schema)
-    zip -r -j "./ownables/$name.zip" "$dir/assets/" "$dir/pkg/ownable_bg.wasm" "$dir/pkg/package.json" "$dir/schema/"*.json
+    local zip_inputs=("$dir/pkg/ownable_bg.wasm" "$dir/pkg/package.json" "$dir/schema/"*.json)
+    if [ -d "$dir/assets" ]; then
+      zip_inputs=("$dir/assets/" "${zip_inputs[@]}")
+    fi
+    zip -r -j "./ownables/$name.zip" "${zip_inputs[@]}"
   else
+    rm -f "./ownables/$name.zip"
     zip -r -j "./ownables/$name.zip" "$dir/"*
   fi
 }

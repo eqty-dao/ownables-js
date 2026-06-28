@@ -1,6 +1,6 @@
 import type { TypedPackage } from "@ownables/core";
 
-export const FIXED_OWNABLE_TYPE = "static_image";
+export const FIXED_OWNABLE_TYPE = "dossier";
 
 export interface OwnableMetadataInput {
   name: string;
@@ -13,6 +13,16 @@ export interface PrepareOwnableInput extends OwnableMetadataInput {
   packageService: {
     processPackage(files: File[]): Promise<TypedPackage | null | undefined>;
   };
+}
+
+export interface PrepareDossierInput extends OwnableMetadataInput {
+  thumbnail?: File;
+  packageService: {
+    extractAssets(zipFile: File, chain?: boolean): Promise<File[]>;
+    processPackage(files: File[]): Promise<TypedPackage | null | undefined>;
+  };
+  bundleUrl?: string;
+  fetchFn?: (input: string, init?: RequestInit) => Promise<Response>;
 }
 
 export interface PreparedOwnable {

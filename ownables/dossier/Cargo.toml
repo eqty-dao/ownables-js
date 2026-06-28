@@ -67,8 +67,8 @@ bs58 = "0.4.0"
 blake2 = "0.10.6"
 hex = "0.4.3"
 secp256k1 = "0.26.0"
-ownable-std = { path = "/home/arnold/Projects/eqty/.runs/2026-06-22_23-57-48_dossier/worktrees/ownable-std" }
-ownable-std-macros = { path = "/home/arnold/Projects/eqty/.runs/2026-06-22_23-57-48_dossier/worktrees/ownable-std/macros/ownable-std-macros" }
+ownable-std = "0.9.0"
+ownable-std-macros = "0.9.0"
 serde_bytes = "0.11"
 ciborium = "0.2"
 

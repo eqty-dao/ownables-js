@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, readFile, rm } from "node:fs/promises";
+import { access, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
@@ -226,62 +226,84 @@ describe("@ownables/builder", () => {
   });
 
   it("prepareDossier works through the built package bundle path", async () => {
-    await rm(`${PACKAGE_ROOT}/dossier.zip`, { force: true });
-    await rm(`${REPO_ROOT}/ownables/dossier.zip`, { force: true });
-    await rm(`${PACKAGE_ROOT}/dist/builder/src/dossier.zip`, { force: true });
+    const localBundlePath = `${PACKAGE_ROOT}/dossier.zip`;
+    const stagedBundlePath = `${PACKAGE_ROOT}/dist/builder/src/dossier.zip`;
+    const seededBundleBytes = Buffer.from("seeded-dossier-bundle");
+    const originalLocalBundle = await readFile(localBundlePath).catch(() => null);
+    const originalStagedBundle = await readFile(stagedBundlePath).catch(() => null);
 
-    await execFileAsync("yarn", ["workspace", "@ownables/builder", "build"], {
-      cwd: REPO_ROOT,
-    });
+    try {
+      await writeFile(localBundlePath, seededBundleBytes);
+      await rm(stagedBundlePath, { force: true });
 
-    await access(BUILT_INDEX_PATH);
-    await access(BUILT_TYPES_PATH);
-    const builtBuilder = (await import(pathToFileURL(BUILT_INDEX_PATH).href)) as typeof BuilderModule;
-    const bundlePath = fileURLToPath(builtBuilder.DOSSIER_BUNDLE_URL);
-    await access(bundlePath);
-
-    const extractAssets = vi.fn().mockResolvedValue([] as File[]);
-    const packageService = {
-      extractAssets,
-      processPackage: vi.fn().mockResolvedValue({
-        cid: "bafy-built-dossier",
-        title: "Dossier",
-        name: "dossier",
-        versions: [],
-        isDynamic: true,
-        hasMetadata: true,
-        hasWidgetState: false,
-        hasAttachments: true,
-        isClosable: true,
-        isConsumable: false,
-        isConsumer: false,
-        isLockable: false,
-        isTransferable: true,
-      }),
-    };
-    const fetchFn = vi.fn(async (resource: string) => {
-      const bytes = await readFile(fileURLToPath(resource));
-      return new Response(new Blob([bytes], { type: "application/zip" }), {
-        status: 200,
-        statusText: "OK",
-        headers: { "content-type": "application/zip" },
+      await execFileAsync("yarn", ["workspace", "@ownables/builder", "build"], {
+        cwd: REPO_ROOT,
       });
-    });
 
-    const result = await builtBuilder.prepareDossier({
-      name: "Dossier",
-      description: "A living file dossier",
-      packageService,
-      fetchFn,
-    });
+      await access(BUILT_INDEX_PATH);
+      await access(BUILT_TYPES_PATH);
+      const builtBuilder = (await import(pathToFileURL(BUILT_INDEX_PATH).href)) as typeof BuilderModule;
+      const bundlePath = fileURLToPath(builtBuilder.DOSSIER_BUNDLE_URL);
+      const expectedBundlePath = fileURLToPath(new URL("./dossier.zip", pathToFileURL(BUILT_INDEX_PATH)));
+      await access(bundlePath);
+      expect(bundlePath).toBe(expectedBundlePath);
+      expect(await readFile(bundlePath)).toEqual(seededBundleBytes);
 
-    expect(BUILT_INDEX_PATH).toMatch(/packages\/builder\/dist\/builder\/src\/index\.js$/);
-    expect(BUILT_TYPES_PATH).toMatch(/packages\/builder\/dist\/builder\/src\/index\.d\.ts$/);
-    expect(bundlePath).toMatch(/packages\/builder\/dist\/builder\/src\/dossier\.zip$/);
-    expect(fetchFn).toHaveBeenCalledWith(builtBuilder.DOSSIER_BUNDLE_URL);
-    expect(extractAssets).toHaveBeenCalledWith(expect.any(File));
-    expect(packageService.processPackage).toHaveBeenCalledWith([]);
-    expect(result.packageCid).toBe("bafy-built-dossier");
+      const extractAssets = vi.fn().mockResolvedValue([] as File[]);
+      const packageService = {
+        extractAssets,
+        processPackage: vi.fn().mockResolvedValue({
+          cid: "bafy-built-dossier",
+          title: "Dossier",
+          name: "dossier",
+          versions: [],
+          isDynamic: true,
+          hasMetadata: true,
+          hasWidgetState: false,
+          hasAttachments: true,
+          isClosable: true,
+          isConsumable: false,
+          isConsumer: false,
+          isLockable: false,
+          isTransferable: true,
+        }),
+      };
+      const fetchFn = vi.fn(async (resource: string) => {
+        const bytes = await readFile(fileURLToPath(resource));
+        return new Response(new Blob([bytes], { type: "application/zip" }), {
+          status: 200,
+          statusText: "OK",
+          headers: { "content-type": "application/zip" },
+        });
+      });
+
+      const result = await builtBuilder.prepareDossier({
+        name: "Dossier",
+        description: "A living file dossier",
+        packageService,
+        fetchFn,
+      });
+
+      expect(BUILT_INDEX_PATH).toMatch(/packages\/builder\/dist\/builder\/src\/index\.js$/);
+      expect(BUILT_TYPES_PATH).toMatch(/packages\/builder\/dist\/builder\/src\/index\.d\.ts$/);
+      expect(bundlePath).toMatch(/packages\/builder\/dist\/builder\/src\/dossier\.zip$/);
+      expect(fetchFn).toHaveBeenCalledWith(builtBuilder.DOSSIER_BUNDLE_URL);
+      expect(extractAssets).toHaveBeenCalledWith(expect.any(File));
+      expect(packageService.processPackage).toHaveBeenCalledWith([]);
+      expect(result.packageCid).toBe("bafy-built-dossier");
+    } finally {
+      if (originalLocalBundle) {
+        await writeFile(localBundlePath, originalLocalBundle);
+      } else {
+        await rm(localBundlePath, { force: true });
+      }
+
+      if (originalStagedBundle) {
+        await writeFile(stagedBundlePath, originalStagedBundle);
+      } else {
+        await rm(stagedBundlePath, { force: true });
+      }
+    }
   }, 30000);
 
   it("buildInstantiateMsg builds payload with fixed ownable type", () => {

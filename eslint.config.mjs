@@ -47,6 +47,23 @@ export default tseslint.config(
     }
   },
   {
+    files: ['packages/**/*.{ts,js,mjs,cjs}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@ownables/*/dist/*', '@ownables/*/src/*', '../ownables-js/*'],
+              message:
+                'Import from published package entrypoints or repo path aliases instead of build artifacts, source internals, or sibling checkouts.'
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
     files: ['**/*.test.ts'],
     languageOptions: {
       globals: {

@@ -11,6 +11,7 @@ coverage
 
 # Generated contract build artifacts
 ownables/*.zip
+packages/builder/dossier.zip
 ownables/Cargo.lock
 ownables/target/
 ownables/*/target/

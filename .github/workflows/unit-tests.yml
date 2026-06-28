@@ -32,6 +32,12 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
+      - name: Setup Rust
+        if: matrix.package == 'builder'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
       - name: Enable Corepack
         run: |
           corepack enable

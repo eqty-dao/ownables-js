@@ -1,3 +1,18 @@
+# [0.8.0](https://github.com/eqty-dao/ownables-js/compare/v0.7.0...v0.8.0) (2026-06-28)
+
+
+### Bug Fixes
+
+* **builder:** stage dossier bundle for publication ([a087c1f](https://github.com/eqty-dao/ownables-js/commit/a087c1f8f2ce9b302694fcc80c27f083248f8c04))
+* **dossier:** finalize internal package publication ([ac5ab3b](https://github.com/eqty-dao/ownables-js/commit/ac5ab3bd5db582df95f6b462b3cca3398af3e3ca))
+
+
+### Features
+
+* **dossier:** finalize builder and attachment updates ([2df4e0d](https://github.com/eqty-dao/ownables-js/commit/2df4e0d4980c603c3ac6e7a7c4e26c6bfd5a9e4b))
+* implement dossier attachment and close flow ([971e222](https://github.com/eqty-dao/ownables-js/commit/971e222e9ca5b5b4434b592c95962c22e1ba4519))
+* **service-boundary:** publish shared dossier services ([3db0c4e](https://github.com/eqty-dao/ownables-js/commit/3db0c4eb4bc3cbb8595d528f4cc391318822b476))
+
 # [0.7.0](https://github.com/eqty-dao/ownables-js/compare/v0.6.1...v0.7.0) (2026-06-18)
 
 

@@ -1,6 +1,6 @@
 {
   "name": "@ownables/platform-browser",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "type": "module",
   "main": "dist/platform-browser/src/index.js",
   "types": "dist/platform-browser/src/index.d.ts",

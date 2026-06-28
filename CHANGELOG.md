@@ -1,3 +1,10 @@
+## [0.8.1](https://github.com/eqty-dao/ownables-js/compare/v0.8.0...v0.8.1) (2026-06-28)
+
+
+### Bug Fixes
+
+* **platform-node:** use workspace core dep ([8edb77e](https://github.com/eqty-dao/ownables-js/commit/8edb77e2bc315aa54b4186a9410c040b7624f4f4))
+
 # [0.8.0](https://github.com/eqty-dao/ownables-js/compare/v0.7.0...v0.8.0) (2026-06-28)
 
 

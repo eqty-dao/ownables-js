@@ -38,6 +38,11 @@ export interface OwnableEvent {
   attributes: TypedDict;
 }
 
+export interface EventAttachmentInput {
+  name: string;
+  file: Blob | File;
+}
+
 export interface OwnableRPC {
   initialize: (js: string, wasm: Uint8Array) => Promise<void>;
   instantiate: (

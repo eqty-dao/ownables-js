@@ -2,8 +2,16 @@
   "name": "@ownables/builder",
   "version": "0.7.0",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/builder/src/index.js",
+  "types": "dist/builder/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/builder/src/index.d.ts",
+      "default": "./dist/builder/src/index.js"
+    },
+    "./dossier.zip": "./dossier.zip",
+    "./ownable_bg.wasm": "./ownable_bg.wasm"
+  },
   "files": [
     "dist",
     "ownable_bg.wasm",

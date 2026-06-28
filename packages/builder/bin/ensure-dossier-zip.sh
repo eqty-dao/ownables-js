@@ -14,6 +14,14 @@ if [ -f "${LOCAL_ZIP}" ]; then
 fi
 
 if [ ! -f "${SOURCE_ZIP}" ]; then
+  echo "Building ownables dossier zip..."
+  (
+    cd "${REPO_ROOT}"
+    bash ./bin/ownables-build.sh dossier
+  )
+fi
+
+if [ ! -f "${SOURCE_ZIP}" ]; then
   echo "Failed to locate source dossier zip at ${SOURCE_ZIP}" >&2
   exit 1
 fi

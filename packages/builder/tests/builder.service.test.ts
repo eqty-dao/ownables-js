@@ -1,10 +1,11 @@
 import { execFile } from "node:child_process";
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, rm } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 import type * as BuilderModule from "../src";
 import { describe, expect, it, vi } from "vitest";
+import packageJson from "../package.json";
 
 import {
   buildInstantiateMsg,
@@ -17,7 +18,9 @@ import {
 
 const execFileAsync = promisify(execFile);
 const REPO_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
-const BUILT_INDEX_PATH = `${REPO_ROOT}/packages/builder/dist/builder/src/index.js`;
+const PACKAGE_ROOT = `${REPO_ROOT}/packages/builder`;
+const BUILT_INDEX_PATH = `${PACKAGE_ROOT}/${packageJson.main}`;
+const BUILT_TYPES_PATH = `${PACKAGE_ROOT}/${packageJson.types}`;
 
 describe("@ownables/builder", () => {
   it("prepareOwnable validates metadata and returns package cid", async () => {
@@ -120,11 +123,119 @@ describe("@ownables/builder", () => {
     expect(result.packageCid).toBe("bafy-dossier");
   });
 
+  it("prepareDossier prefers caller metadata over bundled dossier defaults", async () => {
+    const extractAssets = vi.fn().mockResolvedValue([] as File[]);
+    const packageService = {
+      extractAssets,
+      processPackage: vi.fn().mockResolvedValue({
+        cid: "bafy-dossier",
+        title: "Dossier",
+        name: "dossier",
+        description: "Bundled dossier description",
+        versions: [],
+        isDynamic: true,
+        hasMetadata: true,
+        hasWidgetState: false,
+        hasAttachments: true,
+        isClosable: true,
+        isConsumable: false,
+        isConsumer: false,
+        isLockable: false,
+        isTransferable: true,
+      }),
+    };
+    const fetchFn = vi.fn().mockResolvedValue(
+      new Response(new Blob(["zip-bytes"], { type: "application/zip" }), {
+        status: 200,
+        statusText: "OK",
+      })
+    );
+
+    const result = await prepareDossier({
+      name: "Customer dossier",
+      description: "Issued from the SDK",
+      packageService,
+      fetchFn,
+      keywords: ["sdk"],
+    });
+
+    expect(result.pkg.title).toBe("Customer dossier");
+    expect(result.pkg.description).toBe("Issued from the SDK");
+    expect(result.pkg.keywords).toEqual(["sdk"]);
+  });
+
+  it("prepareDossier can stage an optional thumbnail.webp asset for the package service", async () => {
+    const bundledFiles = [
+      new File(["bundle"], "package.json", { type: "application/json" }),
+      new File(["default-thumb"], "thumbnail.webp", { type: "image/webp" }),
+      new File(["meta"], "metadata.json", { type: "application/json" }),
+    ];
+    const extractAssets = vi.fn().mockResolvedValue(bundledFiles);
+    const packageService = {
+      extractAssets,
+      processPackage: vi.fn().mockResolvedValue({
+        cid: "bafy-dossier",
+        title: "Dossier",
+        name: "dossier",
+        description: "Bundled dossier description",
+        versions: [],
+        isDynamic: true,
+        hasMetadata: true,
+        hasWidgetState: false,
+        hasAttachments: true,
+        isClosable: true,
+        isConsumable: false,
+        isConsumer: false,
+        isLockable: false,
+        isTransferable: true,
+      }),
+    };
+    const fetchFn = vi.fn().mockResolvedValue(
+      new Response(new Blob(["zip-bytes"], { type: "application/zip" }), {
+        status: 200,
+        statusText: "OK",
+      })
+    );
+    const thumbnail = new File(["custom-thumb"], "picked.png", { type: "image/png" });
+
+    await prepareDossier({
+      name: "Customer dossier",
+      description: "Issued from the SDK",
+      packageService,
+      fetchFn,
+      thumbnail,
+    });
+
+    expect(packageService.processPackage).toHaveBeenCalledTimes(1);
+    const files = packageService.processPackage.mock.calls[0]?.[0];
+    if (!files) {
+      throw new Error("Expected processPackage to be called with staged files");
+    }
+    expect(files.map((file: File) => file.name)).toEqual([
+      "package.json",
+      "metadata.json",
+      "thumbnail.webp",
+    ]);
+    const stagedThumbnail = files.find((file: File) => file.name === "thumbnail.webp");
+    if (!stagedThumbnail) {
+      throw new Error("Expected staged thumbnail.webp asset");
+    }
+    expect(stagedThumbnail).toBeInstanceOf(File);
+    expect(await stagedThumbnail.text()).toBe("custom-thumb");
+    expect(stagedThumbnail.type).toBe("image/png");
+  });
+
   it("prepareDossier works through the built package bundle path", async () => {
+    await rm(`${PACKAGE_ROOT}/dossier.zip`, { force: true });
+    await rm(`${REPO_ROOT}/ownables/dossier.zip`, { force: true });
+    await rm(`${PACKAGE_ROOT}/dist/builder/src/dossier.zip`, { force: true });
+
     await execFileAsync("yarn", ["workspace", "@ownables/builder", "build"], {
       cwd: REPO_ROOT,
     });
 
+    await access(BUILT_INDEX_PATH);
+    await access(BUILT_TYPES_PATH);
     const builtBuilder = (await import(pathToFileURL(BUILT_INDEX_PATH).href)) as typeof BuilderModule;
     const bundlePath = fileURLToPath(builtBuilder.DOSSIER_BUNDLE_URL);
     await access(bundlePath);
@@ -164,12 +275,14 @@ describe("@ownables/builder", () => {
       fetchFn,
     });
 
+    expect(BUILT_INDEX_PATH).toMatch(/packages\/builder\/dist\/builder\/src\/index\.js$/);
+    expect(BUILT_TYPES_PATH).toMatch(/packages\/builder\/dist\/builder\/src\/index\.d\.ts$/);
     expect(bundlePath).toMatch(/packages\/builder\/dist\/builder\/src\/dossier\.zip$/);
     expect(fetchFn).toHaveBeenCalledWith(builtBuilder.DOSSIER_BUNDLE_URL);
     expect(extractAssets).toHaveBeenCalledWith(expect.any(File));
     expect(packageService.processPackage).toHaveBeenCalledWith([]);
     expect(result.packageCid).toBe("bafy-built-dossier");
-  });
+  }, 30000);
 
   it("buildInstantiateMsg builds payload with fixed ownable type", () => {
     const payload = buildInstantiateMsg({

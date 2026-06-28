@@ -6,6 +6,7 @@ import type {
   DeployResult,
   EstimateCostInput,
   InstantiateMsgPayload,
+  OwnableMetadataInput,
   PrepareDossierInput,
   PreparedOwnable,
   PrepareOwnableInput,
@@ -18,6 +19,32 @@ const normalize = (value: string, field: string): string => {
     throw new Error(`${field} is required`);
   }
   return trimmed;
+};
+
+const withPreparedMetadata = (
+  pkg: PreparedOwnable["pkg"],
+  input: OwnableMetadataInput
+): PreparedOwnable["pkg"] => ({
+  ...pkg,
+  title: input.name,
+  description: input.description,
+  ...(input.keywords !== undefined ? { keywords: input.keywords } : {}),
+});
+
+const withOptionalThumbnail = (files: File[], thumbnail?: File): File[] => {
+  if (!thumbnail) {
+    return files;
+  }
+
+  const stagedThumbnail = new File([thumbnail], "thumbnail.webp", {
+    type: thumbnail.type || "image/webp",
+    lastModified: thumbnail.lastModified,
+  });
+
+  return [
+    ...files.filter((file) => file.name !== stagedThumbnail.name),
+    stagedThumbnail,
+  ];
 };
 
 export const prepareOwnable = async (
@@ -47,6 +74,8 @@ export const DOSSIER_BUNDLE_URL = new URL("../dossier.zip", import.meta.url).toS
 export const prepareDossier = async (
   input: PrepareDossierInput
 ): Promise<PreparedOwnable> => {
+  const name = normalize(input.name, "name");
+  const description = normalize(input.description, "description");
   const fetchFn = input.fetchFn ?? ((resource: string, init?: RequestInit) => fetch(resource, init));
   const response = await fetchFn(input.bundleUrl ?? DOSSIER_BUNDLE_URL);
   if (!response.ok) {
@@ -56,15 +85,27 @@ export const prepareDossier = async (
   const zipFile = new File([await response.blob()], "dossier.zip", {
     type: "application/zip",
   });
-  const files = await input.packageService.extractAssets(zipFile);
+  const files = withOptionalThumbnail(
+    await input.packageService.extractAssets(zipFile),
+    input.thumbnail
+  );
 
-  return await prepareOwnable({
-    name: input.name,
-    description: input.description,
+  const prepared = await prepareOwnable({
+    name,
+    description,
     packageService: input.packageService,
     files,
     ...(input.keywords !== undefined ? { keywords: input.keywords } : {}),
   });
+
+  return {
+    ...prepared,
+    pkg: withPreparedMetadata(prepared.pkg, {
+      name,
+      description,
+      ...(input.keywords !== undefined ? { keywords: input.keywords } : {}),
+    }),
+  };
 };
 
 export const buildInstantiateMsg = (

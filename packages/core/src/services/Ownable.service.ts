@@ -15,6 +15,7 @@ import type { TypedOwnableInfo } from "../types/TypedOwnableInfo.js";
 import type {
   CosmWasmMessageInfo,
   CosmWasmEvent,
+  EventAttachmentInput,
   OwnableEvent,
   PublicEvent,
   OwnableRPC,
@@ -446,7 +447,8 @@ export default class OwnableService {
     chain: EventChain,
     msg: TypedDict,
     stateDump: StateDump,
-    onProgress?: LogProgress
+    onProgress?: LogProgress,
+    attachments: EventAttachmentInput[] = []
   ): Promise<StateDump> {
     const info = { sender: this.eqty.address, funds: [] } as CosmWasmMessageInfo;
     const { state: newStateDump } = await this.rpc(chain.id).execute(
@@ -457,11 +459,16 @@ export default class OwnableService {
 
     delete msg["@context"]; // Shouldn't be set
 
-    await withProgress(onProgress)("signEvent", () =>
-      this.eqty.sign(
-        new Event({ "@context": "execute_msg.json", ...msg }).addTo(chain)
-      )
-    );
+    const event = new Event({ "@context": "execute_msg.json", ...msg }).addTo(chain);
+    for (const attachment of attachments) {
+      event.addAttachment(
+        attachment.name,
+        new Uint8Array(await attachment.file.arrayBuffer()),
+        attachment.file.type || "application/octet-stream"
+      );
+    }
+
+    await withProgress(onProgress)("signEvent", () => this.eqty.sign(event));
 
     // Store without submitting anchors yet; submission is controlled by caller
     await this.store(chain, newStateDump);

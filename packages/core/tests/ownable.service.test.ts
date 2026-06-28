@@ -242,10 +242,11 @@ describe('OwnableService', () => {
 
   it('executes rpc message, signs event, and stores resulting state', async () => {
     const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
+    const sign = vi.fn();
     const service = createService(
       {} as any,
       {} as any,
-      { address: '0xabc', sign: vi.fn() } as any,
+      { address: '0xabc', sign } as any,
       {} as any
     );
     const rpc = {
@@ -259,7 +260,44 @@ describe('OwnableService', () => {
 
     expect(result).toEqual([['k', 'v']]);
     expect(rpc.execute).toHaveBeenCalledTimes(1);
+    expect(sign).toHaveBeenCalledTimes(1);
     expect(storeSpy).toHaveBeenCalledWith(chain, [['k', 'v']]);
+  });
+
+  it('signs execute events with attachments when provided', async () => {
+    const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
+    const sign = vi.fn();
+    const service = createService(
+      {} as any,
+      {} as any,
+      { address: '0xabc', sign } as any,
+      {} as any
+    );
+    const rpc = {
+      execute: vi.fn().mockResolvedValue({ state: [['k', 'v']] }),
+    };
+    (service as any)._rpc.set(chain.id, rpc);
+    vi.spyOn(service, 'store').mockResolvedValue(undefined as any);
+
+    const attachment = new File(['hello world'], 'passport.pdf', {
+      type: 'application/pdf',
+    });
+
+    await service.execute(
+      chain,
+      { ping: true } as any,
+      [] as any,
+      undefined,
+      [{ name: 'passport.pdf', file: attachment }]
+    );
+
+    const event = sign.mock.calls[0]?.[0];
+    expect(event.attachments).toHaveLength(1);
+    expect(event.attachments[0]?.name).toBe('passport.pdf');
+    expect(event.attachments[0]?.mediaType).toBe('application/pdf');
+    expect(Array.from(event.attachments[0]?.data ?? [])).toEqual(
+      Array.from(new Uint8Array(await attachment.arrayBuffer()))
+    );
   });
 
   it('applies event chain and handles instantiate/execute/register/ingest contexts', async () => {

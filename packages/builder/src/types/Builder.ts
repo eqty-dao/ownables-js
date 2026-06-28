@@ -16,6 +16,7 @@ export interface PrepareOwnableInput extends OwnableMetadataInput {
 }
 
 export interface PrepareDossierInput extends OwnableMetadataInput {
+  thumbnail?: File;
   packageService: {
     extractAssets(zipFile: File, chain?: boolean): Promise<File[]>;
     processPackage(files: File[]): Promise<TypedPackage | null | undefined>;

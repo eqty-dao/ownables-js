@@ -23,13 +23,13 @@ import type {
   StateDump,
   StateSnapshot,
 } from "../types/OwnableRuntime.js";
-import type { IndexedPublicEvent, ReplayAppliedResult, ReplayAttemptResult } from "../types/Replay.js";
+import type { IndexedPublicEvent, IndexedPublicReplaySelectionOptions, ReplayAttemptResult } from "../types/Replay.js";
 import EventChainService from "./EventChain.service.js";
 import { withProgress } from "../progress.js";
 import type { LoggerLike } from "../logger.js";
 import WorkerRPC from "./WorkerRPC.service.js";
 import { DEFAULT_WORKER_SOURCE } from "./workerSource.js";
-import { dedupeIndexedPublicEvents, publicEventReplayKey } from "./ReplayAuthority.service.js";
+import { dedupeIndexedPublicEvents, publicEventReplayKey, selectReplayableIndexedPublicEvents } from "./ReplayAuthority.service.js";
 
 export default class OwnableService {
   private readonly SNAPSHOT_INTERVAL = 50;
@@ -379,31 +379,36 @@ export default class OwnableService {
   async replayIndexedPublicEvents(
     chainId: string,
     stateDump: StateDump,
-    indexedPublicEvents: IndexedPublicEvent[]
-  ): Promise<ReplayAppliedResult> {
-    const replay = await this.attemptReplayIndexedPublicEvents(chainId, stateDump, indexedPublicEvents);
-    if (!replay.complete) {
-      if (replay.failure?.cause instanceof Error) {
-        throw replay.failure.cause;
-      }
-      throw new Error(`Failed to replay indexed public event ${replay.failure?.replayKey ?? "unknown"}`);
-    }
-
-    return replay;
+    indexedPublicEvents: IndexedPublicEvent[],
+    options?: IndexedPublicReplaySelectionOptions
+  ): Promise<ReplayAttemptResult> {
+    return this.attemptReplayIndexedPublicEvents(chainId, stateDump, indexedPublicEvents, options);
   }
 
   async attemptReplayIndexedPublicEvents(
     chainId: string,
     stateDump: StateDump,
-    indexedPublicEvents: IndexedPublicEvent[]
+    indexedPublicEvents: IndexedPublicEvent[],
+    options?: IndexedPublicReplaySelectionOptions
   ): Promise<ReplayAttemptResult> {
     const info: CosmWasmMessageInfo = {
       sender: this.eqty.address,
       funds: [],
     };
-    const { events, duplicateReplayKeys } = dedupeIndexedPublicEvents(indexedPublicEvents);
+    const deduped = dedupeIndexedPublicEvents(indexedPublicEvents);
+    const selected = options
+      ? selectReplayableIndexedPublicEvents(indexedPublicEvents, options)
+      : { events: deduped.events, ignoredPublicEvents: [] };
+    const events = selected.events;
+    const duplicateReplayKeys = deduped.duplicateReplayKeys;
     const appliedEvents: IndexedPublicEvent[] = [];
     const appliedReplayKeys: string[] = [];
+    const appliedPublicEvents = [];
+    const duplicatePublicEvents = deduped.duplicateEvents.map((event) => ({
+      replayKey: publicEventReplayKey(event),
+      event,
+    }));
+    const ignoredPublicEvents = [...selected.ignoredPublicEvents];
     let nextState = stateDump;
 
     for (const indexedEvent of events) {
@@ -418,28 +423,29 @@ export default class OwnableService {
         nextState = state;
         appliedEvents.push(indexedEvent);
         appliedReplayKeys.push(replayKey);
+        appliedPublicEvents.push({
+          replayKey,
+          event: indexedEvent,
+        });
       } catch (cause) {
-        return {
-          complete: false,
-          stateDump: nextState,
-          appliedEvents,
-          appliedReplayKeys,
-          duplicateReplayKeys,
-          failure: {
-            replayKey,
-            event: indexedEvent,
-            cause,
-          },
-        };
+        ignoredPublicEvents.push({
+          replayKey,
+          event: indexedEvent,
+          reason: "register_failed",
+          cause,
+        });
       }
     }
 
     return {
-      complete: true,
+      complete: ignoredPublicEvents.length === 0,
       stateDump: nextState,
       appliedEvents,
       appliedReplayKeys,
       duplicateReplayKeys,
+      appliedPublicEvents,
+      duplicatePublicEvents,
+      ignoredPublicEvents,
     };
   }
 
@@ -480,7 +486,7 @@ export default class OwnableService {
     chain: EventChain,
     event: Omit<PublicEvent, "data"> & { data: string | Uint8Array | Binary },
     onProgress?: LogProgress
-  ): Promise<void> {
+  ): Promise<ReplayAttemptResult> {
     const stateDump = await this.eventChains.getStateDump(chain.id, chain.state.hex);
     if (!stateDump) throw Error("State mismatch for register public event");
 
@@ -489,10 +495,22 @@ export default class OwnableService {
     const replayKey = publicEventReplayKey(publicEvent);
 
     if ((await this.stateStore.hasStore(replayStoreId)) && (await this.stateStore.get(replayStoreId, replayKey))) {
-      return;
+      return {
+        complete: true,
+        stateDump,
+        appliedEvents: [],
+        appliedReplayKeys: [],
+        duplicateReplayKeys: [replayKey],
+        appliedPublicEvents: [],
+        duplicatePublicEvents: [{ replayKey, event: publicEvent }],
+        ignoredPublicEvents: [],
+      };
     }
 
     const replay = await this.replayIndexedPublicEvents(chain.id, stateDump, [publicEvent]);
+    if (replay.appliedReplayKeys.length === 0) {
+      return replay;
+    }
     const newStateDump = replay.stateDump;
 
     await withProgress(onProgress)("signPublicEvent", () =>
@@ -509,6 +527,7 @@ export default class OwnableService {
       await this.stateStore.createStore(replayStoreId);
     }
     await this.stateStore.set(replayStoreId, replayKey, true);
+    return replay;
   }
 
   async emitPublicEvent(
@@ -516,14 +535,14 @@ export default class OwnableService {
     eventType: string,
     payload: TypedDict,
     onProgress?: LogProgress
-  ): Promise<void> {
+  ): Promise<ReplayAttemptResult> {
     const encodedPayload = await withProgress(onProgress)("encodePublicEvent", () =>
       this.rpc(chain.id).encodePublicEvent(eventType, encode(payload) as Uint8Array)
     );
     const publicEvent = await withProgress(onProgress)("emitPublicEvent", () =>
       this.eqty.emitPublicEvent(chain.id, eventType, encodedPayload)
     );
-    await this.registerPublicEvent(chain, publicEvent, onProgress);
+    return this.registerPublicEvent(chain, publicEvent, onProgress);
   }
 
   async submitAnchors(onProgress?: LogProgress): Promise<string | undefined> {

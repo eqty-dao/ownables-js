@@ -20,6 +20,7 @@ export interface PublicEvent {
   transactionHash: string;
   transactionIndex: number;
   logIndex: number;
+  timestamp?: number;
 }
 
 export interface RuntimePublicEvent extends Omit<PublicEvent, 'data'> {

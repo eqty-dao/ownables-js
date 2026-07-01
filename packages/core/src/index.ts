@@ -5,6 +5,7 @@ export * from './progress.js';
 export * from './types/TypedCosmWasmMsg.js';
 export * from './types/TypedOwnableInfo.js';
 export * from './types/TypedPackage.js';
+export * from './types/AnchorValidation.js';
 export * from './types/MessageInfo.js';
 export * from './types/OwnableRuntime.js';
 export * from './types/SIWE.js';
@@ -16,6 +17,7 @@ export { default as TypedDict } from './types/TypedDict.js';
 export { default as ownableErrorMessage } from './ownableErrorMessage.js';
 
 export * from './services/SIWE.service.js';
+export * from './services/AnchorValidation.service.js';
 export { PollingService } from './services/Polling.service.js';
 export * from './services/ReplayAuthority.service.js';
 export * from './services/OwnablePackageCid.service.js';

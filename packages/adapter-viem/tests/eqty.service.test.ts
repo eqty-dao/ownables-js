@@ -69,7 +69,7 @@ describe('EQTYService', () => {
       { anchorClient: { anchor: vi.fn() }, signer: {} as any }
     );
 
-    await expect(service.verifyAnchors()).resolves.toEqual({ verified: false, anchors: {}, map: {} });
+    await expect(service.verifyAnchors()).resolves.toEqual({ verified: false, anchors: {}, map: {}, details: {} });
   });
 
   it('builds default viem clients and anchor client from ethereum provider', async () => {
@@ -82,7 +82,7 @@ describe('EQTYService', () => {
       {}
     );
 
-    await expect(service.verifyAnchors()).resolves.toEqual({ verified: false, anchors: {}, map: {} });
+    await expect(service.verifyAnchors()).resolves.toEqual({ verified: false, anchors: {}, map: {}, details: {} });
   });
 
   it('throws when provider inputs are missing and no ethereum provider is supplied', () => {
@@ -319,6 +319,7 @@ describe('EQTYService', () => {
       verified: false,
       anchors: {},
       map: {},
+      details: {},
     });
 
     const key = Binary.fromHex(`0x${'b'.repeat(64)}`);
@@ -326,6 +327,7 @@ describe('EQTYService', () => {
     const result = await service.verifyAnchors({ key, value });
     expect(result.verified).toBe(false);
     expect(result.anchors[key.hex]).toBeUndefined();
+    expect(result.details[key.hex]?.timestamp).toBeUndefined();
   });
 
   it('provides lockable operations through injected lockable client', async () => {
@@ -434,6 +436,7 @@ describe('EQTYService', () => {
     expect(result.anchors[key1.hex]).toBe('0xtx1');
     expect(result.anchors[key2.hex]).toBeUndefined();
     expect(result.map[key1.hex]).toBe(`0x${'d'.repeat(64)}`);
+    expect(result.details[key1.hex]?.timestamp).toBeUndefined();
   });
 
   it('verifies binary anchors with zero hash defaults and handles bigint log values', async () => {

@@ -867,10 +867,12 @@ describe('OwnableService', () => {
       logIndex: 7,
     };
 
-    await service.registerPublicEvent(chain, event);
-    await service.registerPublicEvent(chain, event);
+    const firstReplay = await service.registerPublicEvent(chain, event);
+    const duplicateReplay = await service.registerPublicEvent(chain, event);
 
     expect(register).toHaveBeenCalledTimes(1);
+    expect(firstReplay.appliedReplayKeys).toEqual([publicEventReplayKey(event)]);
+    expect(duplicateReplay.duplicateReplayKeys).toEqual([publicEventReplayKey(event)]);
     expect(await stateStore.get(`ownable:${chain.id}.public-event-replays`, publicEventReplayKey(event))).toBe(true);
   });
 
@@ -921,10 +923,16 @@ describe('OwnableService', () => {
     expect(register).toHaveBeenCalledTimes(2);
     expect(replay.appliedReplayKeys).toEqual(['0xaaa:8', '0xbbb:4']);
     expect(replay.duplicateReplayKeys).toEqual(['0xbbb:4']);
+    expect(replay.duplicatePublicEvents).toEqual([
+      {
+        replayKey: '0xbbb:4',
+        event: indexedEvents[2],
+      },
+    ]);
     expect(replay.stateDump).toEqual([['s2', 2]]);
   });
 
-  it('preserves partial replay progress on replay attempts and keeps fail-fast replay API', async () => {
+  it('preserves partial replay progress and records ignored public events without throwing', async () => {
     const service = createService(
       {} as any,
       {} as any,
@@ -977,14 +985,248 @@ describe('OwnableService', () => {
     expect(attempt.appliedReplayKeys).toEqual(['0xaaa:8']);
     expect(attempt.duplicateReplayKeys).toEqual(['0xbbb:4']);
     expect(attempt.stateDump).toEqual([['s1', 1]]);
-    expect(attempt.failure?.replayKey).toBe('0xbbb:4');
-    expect(attempt.failure?.event).toEqual(indexedEvents[1]);
-    expect(attempt.failure?.cause).toBe(replayFailure);
+    expect(attempt.ignoredPublicEvents).toEqual([
+      {
+        replayKey: '0xbbb:4',
+        event: indexedEvents[1],
+        reason: 'register_failed',
+        cause: replayFailure,
+      },
+    ]);
 
-    await expect(
-      service.replayIndexedPublicEvents('chain-replay-failure', [] as any, indexedEvents as any)
-    ).rejects.toThrow('missing private event');
-    expect(register).toHaveBeenCalledTimes(3);
+    const replay = await service.replayIndexedPublicEvents('chain-replay-failure', [] as any, indexedEvents as any);
+    expect(replay.complete).toBe(false);
+    expect(register).toHaveBeenCalledTimes(4);
+  });
+
+  it('replays only public events inside the proven private prefix window', async () => {
+    const service = createService(
+      {} as any,
+      {} as any,
+      { address: '0xabc' } as any,
+      {} as any
+    );
+    const register = vi.fn().mockResolvedValue({ state: [['inside-window', 1]] });
+    (service as any)._rpc.set('chain-replay-window', { register });
+    const indexedEvents = [
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'11'.repeat(4)}`,
+        blockNumber: 9,
+        transactionHash: '0xaaa',
+        transactionIndex: 0,
+        logIndex: 1,
+        timestamp: 5,
+      },
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'22'.repeat(4)}`,
+        blockNumber: 10,
+        transactionHash: '0xbbb',
+        transactionIndex: 0,
+        logIndex: 2,
+        timestamp: 15,
+      },
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'33'.repeat(4)}`,
+        blockNumber: 11,
+        transactionHash: '0xccc',
+        transactionIndex: 0,
+        logIndex: 3,
+        timestamp: 25,
+      },
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'44'.repeat(4)}`,
+        blockNumber: 12,
+        transactionHash: '0xddd',
+        transactionIndex: 0,
+        logIndex: 4,
+      },
+    ];
+
+    const replay = await service.attemptReplayIndexedPublicEvents(
+      'chain-replay-window',
+      [] as any,
+      indexedEvents as any,
+      {
+        privateEvents: [
+          { hash: '0xpriv-1', timestamp: 10 },
+          { hash: '0xpriv-2', timestamp: 20 },
+          { hash: '0xpriv-3', timestamp: 30 },
+        ],
+        privatePrefixLength: 1,
+        anchorValidation: {
+          verified: true,
+          anchors: {
+            '0xpriv-1': '0xtx-1',
+            '0xpriv-2': '0xtx-2',
+            '0xpriv-3': '0xtx-3',
+          },
+          map: {
+            '0xpriv-1': '0x01',
+            '0xpriv-2': '0x02',
+            '0xpriv-3': '0x03',
+          },
+          details: {
+            '0xpriv-1': {
+              key: '0xpriv-1',
+              expectedValue: '0x01',
+              value: '0x01',
+              transactionHash: '0xtx-1',
+              timestamp: 10,
+              verified: true,
+              source: 'indexed',
+            },
+            '0xpriv-2': {
+              key: '0xpriv-2',
+              expectedValue: '0x02',
+              value: '0x02',
+              transactionHash: '0xtx-2',
+              timestamp: 20,
+              verified: true,
+              source: 'indexed',
+            },
+            '0xpriv-3': {
+              key: '0xpriv-3',
+              expectedValue: '0x03',
+              value: '0x03',
+              transactionHash: '0xtx-3',
+              timestamp: 30,
+              verified: true,
+              source: 'indexed',
+            },
+          },
+        },
+      }
+    );
+
+    expect(register).toHaveBeenCalledTimes(1);
+    expect(replay.complete).toBe(false);
+    expect(replay.appliedReplayKeys).toEqual(['0xbbb:2']);
+    expect(replay.ignoredPublicEvents).toEqual([
+      {
+        replayKey: '0xaaa:1',
+        event: indexedEvents[0],
+        reason: 'missing_private_prefix',
+        cause: {
+          privatePrefixLength: 1,
+          usedTimestampFallback: false,
+        },
+      },
+      {
+        replayKey: '0xccc:3',
+        event: indexedEvents[2],
+        reason: 'missing_private_prefix',
+        cause: {
+          privatePrefixLength: 1,
+          usedTimestampFallback: false,
+        },
+      },
+      {
+        replayKey: '0xddd:4',
+        event: indexedEvents[3],
+        reason: 'missing_public_timestamp',
+        cause: {
+          privatePrefixLength: 1,
+          usedTimestampFallback: false,
+        },
+      },
+    ]);
+  });
+
+  it('falls back to private event timestamps only in development mode', async () => {
+    const service = createService(
+      {} as any,
+      {} as any,
+      { address: '0xabc' } as any,
+      {} as any
+    );
+    const register = vi.fn().mockResolvedValue({ state: [['dev-window', 1]] });
+    (service as any)._rpc.set('chain-replay-development', { register });
+    const indexedEvents = [
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'11'.repeat(4)}`,
+        blockNumber: 10,
+        transactionHash: '0xaaa',
+        transactionIndex: 0,
+        logIndex: 1,
+        timestamp: 15,
+      },
+    ];
+    const options = {
+      privateEvents: [
+        { hash: '0xpriv-1', timestamp: 10 },
+        { hash: '0xpriv-2', timestamp: 20 },
+      ],
+      privatePrefixLength: 1,
+      anchorValidation: {
+        verified: false,
+        anchors: {
+          '0xpriv-1': undefined,
+          '0xpriv-2': undefined,
+        },
+        map: {
+          '0xpriv-1': '0x01',
+          '0xpriv-2': '0x02',
+        },
+        details: {
+          '0xpriv-1': {
+            key: '0xpriv-1',
+            expectedValue: '0x01',
+            value: '0x01',
+            verified: true,
+            source: 'indexed',
+          },
+          '0xpriv-2': {
+            key: '0xpriv-2',
+            expectedValue: '0x02',
+            value: '0x02',
+            verified: true,
+            source: 'indexed',
+          },
+        },
+      },
+    } as const;
+
+    const productionReplay = await service.attemptReplayIndexedPublicEvents(
+      'chain-replay-development',
+      [] as any,
+      indexedEvents as any,
+      options
+    );
+    const developmentReplay = await service.attemptReplayIndexedPublicEvents(
+      'chain-replay-development',
+      [] as any,
+      indexedEvents as any,
+      {
+        ...options,
+        mode: 'development',
+      }
+    );
+
+    expect(productionReplay.appliedReplayKeys).toEqual([]);
+    expect(productionReplay.ignoredPublicEvents).toEqual([
+      {
+        replayKey: '0xaaa:1',
+        event: indexedEvents[0],
+        reason: 'missing_private_prefix',
+        cause: {
+          privatePrefixLength: 1,
+          mode: 'production',
+        },
+      },
+    ]);
+    expect(developmentReplay.appliedReplayKeys).toEqual(['0xaaa:1']);
+    expect(developmentReplay.ignoredPublicEvents).toEqual([]);
+    expect(register).toHaveBeenCalledTimes(1);
   });
 
   it('encodes, emits, and registers public events', async () => {
@@ -1010,7 +1252,16 @@ describe('OwnableService', () => {
     );
     const encodePublicEvent = vi.fn().mockResolvedValue(Uint8Array.from([1, 2, 3]));
     (service as any)._rpc.set(chain.id, { encodePublicEvent });
-    const registerSpy = vi.spyOn(service, 'registerPublicEvent').mockResolvedValue(undefined);
+    const registerSpy = vi.spyOn(service, 'registerPublicEvent').mockResolvedValue({
+      complete: true,
+      stateDump: [] as any,
+      appliedEvents: [],
+      appliedReplayKeys: [],
+      duplicateReplayKeys: [],
+      appliedPublicEvents: [],
+      duplicatePublicEvents: [],
+      ignoredPublicEvents: [],
+    });
 
     await service.emitPublicEvent(chain, 'consume', { amount: 1 });
 

@@ -7,7 +7,8 @@ const makeEvent = (
   transactionHash: string,
   logIndex: number,
   blockNumber: number,
-  transactionIndex: number
+  transactionIndex: number,
+  timestamp = blockNumber
 ) => ({
   source: '0xsource',
   eventType: 'consume',
@@ -16,19 +17,67 @@ const makeEvent = (
   transactionHash,
   transactionIndex,
   logIndex,
+  timestamp,
 });
 
 describe('ReplayAuthorityService', () => {
   it('returns anchor verification, replay metadata, freshness, owner, and ownable info', async () => {
-    const chain = { id: 'chain-1' } as any;
+    const chain = {
+      id: 'chain-1',
+      events: [
+        { hash: { hex: '0xpriv-1' }, timestamp: 10 },
+        { hash: { hex: '0xpriv-2' }, timestamp: 20 },
+      ],
+    } as any;
     const stateDump = [['s', 1]] as any;
     const indexedPublicEvents = [
       makeEvent('0xbbb', 4, 12, 1),
       makeEvent('0xaaa', 8, 10, 2),
       makeEvent('0xbbb', 4, 12, 1),
     ];
+    const anchorEvidence = {
+      indexedRecords: [
+        {
+          key: '0xanchor-1',
+          value: '0xvalue-1',
+          transactionHash: '0xtx-1',
+          timestamp: 10,
+        },
+      ],
+    };
+    const anchorVerification = {
+      verified: true,
+      anchors: {
+        '0xpriv-1': '0xtx-1',
+        '0xpriv-2': '0xtx-2',
+      },
+      map: {
+        '0xpriv-1': '0x01',
+        '0xpriv-2': '0x02',
+      },
+      details: {
+        '0xpriv-1': {
+          key: '0xpriv-1',
+          expectedValue: '0x01',
+          value: '0x01',
+          transactionHash: '0xtx-1',
+          timestamp: 10,
+          verified: true,
+          source: 'indexed',
+        },
+        '0xpriv-2': {
+          key: '0xpriv-2',
+          expectedValue: '0x02',
+          value: '0x02',
+          transactionHash: '0xtx-2',
+          timestamp: 20,
+          verified: true,
+          source: 'indexed',
+        },
+      },
+    };
     const eventChains = {
-      verify: vi.fn().mockResolvedValue({ verified: true, anchors: {}, map: {} }),
+      verify: vi.fn().mockResolvedValue(anchorVerification),
     } as any;
     const ownableInfo = {
       owner: '0x2222222222222222222222222222222222222222',
@@ -49,6 +98,14 @@ describe('ReplayAuthorityService', () => {
           publicEventReplayKey(indexedPublicEvents[0]!),
         ],
         duplicateReplayKeys: [publicEventReplayKey(indexedPublicEvents[2]!)],
+        appliedPublicEvents: [
+          { replayKey: publicEventReplayKey(indexedPublicEvents[1]!), event: indexedPublicEvents[1] },
+          { replayKey: publicEventReplayKey(indexedPublicEvents[0]!), event: indexedPublicEvents[0] },
+        ],
+        duplicatePublicEvents: [
+          { replayKey: publicEventReplayKey(indexedPublicEvents[2]!), event: indexedPublicEvents[2] },
+        ],
+        ignoredPublicEvents: [],
       }),
       rpc: vi.fn().mockReturnValue({
         query: vi.fn().mockResolvedValue(ownableInfo),
@@ -56,12 +113,32 @@ describe('ReplayAuthorityService', () => {
     } as any;
 
     const service = new ReplayAuthorityService({ eventChains, ownables });
-    const result = await service.evaluate({ chain, stateDump, indexedPublicEvents });
+    const result = await service.evaluate({
+      chain,
+      stateDump,
+      indexedPublicEvents,
+      anchorEvidence,
+      replayContext: {
+        privatePrefixLength: 1,
+      },
+    });
 
-    expect(eventChains.verify).toHaveBeenCalledWith(chain);
-    expect(ownables.attemptReplayIndexedPublicEvents).toHaveBeenCalledWith(chain.id, stateDump, indexedPublicEvents);
+    expect(eventChains.verify).toHaveBeenCalledWith(chain, anchorEvidence);
+    expect(ownables.attemptReplayIndexedPublicEvents).toHaveBeenCalledWith(
+      chain.id,
+      stateDump,
+      indexedPublicEvents,
+      {
+        privateEvents: [
+          { hash: '0xpriv-1', timestamp: 10 },
+          { hash: '0xpriv-2', timestamp: 20 },
+        ],
+        privatePrefixLength: 1,
+        anchorValidation: anchorVerification,
+      }
+    );
     expect(ownables.rpc).toHaveBeenCalledWith(chain.id);
-    expect(result.anchorVerification).toEqual({ verified: true, anchors: {}, map: {} });
+    expect(result.anchorVerification).toEqual(anchorVerification);
     expect(result.replay.appliedReplayKeys).toEqual(['0xaaa:8', '0xbbb:4']);
     expect(result.replay.duplicateReplayKeys).toEqual(['0xbbb:4']);
     expect(result.freshness).toEqual({
@@ -74,7 +151,10 @@ describe('ReplayAuthorityService', () => {
   });
 
   it('marks stale when indexed events cannot be fully replayed', async () => {
-    const chain = { id: 'chain-2' } as any;
+    const chain = {
+      id: 'chain-2',
+      events: [],
+    } as any;
     const stateDump = [['base', 1]] as any;
     const indexedPublicEvents = [
       makeEvent('0xaaa', 1, 10, 0),
@@ -84,7 +164,8 @@ describe('ReplayAuthorityService', () => {
     const register = vi
       .fn()
       .mockResolvedValueOnce({ state: [['after-first', 1]] })
-      .mockRejectedValueOnce(new Error('missing private event'));
+      .mockRejectedValueOnce(new Error('missing private event'))
+      .mockResolvedValueOnce({ state: [['after-third', 1]] });
     const query = vi.fn().mockResolvedValue({ owner: '0x1', issuer: '0x2' });
     const ownables = new OwnableService(
       {} as any,
@@ -98,7 +179,7 @@ describe('ReplayAuthorityService', () => {
     });
 
     const service = new ReplayAuthorityService({
-      eventChains: { verify: vi.fn().mockResolvedValue({ verified: true }) } as any,
+      eventChains: { verify: vi.fn().mockResolvedValue({ verified: true, anchors: {}, map: {}, details: {} }) } as any,
       ownables,
     });
 
@@ -108,15 +189,25 @@ describe('ReplayAuthorityService', () => {
       indexedPublicEvents,
     });
 
-    expect(register).toHaveBeenCalledTimes(2);
+    expect(register).toHaveBeenCalledTimes(3);
     expect(result.replay.complete).toBe(false);
-    expect(result.replay.failure?.replayKey).toBe(publicEventReplayKey(indexedPublicEvents[1]!));
-    expect(result.replay.appliedReplayKeys).toEqual([publicEventReplayKey(indexedPublicEvents[0]!)]);
+    expect(result.replay.appliedReplayKeys).toEqual([
+      publicEventReplayKey(indexedPublicEvents[0]!),
+      publicEventReplayKey(indexedPublicEvents[2]!),
+    ]);
+    expect(result.replay.ignoredPublicEvents).toEqual([
+      {
+        replayKey: publicEventReplayKey(indexedPublicEvents[1]!),
+        event: indexedPublicEvents[1],
+        reason: 'register_failed',
+        cause: expect.any(Error),
+      },
+    ]);
     expect(result.freshness).toEqual({
       stale: true,
-      missingReplayKeys: ['0xbbb:2', '0xccc:3'],
+      missingReplayKeys: ['0xbbb:2'],
       latestReplayKey: '0xccc:3',
     });
-    expect(query).toHaveBeenCalledWith({ get_info: {} }, [['after-first', 1]]);
+    expect(query).toHaveBeenCalledWith({ get_info: {} }, [['after-third', 1]]);
   });
 });

@@ -2,6 +2,7 @@ import type { Event, Message } from 'eqty-core';
 import type { TypedPackage } from '../types/TypedPackage.js';
 import type { OwnableRPC } from '../types/OwnableRuntime.js';
 import type { PublicEvent } from '../types/OwnableRuntime.js';
+import type { AnchorValidationResult, AnchorValidationSource } from '../types/AnchorValidation.js';
 
 export type LogProgress = (step: string, meta?: Record<string, unknown>) => void;
 
@@ -48,11 +49,8 @@ export interface AnchorProvider {
     data: Uint8Array,
     txOptions?: { value?: bigint }
   ): Promise<PublicEvent>;
-  verifyAnchors(...anchors: any[]): Promise<{
-    verified: boolean;
-    anchors: Record<string, string | undefined>;
-    map: Record<string, string>;
-  }>;
+  validateAnchors?: AnchorValidationSource["validateAnchors"];
+  verifyAnchors(...anchors: any[]): Promise<AnchorValidationResult>;
 }
 
 export interface PackageAssetIO {

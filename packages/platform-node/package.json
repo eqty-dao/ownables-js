@@ -25,6 +25,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
+    "prepare": "yarn build",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "publishConfig": {

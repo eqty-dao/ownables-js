@@ -1,5 +1,6 @@
 import { withProgress } from "@ownables/core";
 import type { LogProgress } from "@ownables/core";
+import JSZip from "jszip";
 
 export interface HubUploadResult {
   cid: string;
@@ -73,12 +74,8 @@ export default class HubService {
     return parsed;
   }
 
-  getPackageDownloadUrl(cid: string): string {
-    return this.endpoint(`/packages/${encodeURIComponent(cid)}/download`);
-  }
-
-  getOwnableChainUrl(id: string): string {
-    return this.endpoint(`/ownables/${encodeURIComponent(id)}/chain`);
+  getOwnableBundleUrl(id: string): string {
+    return this.endpoint(`/ownables/${encodeURIComponent(id)}/bundle`);
   }
 
   async isAvailable(): Promise<boolean> {
@@ -119,18 +116,21 @@ export default class HubService {
     });
   }
 
-  async downloadOwnable(cid: string, onProgress?: LogProgress): Promise<File> {
+  async downloadOwnable(ownableId: string, onProgress?: LogProgress): Promise<File> {
     const step = withProgress(onProgress);
 
     return await step("hubDownload", async () => {
-      const response = await this.fetchFn(this.endpoint(`/packages/${encodeURIComponent(cid)}/download`));
+      const bundleUrl = this.parseHubDownloadUrl(this.getOwnableBundleUrl(ownableId));
+      const response = await this.fetchFn(bundleUrl.toString());
 
       if (!response.ok) {
         const message = await readError(response);
         throw new Error(`Hub download failed: ${message}`);
       }
 
-      return new File([await response.blob()], `${cid}.zip`, { type: "application/zip" });
+      return new File([await response.blob()], fileNameFromUrl(bundleUrl), {
+        type: response.headers.get("content-type") || "application/zip",
+      });
     });
   }
 
@@ -138,28 +138,22 @@ export default class HubService {
     packageFile: File;
     chainJson: unknown;
   }> {
-    const packageUrl = this.parseHubDownloadUrl(this.getPackageDownloadUrl(packageCid));
-    const chainUrl = this.parseHubDownloadUrl(this.getOwnableChainUrl(ownableId));
-    const [packageResponse, chainResponse] = await Promise.all([
-      this.fetchFn(packageUrl.toString()),
-      this.fetchFn(chainUrl.toString()),
-    ]);
+    const bundleUrl = this.parseHubDownloadUrl(this.getOwnableBundleUrl(ownableId));
+    const bundleResponse = await this.fetchFn(bundleUrl.toString());
 
-    if (!packageResponse.ok) {
-      const message = await readError(packageResponse);
+    if (!bundleResponse.ok) {
+      const message = await readError(bundleResponse);
       throw new Error(`Hub import failed: ${message}`);
     }
 
-    if (!chainResponse.ok) {
-      const message = await readError(chainResponse);
-      throw new Error(`Hub event chain download failed: ${message}`);
-    }
+    const bundleBlob = await bundleResponse.blob();
+    const chainJson = await readChainJsonFromBundle(bundleBlob);
 
     return {
-      packageFile: new File([await packageResponse.blob()], fileNameFromUrl(packageUrl), {
-        type: packageResponse.headers.get("content-type") || "application/zip",
+      packageFile: new File([bundleBlob], packageCid ? `${packageCid}.zip` : fileNameFromUrl(bundleUrl), {
+        type: bundleResponse.headers.get("content-type") || "application/zip",
       }),
-      chainJson: await chainResponse.json(),
+      chainJson,
     };
   }
 
@@ -222,4 +216,15 @@ async function readError(response: Response): Promise<string> {
   }
 
   return (await response.text().catch(() => "")) || `${response.status} ${response.statusText}`;
+}
+
+async function readChainJsonFromBundle(bundleBlob: Blob): Promise<unknown> {
+  const archive = await JSZip.loadAsync(await bundleBlob.arrayBuffer());
+  const chainEntry = archive.file("chain.json") ?? archive.file("eventChain.json");
+
+  if (!chainEntry) {
+    throw new Error("Hub bundle did not include chain.json");
+  }
+
+  return JSON.parse(await chainEntry.async("text"));
 }

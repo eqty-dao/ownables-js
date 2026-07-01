@@ -330,6 +330,7 @@ describe('Ethers EQTYService', () => {
       verified: false,
       anchors: {},
       map: {},
+      details: {},
     });
 
     const key = Binary.fromHex(`0x${'b'.repeat(64)}`);
@@ -337,6 +338,7 @@ describe('Ethers EQTYService', () => {
     const result = await service.verifyAnchors({ key, value });
     expect(result.verified).toBe(false);
     expect(result.anchors[key.hex]).toBeUndefined();
+    expect(result.details[key.hex]?.timestamp).toBeUndefined();
   });
 
   it('provides lockable operations through injected lockable client', async () => {
@@ -431,6 +433,7 @@ describe('Ethers EQTYService', () => {
     expect(result.verified).toBe(false);
     expect(result.anchors[key.hex]).toBe('0xtx1');
     expect(result.map[key.hex]).toBe(`0x${'e'.repeat(64)}`);
+    expect(result.details[key.hex]?.timestamp).toBe(1);
   });
 
   it('handles sparse log arrays where latest log entry is undefined', async () => {

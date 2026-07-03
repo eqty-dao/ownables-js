@@ -1,9 +1,11 @@
 import type { Binary, ViemSigner } from 'eqty-core';
+import type { Chain } from 'viem';
 
 export type TypedDataDomain = Record<string, unknown>;
 export type TypedDataField = { name: string; type: string };
 export type AnchorTxOptions = { value?: bigint };
 export type EmittedPublicEvent = {
+  subjectId: string;
   source: string;
   eventType: string;
   data: string;
@@ -11,6 +13,7 @@ export type EmittedPublicEvent = {
   transactionHash: string;
   transactionIndex: number;
   logIndex: number;
+  timestamp?: number;
 };
 
 export interface AnchorClientLike {
@@ -36,8 +39,14 @@ export interface EqtyTokenReader {
   allowance(owner: string, spender: string): Promise<bigint>;
 }
 
+export interface ViemAnchorConfig {
+  contractAddress: `0x${string}`;
+  chain?: Chain;
+}
+
 export interface EQTYServiceDeps {
   anchorClient?: AnchorClientLike;
+  anchor?: ViemAnchorConfig;
   publicEventClient?: PublicEventClientLike;
   feeReader?: AnchorFeeReader;
   eqtyToken?: EqtyTokenReader;

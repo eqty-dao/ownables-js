@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import JSZip from "jszip";
 
 import HubService, {
   AVAILABLE_OWNABLES_UNAVAILABLE_MESSAGE,
@@ -26,7 +27,7 @@ describe("HubService", () => {
   it("guards Hub imports to the configured origin", () => {
     const hub = new HubService("https://hub.example");
 
-    expect(() => hub.parseHubDownloadUrl(hub.getPackageDownloadUrl("bafy-1"))).not.toThrow();
+    expect(() => hub.parseHubDownloadUrl(hub.getOwnableBundleUrl("ownable-1"))).not.toThrow();
     expect(() =>
       hub.parseHubDownloadUrl("https://evil.example/ownables/bafy/download")
     ).toThrow("Hub download URL must use the configured Hub origin");
@@ -82,7 +83,7 @@ describe("HubService", () => {
     expect(result).toEqual({ cid: "bafy-uploaded", owner: ACCOUNT });
   });
 
-  it("downloads ownables from the Hub package endpoint", async () => {
+  it("downloads ownables from the Hub bundle endpoint", async () => {
     const fetchFn = vi.fn().mockResolvedValue(
       new Response(new Blob(["zip-bytes"], { type: "application/zip" }), {
         status: 200,
@@ -91,35 +92,59 @@ describe("HubService", () => {
     );
     const hub = new HubService("https://hub.example", fetchFn);
 
-    const result = await hub.downloadOwnable("bafy-download");
+    const result = await hub.downloadOwnable("ownable-download");
 
-    expect(fetchFn).toHaveBeenCalledWith("https://hub.example/packages/bafy-download/download");
-    expect(result.name).toBe("bafy-download.zip");
+    expect(fetchFn).toHaveBeenCalledWith("https://hub.example/ownables/ownable-download/bundle");
+    expect(result.name).toBe("bundle.zip");
     expect(result.type).toBe("application/zip");
   });
 
+  it("fails import when the Hub bundle does not include chain state", async () => {
+    const archive = await new Blob([
+      await createBundle([['package.json', JSON.stringify({ name: 'bundle' })]]),
+    ], { type: "application/zip" });
+    const fetchFn = vi.fn().mockResolvedValue(
+      new Response(archive, {
+        status: 200,
+        headers: { "content-type": "application/zip" },
+      })
+    );
+    const hub = new HubService("https://hub.example", fetchFn);
+
+    await expect(hub.importFromHub("bafy-1", "ownable-1")).rejects.toThrow(
+      "Hub bundle did not include chain.json"
+    );
+  });
+
   it("imports package and chain payloads from Hub", async () => {
+    const archive = await new Blob([
+      await createBundle([
+        ['chain.json', JSON.stringify({ id: 'ownable-1' })],
+        ['package.json', JSON.stringify({ name: 'bundle' })],
+      ]),
+    ], { type: "application/zip" });
     const fetchFn = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response(new Blob(["zip-bytes"], { type: "application/zip" }), {
+        new Response(archive, {
           status: 200,
           headers: { "content-type": "application/zip" },
-        })
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ id: "ownable-1" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
         })
       );
     const hub = new HubService("https://hub.example", fetchFn);
 
     const result = await hub.importFromHub("bafy-1", "ownable-1");
 
-    expect(fetchFn).toHaveBeenNthCalledWith(1, "https://hub.example/packages/bafy-1/download");
-    expect(fetchFn).toHaveBeenNthCalledWith(2, "https://hub.example/ownables/ownable-1/chain");
-    expect(result.packageFile.name).toBe("download.zip");
+    expect(fetchFn).toHaveBeenNthCalledWith(1, "https://hub.example/ownables/ownable-1/bundle");
+    expect(result.packageFile.name).toBe("bafy-1.zip");
     expect(result.chainJson).toEqual({ id: "ownable-1" });
   });
 });
+
+async function createBundle(entries: Array<[string, string]>): Promise<Uint8Array> {
+  const archive = new JSZip();
+  for (const [name, content] of entries) {
+    archive.file(name, content);
+  }
+  return archive.generateAsync({ type: "uint8array" });
+}

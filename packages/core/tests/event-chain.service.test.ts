@@ -66,7 +66,7 @@ describe('EventChainService', () => {
 
   it('delegates verify to anchor provider', async () => {
     const eqty = {
-      verifyAnchors: vi.fn().mockResolvedValue({ verified: true, anchors: {}, map: {} }),
+      verifyAnchors: vi.fn().mockResolvedValue({ verified: true, anchors: {}, map: {}, details: {} }),
     };
 
     const service = createService({} as any, eqty as any);
@@ -74,6 +74,65 @@ describe('EventChainService', () => {
 
     expect(result.verified).toBe(true);
     expect(eqty.verifyAnchors).toHaveBeenCalledTimes(1);
+  });
+
+  it('validates indexed anchor records through the same service result contract', async () => {
+    const indexedResult = {
+      verified: true,
+      anchors: {
+        [`0x${'a'.repeat(64)}`]: '0xtx1',
+      },
+      map: {
+        [`0x${'a'.repeat(64)}`]: `0x${'b'.repeat(64)}`,
+      },
+      details: {
+        [`0x${'a'.repeat(64)}`]: {
+          key: `0x${'a'.repeat(64)}`,
+          expectedValue: `0x${'b'.repeat(64)}`,
+          value: `0x${'b'.repeat(64)}`,
+          transactionHash: '0xtx1',
+          timestamp: 11,
+          blockNumber: 2,
+          transactionIndex: 1,
+          logIndex: 0,
+          verified: true,
+          source: 'indexed',
+        },
+      },
+    };
+    const eqty = {
+      validateAnchors: vi.fn().mockResolvedValue(indexedResult),
+      verifyAnchors: vi.fn(),
+    };
+    const service = createService({} as any, eqty as any);
+    const chain = {
+      anchorMap: [
+        {
+          key: { hex: `0x${'a'.repeat(64)}` },
+          value: { hex: `0x${'b'.repeat(64)}` },
+        },
+      ],
+    } as any;
+
+    const providerResult = await service.verify(chain);
+    const indexedEvidenceResult = await service.verify(chain, {
+      indexedRecords: [
+        {
+          key: `0x${'a'.repeat(64)}`,
+          value: `0x${'b'.repeat(64)}`,
+          transactionHash: '0xtx1',
+          timestamp: 11,
+          blockNumber: 2,
+          transactionIndex: 1,
+          logIndex: 0,
+        },
+      ],
+    });
+
+    expect(providerResult).toEqual(indexedResult);
+    expect(indexedEvidenceResult).toEqual(indexedResult);
+    expect(eqty.validateAnchors).toHaveBeenCalledWith(...chain.anchorMap);
+    expect(eqty.verifyAnchors).not.toHaveBeenCalled();
   });
 
   it('stores chain state and queues anchors when anchoring is enabled', async () => {

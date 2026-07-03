@@ -2,19 +2,21 @@
   "name": "@ownables/adapter-viem",
   "version": "0.8.1",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/adapter-viem/src/index.js",
+  "types": "dist/adapter-viem/src/index.d.ts",
   "files": [
     "dist"
   ],
   "dependencies": {
     "@ownables/core": "workspace:*",
-    "eqty-core": "^1.0.2",
+    "eqty-core": "file:../../../eqty-core",
     "viem": "^2.47.4"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
+    "prepack": "yarn build",
+    "prepare": "yarn build",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "publishConfig": {

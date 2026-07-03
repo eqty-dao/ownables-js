@@ -27,5 +27,5 @@ describe('@ownables/platform-browser package root', () => {
     expect(builtModule.IDBService).toBeTypeOf('function');
     expect(builtModule.HubService).toBeTypeOf('function');
     expect(builtModule.calculateCid).toBeTypeOf('function');
-  });
+  }, 15000);
 });

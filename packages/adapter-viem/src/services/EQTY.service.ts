@@ -6,7 +6,7 @@ import {
   ViemContract,
   ViemSigner,
 } from "eqty-core";
-import type { PublicClient, WalletClient } from "viem";
+import type { Chain, PublicClient, WalletClient } from "viem";
 import {
   createPublicClient,
   createWalletClient,
@@ -16,6 +16,12 @@ import {
   zeroAddress,
 } from "viem";
 import { base, baseSepolia } from "viem/chains";
+import {
+  buildAnchorValidationResult,
+  normalizeAnchorValidationPairs,
+  ZERO_ANCHOR_VALUE,
+  type AnchorValidationResult,
+} from "@ownables/core";
 import type {
   AnchorClientLike,
   AnchorFeeReader,
@@ -24,8 +30,6 @@ import type {
   EQTYServiceDeps,
   PublicEventClientLike,
 } from "../types/EQTY";
-
-const ZERO_HASH = Binary.fromHex("0x" + "0".repeat(64));
 
 /**
  * EQTYService
@@ -41,15 +45,20 @@ export default class EQTYService {
   private readonly logger: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
   private readonly lockableClientOverride;
   private readonly eqtyTokenOverride;
+  private readonly anchorContractAddress: `0x${string}`;
 
-  private getChain() {
+  private getChain(deps: EQTYServiceDeps): Chain | undefined {
+    if (deps.anchor?.chain) {
+      return deps.anchor.chain;
+    }
+
     switch (this.chainId) {
       case base.id:
         return base;
       case baseSepolia.id:
         return baseSepolia;
       default:
-        throw new Error(`Unsupported chain ID: ${this.chainId}`);
+        return undefined;
     }
   }
 
@@ -61,14 +70,21 @@ export default class EQTYService {
     ethereumProvider?: any,
     deps: EQTYServiceDeps = {}
   ) {
-    const chain = this.getChain();
+    const chain = this.getChain(deps);
     const eth = ethereumProvider;
+    if (!deps.anchor?.contractAddress) {
+      throw new Error("Anchor contract address is required. Provide deps.anchor.contractAddress.");
+    }
+    this.anchorContractAddress = deps.anchor.contractAddress;
 
     this.walletClient =
       walletClient ||
       (() => {
         if (!eth)
           throw new Error("No Ethereum provider found. Provide walletClient/publicClient or ethereumProvider.");
+        if (!chain) {
+          throw new Error(`Unsupported chain ID: ${this.chainId}`);
+        }
         return createWalletClient({
           account: getAddress(address),
           chain,
@@ -81,6 +97,9 @@ export default class EQTYService {
       (() => {
         if (!eth)
           throw new Error("No Ethereum provider found. Provide walletClient/publicClient or ethereumProvider.");
+        if (!chain) {
+          throw new Error(`Unsupported chain ID: ${this.chainId}`);
+        }
         return createPublicClient({
           chain,
           transport: custom(eth),
@@ -93,7 +112,7 @@ export default class EQTYService {
       const contract = new ViemContract(
         this.publicClient,
         this.walletClient,
-        AnchorClient.contractAddress(this.chainId)
+        this.anchorContractAddress
       );
       this.anchorClient = new AnchorClient(contract) as unknown as AnchorClientLike;
     }
@@ -109,7 +128,7 @@ export default class EQTYService {
         ) => {
           const transactionHash = await (this.walletClient as any).writeContract({
             account: (this.walletClient as any).account,
-            address: AnchorClient.contractAddress(this.chainId) as `0x${string}`,
+            address: this.anchorContractAddress,
             abi: [
               {
                 type: 'function',
@@ -132,7 +151,7 @@ export default class EQTYService {
             'event PublicEvent(bytes32 indexed subjectId, address indexed source, string eventType, bytes data, uint64 timestamp)'
           );
           const logs = await (this.publicClient as any).getLogs({
-            address: AnchorClient.contractAddress(this.chainId) as `0x${string}`,
+            address: this.anchorContractAddress,
             event: publicEventAbi,
             fromBlock: receipt.blockNumber,
             toBlock: receipt.blockNumber,
@@ -148,6 +167,7 @@ export default class EQTYService {
           }
 
           return {
+            subjectId: log.args.subjectId as string,
             source: log.args.source as string,
             eventType: log.args.eventType as string,
             data:
@@ -158,6 +178,7 @@ export default class EQTYService {
             transactionHash,
             transactionIndex: Number(receipt.transactionIndex ?? receipt.index ?? 0),
             logIndex: Number(log.logIndex),
+            ...(log.args.timestamp !== undefined ? { timestamp: Number(log.args.timestamp) } : {}),
           };
         },
       };
@@ -186,7 +207,7 @@ export default class EQTYService {
     if (first instanceof Binary || (first && (first as any).hex)) {
       const list = (anchors as Array<any>).map((b) => toBinary(b));
       for (const val of list) {
-        this.anchorQueue.push({ key: val, value: ZERO_HASH });
+        this.anchorQueue.push({ key: val, value: ZERO_ANCHOR_VALUE });
       }
     } else {
       const list = (anchors as Array<any>).map(({ key, value }) => ({
@@ -223,7 +244,7 @@ export default class EQTYService {
 
   async quoteEqtyCost(count: bigint): Promise<bigint> {
     return (await (this.publicClient as any).readContract({
-      address: AnchorClient.contractAddress(this.chainId),
+      address: this.anchorContractAddress,
       abi: [{ name: 'quoteEqtyCost', type: 'function', stateMutability: 'view', inputs: [{ name: 'count', type: 'uint256' }], outputs: [{ name: 'cost', type: 'uint256' }] }],
       functionName: 'quoteEqtyCost',
       args: [count],
@@ -232,7 +253,7 @@ export default class EQTYService {
 
   async quoteEthCost(count: bigint): Promise<bigint> {
     return (await (this.publicClient as any).readContract({
-      address: AnchorClient.contractAddress(this.chainId),
+      address: this.anchorContractAddress,
       abi: [{ name: 'quoteEthCost', type: 'function', stateMutability: 'view', inputs: [{ name: 'count', type: 'uint256' }], outputs: [{ name: 'cost', type: 'uint256' }] }],
       functionName: 'quoteEthCost',
       args: [count],
@@ -241,7 +262,7 @@ export default class EQTYService {
 
   async eqtyToken(): Promise<string> {
     return (await (this.publicClient as any).readContract({
-      address: AnchorClient.contractAddress(this.chainId),
+      address: this.anchorContractAddress,
       abi: [{ name: 'eqtyToken', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: 'token', type: 'address' }] }],
       functionName: 'eqtyToken',
       args: [],
@@ -265,7 +286,7 @@ export default class EQTYService {
       return { value: 0n };
     }
 
-    const anchorAddress = AnchorClient.contractAddress(this.chainId);
+    const anchorAddress = this.anchorContractAddress;
     const eqtyTokenAddress = await this.feeReader.eqtyToken();
     if (eqtyTokenAddress !== zeroAddress) {
       const eqtyToken: EqtyTokenReader =
@@ -296,39 +317,13 @@ export default class EQTYService {
     }
   }
 
-  async verifyAnchors(...anchors: any[]): Promise<{
-    verified: boolean;
-    anchors: Record<string, string | undefined>;
-    map: Record<string, string>;
-  }> {
+  async validateAnchors(...anchors: any[]): Promise<AnchorValidationResult> {
     if (anchors.length === 0) {
-      return { verified: false, anchors: {}, map: {} };
+      return { verified: false, anchors: {}, map: {}, details: {} };
     }
 
-    const contractAddress = AnchorClient.contractAddress(this.chainId);
-    const anchorsMap: Record<string, string> = {};
-    const txHashes: Record<string, string | undefined> = {};
-    let allVerified = true;
-
-    const anchorPairs: Array<{ key: Binary; value: Binary }> = [];
-
-    const toBinary = (b: any) =>
-      b instanceof Binary ? b : Binary.fromHex(b.hex);
-    const first = anchors[0] as any;
-
-    if (first instanceof Binary || (first && (first as any).hex)) {
-      for (const anchor of anchors as Array<any>) {
-        const key = toBinary(anchor);
-        anchorPairs.push({ key, value: ZERO_HASH });
-      }
-    } else {
-      for (const anchor of anchors as Array<any>) {
-        anchorPairs.push({
-          key: toBinary(anchor.key),
-          value: toBinary(anchor.value),
-        });
-      }
-    }
+    const contractAddress = this.anchorContractAddress;
+    const anchorPairs = normalizeAnchorValidationPairs(...anchors);
 
     const anchoredEvent = parseAbiItem(
       "event Anchored(bytes32 indexed key, bytes32 value, address indexed sender, uint64 timestamp)"
@@ -339,6 +334,7 @@ export default class EQTYService {
     const fromBlock =
       currentBlock > maxBlockRange ? currentBlock - maxBlockRange : BigInt(0);
 
+    const records = [];
     for (const { key, value } of anchorPairs) {
       try {
         const logs = await (this.publicClient as any).getLogs({
@@ -353,40 +349,35 @@ export default class EQTYService {
 
         if (logs.length > 0) {
           const latestLog = logs[logs.length - 1];
-          txHashes[key.hex] = latestLog.transactionHash;
-
-          if (value.hex !== ZERO_HASH.hex) {
-            const logValue = (latestLog.args as any).value;
-            const normalizedLogValue =
-              typeof logValue === "string" ? logValue.toLowerCase() : logValue;
-            const normalizedExpectedValue = value.hex.toLowerCase();
-
-            anchorsMap[key.hex] = normalizedLogValue;
-
-            if (normalizedLogValue !== normalizedExpectedValue) {
-              allVerified = false;
-            }
-          } else {
-            anchorsMap[key.hex] = value.hex.toLowerCase();
-          }
+          const logValue = (latestLog.args as any).value;
+          const normalizedLogValue =
+            typeof logValue === "string" ? logValue.toLowerCase() : value.hex.toLowerCase();
+          records.push({
+            key: key.hex,
+            expectedValue: value.hex.toLowerCase(),
+            value: normalizedLogValue,
+            transactionHash: latestLog.transactionHash,
+            verified: value.hex === ZERO_ANCHOR_VALUE.hex || normalizedLogValue === value.hex.toLowerCase(),
+            source: "provider" as const,
+            ...(latestLog.args?.timestamp !== undefined ? { timestamp: Number(latestLog.args.timestamp) } : {}),
+            ...(latestLog.blockNumber !== undefined ? { blockNumber: Number(latestLog.blockNumber) } : {}),
+            ...(latestLog.transactionIndex !== undefined ? { transactionIndex: Number(latestLog.transactionIndex) } : {}),
+            ...(latestLog.logIndex !== undefined ? { logIndex: Number(latestLog.logIndex) } : {}),
+          });
         } else {
-          txHashes[key.hex] = undefined;
-          anchorsMap[key.hex] = value.hex.toLowerCase();
-          allVerified = false;
+          records.push(undefined);
         }
       } catch (error) {
         this.logger.error(`Failed to verify anchor ${key.hex}:`, error);
-        txHashes[key.hex] = undefined;
-        anchorsMap[key.hex] = value.hex.toLowerCase();
-        allVerified = false;
+        records.push(undefined);
       }
     }
 
-    return {
-      verified: allVerified,
-      anchors: txHashes,
-      map: anchorsMap,
-    };
+    return buildAnchorValidationResult(anchorPairs, records);
+  }
+
+  async verifyAnchors(...anchors: any[]): Promise<AnchorValidationResult> {
+    return this.validateAnchors(...anchors);
   }
 
   private async lockableRead<T>(

@@ -867,11 +867,62 @@ describe('OwnableService', () => {
       logIndex: 7,
     };
 
-    await service.registerPublicEvent(chain, event);
-    await service.registerPublicEvent(chain, event);
+    const firstReplay = await service.registerPublicEvent(chain, event);
+    const duplicateReplay = await service.registerPublicEvent(chain, event);
 
     expect(register).toHaveBeenCalledTimes(1);
+    expect(firstReplay.appliedReplayKeys).toEqual([publicEventReplayKey(event)]);
+    expect(duplicateReplay.duplicateReplayKeys).toEqual([publicEventReplayKey(event)]);
     expect(await stateStore.get(`ownable:${chain.id}.public-event-replays`, publicEventReplayKey(event))).toBe(true);
+  });
+
+  it('strips receipt-only fields before replaying direct public events', async () => {
+    const stateStore = createStateStore();
+    const chain = {
+      id: `0x${'3'.repeat(98)}`,
+      state: { hex: '0xstate' },
+      latestHash: { hex: `0x${'1'.repeat(64)}` },
+      toJSON: vi.fn().mockReturnValue({ id: `0x${'3'.repeat(98)}`, events: [] }),
+      add: vi.fn(),
+      events: [],
+    } as any;
+    await stateStore.createStore(`ownable:${chain.id}`);
+    await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
+    const service = createService(
+      stateStore as any,
+      { getStateDump: vi.fn().mockResolvedValue([['s', 1]]) } as any,
+      { address: '0xabc', sign: vi.fn(), anchor: vi.fn() } as any,
+      {} as any
+    );
+    const register = vi.fn().mockResolvedValue({ state: [['next', 1]] });
+    (service as any)._rpc.set(chain.id, { register });
+    vi.spyOn(service, 'store').mockResolvedValue(undefined as any);
+
+    await service.registerPublicEvent(chain, {
+      subjectId: Binary.fromHex(chain.id).hash().hex,
+      source: '0xsource',
+      eventType: 'consume',
+      data: `0x${'11'.repeat(4)}`,
+      blockNumber: 1,
+      transactionHash: `0x${'22'.repeat(32)}`,
+      transactionIndex: 0,
+      logIndex: 7,
+      timestamp: 123,
+    });
+
+    expect(register).toHaveBeenCalledWith(
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: Binary.fromHex(`0x${'11'.repeat(4)}`),
+        blockNumber: 1,
+        transactionHash: Binary.fromHex(`0x${'22'.repeat(32)}`),
+        transactionIndex: 0,
+        logIndex: 7,
+      },
+      { sender: '0xabc', funds: [] },
+      [['s', 1]]
+    );
   });
 
   it('replays indexed public events with deterministic dedupe order', async () => {
@@ -892,7 +943,7 @@ describe('OwnableService', () => {
         eventType: 'consume',
         data: `0x${'11'.repeat(4)}`,
         blockNumber: 12,
-        transactionHash: '0xbbb',
+        transactionHash: `0x${'bb'.repeat(32)}`,
         transactionIndex: 1,
         logIndex: 4,
       },
@@ -901,7 +952,7 @@ describe('OwnableService', () => {
         eventType: 'consume',
         data: `0x${'11'.repeat(4)}`,
         blockNumber: 10,
-        transactionHash: '0xaaa',
+        transactionHash: `0x${'aa'.repeat(32)}`,
         transactionIndex: 2,
         logIndex: 8,
       },
@@ -910,7 +961,7 @@ describe('OwnableService', () => {
         eventType: 'consume',
         data: `0x${'11'.repeat(4)}`,
         blockNumber: 12,
-        transactionHash: '0xbbb',
+        transactionHash: `0x${'bb'.repeat(32)}`,
         transactionIndex: 1,
         logIndex: 4,
       },
@@ -919,12 +970,18 @@ describe('OwnableService', () => {
     const replay = await service.replayIndexedPublicEvents('chain-replay', [] as any, indexedEvents as any);
 
     expect(register).toHaveBeenCalledTimes(2);
-    expect(replay.appliedReplayKeys).toEqual(['0xaaa:8', '0xbbb:4']);
-    expect(replay.duplicateReplayKeys).toEqual(['0xbbb:4']);
+    expect(replay.appliedReplayKeys).toEqual([`0x${'aa'.repeat(32)}:8`, `0x${'bb'.repeat(32)}:4`]);
+    expect(replay.duplicateReplayKeys).toEqual([`0x${'bb'.repeat(32)}:4`]);
+    expect(replay.duplicatePublicEvents).toEqual([
+      {
+        replayKey: `0x${'bb'.repeat(32)}:4`,
+        event: indexedEvents[2],
+      },
+    ]);
     expect(replay.stateDump).toEqual([['s2', 2]]);
   });
 
-  it('preserves partial replay progress on replay attempts and keeps fail-fast replay API', async () => {
+  it('preserves partial replay progress and records ignored public events without throwing', async () => {
     const service = createService(
       {} as any,
       {} as any,
@@ -943,7 +1000,7 @@ describe('OwnableService', () => {
         eventType: 'consume',
         data: `0x${'11'.repeat(4)}`,
         blockNumber: 10,
-        transactionHash: '0xaaa',
+        transactionHash: `0x${'aa'.repeat(32)}`,
         transactionIndex: 2,
         logIndex: 8,
       },
@@ -952,7 +1009,7 @@ describe('OwnableService', () => {
         eventType: 'consume',
         data: `0x${'22'.repeat(4)}`,
         blockNumber: 12,
-        transactionHash: '0xbbb',
+        transactionHash: `0x${'bb'.repeat(32)}`,
         transactionIndex: 1,
         logIndex: 4,
       },
@@ -961,7 +1018,7 @@ describe('OwnableService', () => {
         eventType: 'consume',
         data: `0x${'22'.repeat(4)}`,
         blockNumber: 12,
-        transactionHash: '0xbbb',
+        transactionHash: `0x${'bb'.repeat(32)}`,
         transactionIndex: 1,
         logIndex: 4,
       },
@@ -974,25 +1031,261 @@ describe('OwnableService', () => {
     );
 
     expect(attempt.complete).toBe(false);
-    expect(attempt.appliedReplayKeys).toEqual(['0xaaa:8']);
-    expect(attempt.duplicateReplayKeys).toEqual(['0xbbb:4']);
+    expect(attempt.appliedReplayKeys).toEqual([`0x${'aa'.repeat(32)}:8`]);
+    expect(attempt.duplicateReplayKeys).toEqual([`0x${'bb'.repeat(32)}:4`]);
     expect(attempt.stateDump).toEqual([['s1', 1]]);
-    expect(attempt.failure?.replayKey).toBe('0xbbb:4');
-    expect(attempt.failure?.event).toEqual(indexedEvents[1]);
-    expect(attempt.failure?.cause).toBe(replayFailure);
+    expect(attempt.ignoredPublicEvents).toEqual([
+      {
+        replayKey: `0x${'bb'.repeat(32)}:4`,
+        event: indexedEvents[1],
+        reason: 'register_failed',
+        cause: replayFailure,
+      },
+    ]);
 
-    await expect(
-      service.replayIndexedPublicEvents('chain-replay-failure', [] as any, indexedEvents as any)
-    ).rejects.toThrow('missing private event');
-    expect(register).toHaveBeenCalledTimes(3);
+    const replay = await service.replayIndexedPublicEvents('chain-replay-failure', [] as any, indexedEvents as any);
+    expect(replay.complete).toBe(false);
+    expect(register).toHaveBeenCalledTimes(4);
+  });
+
+  it('replays only public events inside the proven private prefix window', async () => {
+    const service = createService(
+      {} as any,
+      {} as any,
+      { address: '0xabc' } as any,
+      {} as any
+    );
+    const register = vi.fn().mockResolvedValue({ state: [['inside-window', 1]] });
+    (service as any)._rpc.set('chain-replay-window', { register });
+    const indexedEvents = [
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'11'.repeat(4)}`,
+        blockNumber: 9,
+        transactionHash: `0x${'aa'.repeat(32)}`,
+        transactionIndex: 0,
+        logIndex: 1,
+        timestamp: 5,
+      },
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'22'.repeat(4)}`,
+        blockNumber: 10,
+        transactionHash: `0x${'bb'.repeat(32)}`,
+        transactionIndex: 0,
+        logIndex: 2,
+        timestamp: 15,
+      },
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'33'.repeat(4)}`,
+        blockNumber: 11,
+        transactionHash: `0x${'cc'.repeat(32)}`,
+        transactionIndex: 0,
+        logIndex: 3,
+        timestamp: 25,
+      },
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'44'.repeat(4)}`,
+        blockNumber: 12,
+        transactionHash: `0x${'dd'.repeat(32)}`,
+        transactionIndex: 0,
+        logIndex: 4,
+      },
+    ];
+
+    const replay = await service.attemptReplayIndexedPublicEvents(
+      'chain-replay-window',
+      [] as any,
+      indexedEvents as any,
+      {
+        privateEvents: [
+          { hash: '0xpriv-1', timestamp: 10 },
+          { hash: '0xpriv-2', timestamp: 20 },
+          { hash: '0xpriv-3', timestamp: 30 },
+        ],
+        privatePrefixLength: 1,
+        anchorValidation: {
+          verified: true,
+          anchors: {
+            '0xpriv-1': '0xtx-1',
+            '0xpriv-2': '0xtx-2',
+            '0xpriv-3': '0xtx-3',
+          },
+          map: {
+            '0xpriv-1': '0x01',
+            '0xpriv-2': '0x02',
+            '0xpriv-3': '0x03',
+          },
+          details: {
+            '0xpriv-1': {
+              key: '0xpriv-1',
+              expectedValue: '0x01',
+              value: '0x01',
+              transactionHash: '0xtx-1',
+              timestamp: 10,
+              verified: true,
+              source: 'indexed',
+            },
+            '0xpriv-2': {
+              key: '0xpriv-2',
+              expectedValue: '0x02',
+              value: '0x02',
+              transactionHash: '0xtx-2',
+              timestamp: 20,
+              verified: true,
+              source: 'indexed',
+            },
+            '0xpriv-3': {
+              key: '0xpriv-3',
+              expectedValue: '0x03',
+              value: '0x03',
+              transactionHash: '0xtx-3',
+              timestamp: 30,
+              verified: true,
+              source: 'indexed',
+            },
+          },
+        },
+      }
+    );
+
+    expect(register).toHaveBeenCalledTimes(1);
+    expect(replay.complete).toBe(false);
+    expect(replay.appliedReplayKeys).toEqual([`0x${'bb'.repeat(32)}:2`]);
+    expect(replay.ignoredPublicEvents).toEqual([
+      {
+        replayKey: `0x${'aa'.repeat(32)}:1`,
+        event: indexedEvents[0],
+        reason: 'missing_private_prefix',
+        cause: {
+          privatePrefixLength: 1,
+          usedTimestampFallback: false,
+        },
+      },
+      {
+        replayKey: `0x${'cc'.repeat(32)}:3`,
+        event: indexedEvents[2],
+        reason: 'missing_private_prefix',
+        cause: {
+          privatePrefixLength: 1,
+          usedTimestampFallback: false,
+        },
+      },
+      {
+        replayKey: `0x${'dd'.repeat(32)}:4`,
+        event: indexedEvents[3],
+        reason: 'missing_public_timestamp',
+        cause: {
+          privatePrefixLength: 1,
+          usedTimestampFallback: false,
+        },
+      },
+    ]);
+  });
+
+  it('falls back to private event timestamps only in development mode', async () => {
+    const service = createService(
+      {} as any,
+      {} as any,
+      { address: '0xabc' } as any,
+      {} as any
+    );
+    const register = vi.fn().mockResolvedValue({ state: [['dev-window', 1]] });
+    (service as any)._rpc.set('chain-replay-development', { register });
+    const indexedEvents = [
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'11'.repeat(4)}`,
+        blockNumber: 10,
+        transactionHash: `0x${'aa'.repeat(32)}`,
+        transactionIndex: 0,
+        logIndex: 1,
+        timestamp: 15,
+      },
+    ];
+    const options = {
+      privateEvents: [
+        { hash: '0xpriv-1', timestamp: 10 },
+        { hash: '0xpriv-2', timestamp: 20 },
+      ],
+      privatePrefixLength: 1,
+      anchorValidation: {
+        verified: false,
+        anchors: {
+          '0xpriv-1': undefined,
+          '0xpriv-2': undefined,
+        },
+        map: {
+          '0xpriv-1': '0x01',
+          '0xpriv-2': '0x02',
+        },
+        details: {
+          '0xpriv-1': {
+            key: '0xpriv-1',
+            expectedValue: '0x01',
+            value: '0x01',
+            verified: true,
+            source: 'indexed',
+          },
+          '0xpriv-2': {
+            key: '0xpriv-2',
+            expectedValue: '0x02',
+            value: '0x02',
+            verified: true,
+            source: 'indexed',
+          },
+        },
+      },
+    } as const;
+
+    const productionReplay = await service.attemptReplayIndexedPublicEvents(
+      'chain-replay-development',
+      [] as any,
+      indexedEvents as any,
+      options
+    );
+    const developmentReplay = await service.attemptReplayIndexedPublicEvents(
+      'chain-replay-development',
+      [] as any,
+      indexedEvents as any,
+      {
+        ...options,
+        mode: 'development',
+      }
+    );
+
+    expect(productionReplay.appliedReplayKeys).toEqual([]);
+    expect(productionReplay.ignoredPublicEvents).toEqual([
+      {
+        replayKey: `0x${'aa'.repeat(32)}:1`,
+        event: indexedEvents[0],
+        reason: 'missing_private_prefix',
+        cause: {
+          privatePrefixLength: 1,
+          mode: 'production',
+        },
+      },
+    ]);
+    expect(developmentReplay.appliedReplayKeys).toEqual([`0x${'aa'.repeat(32)}:1`]);
+    expect(developmentReplay.ignoredPublicEvents).toEqual([]);
+    expect(register).toHaveBeenCalledTimes(1);
   });
 
   it('encodes, emits, and registers public events', async () => {
     const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
+    const expectedSubjectId = Binary.fromHex(chain.id).hash().hex;
     const eqty = {
       address: '0xabc',
       sign: vi.fn(),
       emitPublicEvent: vi.fn().mockResolvedValue({
+        subjectId: expectedSubjectId,
         source: '0xsource',
         eventType: 'consume',
         data: `0x${'33'.repeat(4)}`,
@@ -1000,22 +1293,106 @@ describe('OwnableService', () => {
         transactionHash: `0x${'44'.repeat(32)}`,
         transactionIndex: 2,
         logIndex: 9,
+        timestamp: 12,
       }),
+    };
+    const eventChains = {
+      getStateDump: vi.fn().mockResolvedValue([]),
     };
     const service = createService(
       {} as any,
-      {} as any,
+      eventChains as any,
       eqty as any,
       {} as any
     );
     const encodePublicEvent = vi.fn().mockResolvedValue(Uint8Array.from([1, 2, 3]));
     (service as any)._rpc.set(chain.id, { encodePublicEvent });
-    const registerSpy = vi.spyOn(service, 'registerPublicEvent').mockResolvedValue(undefined);
+    const registerSpy = vi.spyOn(service, 'registerPublicEvent').mockResolvedValue({
+      complete: true,
+      stateDump: [] as any,
+      appliedEvents: [],
+      appliedReplayKeys: [],
+      duplicateReplayKeys: [],
+      appliedPublicEvents: [],
+      duplicatePublicEvents: [],
+      ignoredPublicEvents: [],
+    });
 
     await service.emitPublicEvent(chain, 'consume', { amount: 1 });
 
     expect(encodePublicEvent).toHaveBeenCalledWith('consume', expect.any(Uint8Array));
-    expect(eqty.emitPublicEvent).toHaveBeenCalledWith(chain.id, 'consume', Uint8Array.from([1, 2, 3]));
+    expect(eqty.emitPublicEvent).toHaveBeenCalledWith(
+      expectedSubjectId,
+      'consume',
+      Uint8Array.from([1, 2, 3])
+    );
+    expect(eqty.emitPublicEvent).not.toHaveBeenCalledWith(
+      chain.id,
+      'consume',
+      Uint8Array.from([1, 2, 3])
+    );
+    expect(eqty.emitPublicEvent).not.toHaveBeenCalledWith(
+      new Binary(chain.id).hash().hex,
+      'consume',
+      Uint8Array.from([1, 2, 3])
+    );
     expect(registerSpy).toHaveBeenCalled();
+  });
+
+  it('silently ignores emitted public events with a mismatched receipt subject', async () => {
+    const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
+    const expectedSubjectId = Binary.fromHex(chain.id).hash().hex;
+    const eqty = {
+      address: '0xabc',
+      sign: vi.fn(),
+      emitPublicEvent: vi.fn().mockResolvedValue({
+        subjectId: `0x${'f'.repeat(64)}`,
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'33'.repeat(4)}`,
+        blockNumber: 5,
+        transactionHash: `0x${'44'.repeat(32)}`,
+        transactionIndex: 2,
+        logIndex: 9,
+        timestamp: 12,
+      }),
+    };
+    const eventChains = {
+      getStateDump: vi.fn().mockResolvedValue([['s', 1]]),
+    };
+    const service = createService(
+      {} as any,
+      eventChains as any,
+      eqty as any,
+      {} as any
+    );
+    const encodePublicEvent = vi.fn().mockResolvedValue(Uint8Array.from([1, 2, 3]));
+    (service as any)._rpc.set(chain.id, { encodePublicEvent });
+    const registerSpy = vi.spyOn(service, 'registerPublicEvent');
+
+    const replay = await service.emitPublicEvent(chain, 'consume', { amount: 1 });
+
+    expect(replay.complete).toBe(false);
+    expect(replay.appliedReplayKeys).toEqual([]);
+    expect(replay.ignoredPublicEvents).toEqual([
+      {
+        replayKey: '0x4444444444444444444444444444444444444444444444444444444444444444:9',
+        event: {
+          source: '0xsource',
+          eventType: 'consume',
+          data: `0x${'33'.repeat(4)}`,
+          blockNumber: 5,
+          transactionHash: `0x${'44'.repeat(32)}`,
+          transactionIndex: 2,
+          logIndex: 9,
+        },
+        reason: 'invalid_subject_id',
+        cause: {
+          expectedSubjectId,
+          receivedSubjectId: `0x${'f'.repeat(64)}`,
+        },
+      },
+    ]);
+    expect(registerSpy).not.toHaveBeenCalled();
   });
 });

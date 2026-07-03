@@ -1,3 +1,4 @@
+import type { Binary } from "eqty-core";
 import type TypedDict from './TypedDict.js';
 
 export type StateDump = Array<[ArrayLike<number>, ArrayLike<number>]>;
@@ -20,10 +21,16 @@ export interface PublicEvent {
   transactionHash: string;
   transactionIndex: number;
   logIndex: number;
+  timestamp?: number;
 }
 
-export interface RuntimePublicEvent extends Omit<PublicEvent, 'data'> {
+export interface EmittedPublicEventReceipt extends PublicEvent {
+  subjectId: string;
+}
+
+export interface RuntimePublicEvent extends Omit<PublicEvent, 'data' | 'transactionHash'> {
   data: Uint8Array;
+  transactionHash: Binary;
 }
 
 export interface OwnableEventSource {

@@ -60,12 +60,13 @@ export default class MockEQTYService {
   }
 
   async emitPublicEvent(
-    _subjectId: string,
+    subjectId: string,
     eventType: string,
     data: Uint8Array,
     _txOptions?: { value?: bigint }
   ) {
     return {
+      subjectId,
       source: this.address,
       eventType,
       data: new Binary(data).hex,
@@ -73,6 +74,7 @@ export default class MockEQTYService {
       transactionHash: `0x${"c".repeat(64)}`,
       transactionIndex: 0,
       logIndex: 0,
+      timestamp: 1,
     };
   }
 

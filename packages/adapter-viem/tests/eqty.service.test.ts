@@ -214,6 +214,57 @@ describe('EQTYService', () => {
     expect(feeReader.quoteEthCost).not.toHaveBeenCalled();
   });
 
+  it('reads the current signer allowance against the configured anchor contract', async () => {
+    const feeReader = {
+      quoteEqtyCost: vi.fn(),
+      quoteEthCost: vi.fn(),
+      eqtyToken: vi.fn().mockResolvedValue('0x1111111111111111111111111111111111111111'),
+    };
+    const eqtyToken = {
+      allowance: vi.fn().mockResolvedValue(27n),
+    };
+    const service = createService(
+      '0xabc',
+      84532,
+      { account: '0xabc', signMessage: vi.fn() } as any,
+      { getBlockNumber: vi.fn(), getLogs: vi.fn() } as any,
+      undefined,
+      { anchorClient: { anchor: vi.fn() }, feeReader, eqtyToken, signer: {} as any }
+    );
+
+    await expect(service.getAnchorEqtyAllowance()).resolves.toBe(27n);
+
+    expect(feeReader.eqtyToken).toHaveBeenCalledTimes(1);
+    expect(eqtyToken.allowance).toHaveBeenCalledWith('0xabc', defaultAnchorAddress);
+  });
+
+  it('updates and resets allowance through the EQTY token resolved from the anchor contract', async () => {
+    const feeReader = {
+      quoteEqtyCost: vi.fn(),
+      quoteEthCost: vi.fn(),
+      eqtyToken: vi.fn().mockResolvedValue('0x1111111111111111111111111111111111111111'),
+    };
+    const eqtyToken = {
+      allowance: vi.fn(),
+      approve: vi.fn().mockResolvedValueOnce('0xapprove').mockResolvedValueOnce('0xreset'),
+    };
+    const service = createService(
+      '0xabc',
+      84532,
+      { account: '0xabc', signMessage: vi.fn() } as any,
+      { getBlockNumber: vi.fn(), getLogs: vi.fn() } as any,
+      undefined,
+      { anchorClient: { anchor: vi.fn() }, feeReader, eqtyToken, signer: {} as any }
+    );
+
+    await expect(service.setAnchorEqtyAllowance(42n)).resolves.toBe('0xapprove');
+    await expect(service.setAnchorEqtyAllowance(0n)).resolves.toBe('0xreset');
+
+    expect(feeReader.eqtyToken).toHaveBeenCalledTimes(2);
+    expect(eqtyToken.approve).toHaveBeenNthCalledWith(1, defaultAnchorAddress, 42n);
+    expect(eqtyToken.approve).toHaveBeenNthCalledWith(2, defaultAnchorAddress, 0n);
+  });
+
   it('falls back to ETH payment when allowance is insufficient', async () => {
     const anchorClient = { anchor: vi.fn().mockResolvedValue('0xtx') };
     const feeReader = {

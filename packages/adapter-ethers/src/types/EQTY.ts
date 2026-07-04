@@ -37,6 +37,7 @@ export interface EthersAnchorFeeContractLike {
 
 export interface EthersEqtyTokenLike {
   allowance(owner: string, spender: string): Promise<bigint>;
+  approve?(spender: string, amount: bigint): Promise<string | { hash?: string } | unknown>;
 }
 
 export interface EthersSignerLike {

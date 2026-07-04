@@ -240,6 +240,59 @@ describe('Ethers EQTYService', () => {
     expect(feeContract.quoteEthCost).not.toHaveBeenCalled();
   });
 
+  it('reads the current signer allowance against the configured anchor contract', async () => {
+    const feeContract = {
+      quoteEqtyCost: vi.fn(),
+      quoteEthCost: vi.fn(),
+      eqtyToken: vi.fn().mockResolvedValue('0x1111111111111111111111111111111111111111'),
+    };
+    const eqtyToken = {
+      allowance: vi.fn().mockResolvedValue(27n),
+    };
+    const signer = {
+      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      getAddress: vi.fn().mockResolvedValue('0xabc'),
+      signTypedData: vi.fn().mockResolvedValue('0xsig'),
+    };
+    const service = createService('0xabc', 84532, {
+      signer: signer as any,
+      deps: { anchorClient: { anchor: vi.fn() }, feeContract, eqtyToken, signer: signer as any },
+    });
+
+    await expect(service.getAnchorEqtyAllowance()).resolves.toBe(27n);
+
+    expect(feeContract.eqtyToken).toHaveBeenCalledTimes(1);
+    expect(eqtyToken.allowance).toHaveBeenCalledWith('0xabc', defaultAnchorAddress);
+  });
+
+  it('updates and resets allowance through the EQTY token resolved from the anchor contract', async () => {
+    const feeContract = {
+      quoteEqtyCost: vi.fn(),
+      quoteEthCost: vi.fn(),
+      eqtyToken: vi.fn().mockResolvedValue('0x1111111111111111111111111111111111111111'),
+    };
+    const eqtyToken = {
+      allowance: vi.fn(),
+      approve: vi.fn().mockResolvedValueOnce('0xapprove').mockResolvedValueOnce('0xreset'),
+    };
+    const signer = {
+      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      getAddress: vi.fn().mockResolvedValue('0xabc'),
+      signTypedData: vi.fn().mockResolvedValue('0xsig'),
+    };
+    const service = createService('0xabc', 84532, {
+      signer: signer as any,
+      deps: { anchorClient: { anchor: vi.fn() }, feeContract, eqtyToken, signer: signer as any },
+    });
+
+    await expect(service.setAnchorEqtyAllowance(42n)).resolves.toBe('0xapprove');
+    await expect(service.setAnchorEqtyAllowance(0n)).resolves.toBe('0xreset');
+
+    expect(feeContract.eqtyToken).toHaveBeenCalledTimes(2);
+    expect(eqtyToken.approve).toHaveBeenNthCalledWith(1, defaultAnchorAddress, 42n);
+    expect(eqtyToken.approve).toHaveBeenNthCalledWith(2, defaultAnchorAddress, 0n);
+  });
+
   it('uses the configured anchor contract address for allowance checks and provider validation', async () => {
     const localAnchor = '0x9999999999999999999999999999999999999999';
     const key = Binary.fromHex(`0x${'b'.repeat(64)}`);

@@ -37,6 +37,7 @@ export interface AnchorFeeReader {
 
 export interface EqtyTokenReader {
   allowance(owner: string, spender: string): Promise<bigint>;
+  approve?(spender: string, amount: bigint): Promise<string>;
 }
 
 export interface ViemAnchorConfig {

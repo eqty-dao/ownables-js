@@ -242,6 +242,66 @@ export default class EQTYService {
     return this.publicEventClient.emitPublicEvent(subjectId, eventType, data, nextTxOptions);
   }
 
+  async getAnchorEqtyAllowance(): Promise<bigint> {
+    const eqtyTokenAddress = await this.feeReader.eqtyToken();
+    if (eqtyTokenAddress === zeroAddress) {
+      return 0n;
+    }
+
+    const eqtyToken: EqtyTokenReader =
+      this.eqtyTokenOverride ??
+      {
+        allowance: async (owner: string, spender: string) =>
+          (await (this.publicClient as any).readContract({
+            address: eqtyTokenAddress as `0x${string}`,
+            abi: [{ name: 'allowance', type: 'function', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }], outputs: [{ name: 'remaining', type: 'uint256' }] }],
+            functionName: 'allowance',
+            args: [owner, spender],
+          })) as bigint,
+      };
+
+    return eqtyToken.allowance(this.address, this.anchorContractAddress);
+  }
+
+  async setAnchorEqtyAllowance(amount: bigint): Promise<string> {
+    if (amount < 0n) {
+      throw new Error('EQTY allowance amount must be non-negative');
+    }
+
+    const eqtyTokenAddress = await this.feeReader.eqtyToken();
+    if (eqtyTokenAddress === zeroAddress) {
+      throw new Error('Anchor contract does not expose an EQTY token');
+    }
+
+    if (this.eqtyTokenOverride?.approve) {
+      return this.eqtyTokenOverride.approve(this.anchorContractAddress, amount);
+    }
+
+    const account = (this.walletClient as any).account;
+    if (!account) {
+      throw new Error('Wallet client account is required for EQTY allowance updates');
+    }
+
+    return (this.walletClient as any).writeContract({
+      account,
+      address: eqtyTokenAddress as `0x${string}`,
+      abi: [
+        {
+          name: 'approve',
+          type: 'function',
+          stateMutability: 'nonpayable',
+          inputs: [
+            { name: 'spender', type: 'address' },
+            { name: 'amount', type: 'uint256' },
+          ],
+          outputs: [{ name: 'approved', type: 'bool' }],
+        },
+      ],
+      functionName: 'approve',
+      args: [this.anchorContractAddress, amount],
+    });
+  }
+
   async quoteEqtyCost(count: bigint): Promise<bigint> {
     return (await (this.publicClient as any).readContract({
       address: this.anchorContractAddress,
@@ -286,25 +346,9 @@ export default class EQTYService {
       return { value: 0n };
     }
 
-    const anchorAddress = this.anchorContractAddress;
-    const eqtyTokenAddress = await this.feeReader.eqtyToken();
-    if (eqtyTokenAddress !== zeroAddress) {
-      const eqtyToken: EqtyTokenReader =
-        this.eqtyTokenOverride ??
-        {
-          allowance: async (owner: string, spender: string) =>
-            (await (this.publicClient as any).readContract({
-              address: eqtyTokenAddress as `0x${string}`,
-              abi: [{ name: 'allowance', type: 'function', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }], outputs: [{ name: 'remaining', type: 'uint256' }] }],
-              functionName: 'allowance',
-              args: [owner, spender],
-            })) as bigint,
-        };
-      const allowance = await eqtyToken.allowance(this.address, anchorAddress);
-
-      if (allowance >= quotedEqtyCost) {
-        return { value: 0n };
-      }
+    const allowance = await this.getAnchorEqtyAllowance();
+    if (allowance >= quotedEqtyCost) {
+      return { value: 0n };
     }
 
     const quotedEthCost = await this.feeReader.quoteEthCost(batchSize);

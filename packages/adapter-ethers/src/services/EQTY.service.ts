@@ -176,13 +176,27 @@ class EthersEqtyTokenContract implements EthersEqtyTokenLike {
   constructor(signer: Signer, address: string) {
     this.contract = new Contract(
       address,
-      ['function allowance(address owner, address spender) view returns (uint256)'],
+      [
+        'function allowance(address owner, address spender) view returns (uint256)',
+        'function approve(address spender, uint256 amount) returns (bool)',
+      ],
       signer
     ) as unknown as EthersEqtyTokenLike;
   }
 
   async allowance(owner: string, spender: string): Promise<bigint> {
     return this.contract.allowance(owner, spender);
+  }
+
+  async approve(spender: string, amount: bigint): Promise<string> {
+    const tx = await this.contract.approve?.(spender, amount);
+
+    if (typeof tx === 'string') return tx;
+    if (tx && typeof tx === 'object' && 'hash' in tx && typeof tx.hash === 'string') {
+      return tx.hash;
+    }
+
+    throw new Error(`Unexpected approval tx response: ${String(tx)}`);
   }
 }
 /* v8 ignore stop */
@@ -310,6 +324,37 @@ export default class EQTYService {
     return this.publicEventClient.emitPublicEvent(subjectId, eventType, data, nextTxOptions);
   }
 
+  async getAnchorEqtyAllowance(): Promise<bigint> {
+    const eqtyTokenAddress = await this.feeContract.eqtyToken();
+    if (eqtyTokenAddress === ZeroAddress) {
+      return 0n;
+    }
+
+    const eqtyToken =
+      this.eqtyTokenOverride ?? new EthersEqtyTokenContract(this.signerClient as Signer, eqtyTokenAddress);
+    return eqtyToken.allowance(this.address, this.anchorContractAddress);
+  }
+
+  async setAnchorEqtyAllowance(amount: bigint): Promise<string> {
+    if (amount < 0n) {
+      throw new Error('EQTY allowance amount must be non-negative');
+    }
+
+    const eqtyTokenAddress = await this.feeContract.eqtyToken();
+    if (eqtyTokenAddress === ZeroAddress) {
+      throw new Error('Anchor contract does not expose an EQTY token');
+    }
+
+    const eqtyToken =
+      this.eqtyTokenOverride ?? new EthersEqtyTokenContract(this.signerClient as Signer, eqtyTokenAddress);
+    const approve = eqtyToken.approve;
+    if (!approve) {
+      throw new Error('EQTY token client does not support approve(spender, amount)');
+    }
+
+    return approve.call(eqtyToken, this.anchorContractAddress, amount) as Promise<string>;
+  }
+
   private async resolveAnchorTxOptions(count: number): Promise<{ value?: bigint }> {
     const batchSize = BigInt(count);
     const quotedEqtyCost = await this.feeContract.quoteEqtyCost(batchSize);
@@ -318,15 +363,9 @@ export default class EQTYService {
       return { value: 0n };
     }
 
-    const eqtyTokenAddress = await this.feeContract.eqtyToken();
-    if (eqtyTokenAddress !== ZeroAddress) {
-      const eqtyToken =
-        this.eqtyTokenOverride ?? new EthersEqtyTokenContract(this.signerClient as Signer, eqtyTokenAddress);
-      const allowance = await eqtyToken.allowance(this.address, this.anchorContractAddress);
-
-      if (allowance >= quotedEqtyCost) {
-        return { value: 0n };
-      }
+    const allowance = await this.getAnchorEqtyAllowance();
+    if (allowance >= quotedEqtyCost) {
+      return { value: 0n };
     }
 
     const quotedEthCost = await this.feeContract.quoteEthCost(batchSize);

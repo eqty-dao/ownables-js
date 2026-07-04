@@ -49,6 +49,8 @@ export interface AnchorProvider {
     data: Uint8Array,
     txOptions?: { value?: bigint }
   ): Promise<EmittedPublicEventReceipt>;
+  getAnchorEqtyAllowance?(): Promise<bigint>;
+  setAnchorEqtyAllowance?(amount: bigint): Promise<string>;
   validateAnchors?: AnchorValidationSource["validateAnchors"];
   verifyAnchors(...anchors: any[]): Promise<AnchorValidationResult>;
 }

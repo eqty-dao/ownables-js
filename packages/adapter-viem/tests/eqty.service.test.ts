@@ -639,4 +639,60 @@ describe('EQTYService', () => {
     expect(result.anchors[key.hex]).toBe('0xtx2');
     expect(result.map[key.hex]).toBe(`0x${'0'.repeat(64)}`);
   });
+
+  it('keeps verifyAnchors and validateAnchors safe under same-instance rebinding', async () => {
+    const key = Binary.fromHex(`0x${'1'.repeat(64)}`);
+    const expected = Binary.fromHex(`0x${'2'.repeat(64)}`);
+    const publicClient = {
+      getBlockNumber: vi.fn().mockResolvedValue(8n),
+      getLogs: vi.fn().mockResolvedValue([
+        {
+          transactionHash: '0xtx-rebound',
+          args: { value: expected.hex, timestamp: 12n },
+          blockNumber: 6n,
+          transactionIndex: 3n,
+          logIndex: 4n,
+        },
+      ]),
+    };
+    const service = createService(
+      '0xabc',
+      84532,
+      { account: '0xabc', signMessage: vi.fn() } as any,
+      publicClient as any,
+      undefined,
+      { anchorClient: { anchor: vi.fn() }, signer: {} as any }
+    );
+    const originalVerifyAnchors = service.verifyAnchors.bind(service);
+    const normalizedVerifyAnchors = vi.fn((...anchors: any[]) => originalVerifyAnchors(...anchors));
+
+    service.verifyAnchors = normalizedVerifyAnchors as typeof service.verifyAnchors;
+    service.validateAnchors = normalizedVerifyAnchors as typeof service.validateAnchors;
+
+    const verifyResult = await service.verifyAnchors({ key, value: expected });
+    const validateResult = await service.validateAnchors({ key, value: expected });
+
+    expect(normalizedVerifyAnchors).toHaveBeenCalledTimes(2);
+    expect(publicClient.getLogs).toHaveBeenCalledTimes(2);
+    expect(verifyResult).toEqual({
+      verified: true,
+      anchors: { [key.hex]: '0xtx-rebound' },
+      map: { [key.hex]: expected.hex.toLowerCase() },
+      details: {
+        [key.hex]: expect.objectContaining({
+          key: key.hex,
+          expectedValue: expected.hex.toLowerCase(),
+          value: expected.hex.toLowerCase(),
+          transactionHash: '0xtx-rebound',
+          timestamp: 12,
+          blockNumber: 6,
+          transactionIndex: 3,
+          logIndex: 4,
+          verified: true,
+          source: 'provider',
+        }),
+      },
+    });
+    expect(validateResult).toEqual(verifyResult);
+  });
 });

@@ -361,7 +361,7 @@ export default class EQTYService {
     }
   }
 
-  async validateAnchors(...anchors: any[]): Promise<AnchorValidationResult> {
+  private async runAnchorValidation(...anchors: any[]): Promise<AnchorValidationResult> {
     if (anchors.length === 0) {
       return { verified: false, anchors: {}, map: {}, details: {} };
     }
@@ -420,8 +420,12 @@ export default class EQTYService {
     return buildAnchorValidationResult(anchorPairs, records);
   }
 
+  async validateAnchors(...anchors: any[]): Promise<AnchorValidationResult> {
+    return this.runAnchorValidation(...anchors);
+  }
+
   async verifyAnchors(...anchors: any[]): Promise<AnchorValidationResult> {
-    return this.validateAnchors(...anchors);
+    return this.runAnchorValidation(...anchors);
   }
 
   private async lockableRead<T>(

@@ -1,4 +1,4 @@
-import type { PublicEvent } from "./OwnableRuntime.js";
+import type { EmittedPublicEventReceipt, PublicEvent } from "./OwnableRuntime.js";
 import type { TypedOwnableInfo } from "./TypedOwnableInfo.js";
 import type { EventChain } from "eqty-core";
 import type { AnchorValidationResult, IndexedAnchorRecord } from "./AnchorValidation.js";
@@ -40,6 +40,12 @@ export interface ReplayIgnoredPublicEvent extends ReplayEventMetadata {
 
 export interface ReplayAttemptResult extends ReplayAppliedResult {
   complete: boolean;
+  ignoredPublicEvents: ReplayIgnoredPublicEvent[];
+}
+
+export interface EmitPublicEventObservation {
+  receipt: EmittedPublicEventReceipt;
+  publicEvent?: PublicEvent;
   ignoredPublicEvents: ReplayIgnoredPublicEvent[];
 }
 

@@ -651,4 +651,71 @@ describe('Ethers EQTYService', () => {
     expect(result.anchors[key.hex]).toBeUndefined();
     expect(result.map[key.hex]).toBe(`0x${'0'.repeat(64)}`);
   });
+
+  it('keeps verifyAnchors and validateAnchors safe under same-instance rebinding', async () => {
+    const key = Binary.fromHex(`0x${'1'.repeat(64)}`);
+    const expected = Binary.fromHex(`0x${'2'.repeat(64)}`);
+    const iface = new Interface([
+      'event Anchored(bytes32 indexed key, bytes32 value, address indexed sender, uint64 timestamp)',
+    ]);
+    const encoded = iface.encodeEventLog(iface.getEvent('Anchored')!, [
+      key.hex,
+      expected.hex,
+      '0x1111111111111111111111111111111111111111',
+      12n,
+    ]);
+    const provider = {
+      getBlockNumber: vi.fn().mockResolvedValue(8),
+      getLogs: vi.fn().mockResolvedValue([
+        {
+          ...encoded,
+          transactionHash: '0xtx-rebound',
+          blockNumber: 6,
+          transactionIndex: 3,
+          index: 4,
+        },
+      ]),
+    };
+    const signer = {
+      provider,
+      getAddress: vi.fn().mockResolvedValue('0xabc'),
+      signTypedData: vi.fn().mockResolvedValue('0xsig'),
+      signMessage: vi.fn().mockResolvedValue('0xproof'),
+    };
+    const service = createService('0xabc', 84532, {
+      signer: signer as any,
+      deps: { anchorClient: { anchor: vi.fn() }, signer: signer as any },
+    });
+    const originalVerifyAnchors = service.verifyAnchors.bind(service);
+    const normalizedVerifyAnchors = vi.fn((...anchors: any[]) => originalVerifyAnchors(...anchors));
+
+    service.verifyAnchors = normalizedVerifyAnchors as typeof service.verifyAnchors;
+    service.validateAnchors = normalizedVerifyAnchors as typeof service.validateAnchors;
+
+    const verifyResult = await service.verifyAnchors({ key, value: expected });
+    const validateResult = await service.validateAnchors({ key, value: expected });
+
+    expect(normalizedVerifyAnchors).toHaveBeenCalledTimes(2);
+    expect(provider.getLogs).toHaveBeenCalledTimes(2);
+    expect(verifyResult).toEqual({
+      verified: true,
+      anchors: { [key.hex]: '0xtx-rebound' },
+      map: { [key.hex]: expected.hex.toLowerCase() },
+      details: {
+        [key.hex]: expect.objectContaining({
+          key: key.hex,
+          expectedValue: expected.hex.toLowerCase(),
+          value: expected.hex.toLowerCase(),
+          transactionHash: '0xtx-rebound',
+          timestamp: 12,
+          blockNumber: 6,
+          transactionIndex: 3,
+          logIndex: 4,
+          verified: true,
+          source: 'provider',
+        }),
+      },
+    });
+    expect(validateResult).toEqual(verifyResult);
+  });
 });

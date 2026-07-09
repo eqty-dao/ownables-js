@@ -378,7 +378,9 @@ export default class EQTYService {
     }
   }
 
-  async validateAnchors(...anchors: Array<Binary | { hex: string } | { key: Binary | { hex: string }; value: Binary | { hex: string } }>): Promise<AnchorValidationResult> {
+  private async runAnchorValidation(
+    ...anchors: Array<Binary | { hex: string } | { key: Binary | { hex: string }; value: Binary | { hex: string } }>
+  ): Promise<AnchorValidationResult> {
     if (anchors.length === 0) {
       return { verified: false, anchors: {}, map: {}, details: {} };
     }
@@ -435,8 +437,12 @@ export default class EQTYService {
     return buildAnchorValidationResult(pairs, records);
   }
 
+  async validateAnchors(...anchors: Array<Binary | { hex: string } | { key: Binary | { hex: string }; value: Binary | { hex: string } }>): Promise<AnchorValidationResult> {
+    return this.runAnchorValidation(...anchors);
+  }
+
   async verifyAnchors(...anchors: Array<Binary | { hex: string } | { key: Binary | { hex: string }; value: Binary | { hex: string } }>): Promise<AnchorValidationResult> {
-    return this.validateAnchors(...anchors);
+    return this.runAnchorValidation(...anchors);
   }
 
   private lockableContract(address: string) {

@@ -13,15 +13,14 @@ jobs:
       matrix:
         package:
           - core
-          - notify-core
-          - notify-client
-          - notify-publisher
+          - authority
           - platform-browser
           - adapter-viem
           - adapter-ethers
           - builder
           - builder-client
           - platform-node
+          - platform-react-native
     steps:
       - name: Checkout
         uses: actions/checkout@v6

@@ -24,7 +24,12 @@ import type {
   StateDump,
   StateSnapshot,
 } from "../types/OwnableRuntime.js";
-import type { IndexedPublicEvent, IndexedPublicReplaySelectionOptions, ReplayAttemptResult } from "../types/Replay.js";
+import type {
+  EmitPublicEventObservation,
+  IndexedPublicEvent,
+  IndexedPublicReplaySelectionOptions,
+  ReplayAttemptResult,
+} from "../types/Replay.js";
 import EventChainService from "./EventChain.service.js";
 import { withProgress } from "../progress.js";
 import type { LoggerLike } from "../logger.js";
@@ -314,9 +319,6 @@ export default class OwnableService {
       case "execute_msg.json":
         result = await rpc.execute(msg, info, stateDump);
         break;
-      case "register_msg.json":
-        result = await rpc.register(this.toRegisterRpcPayload(msg as PublicEvent), info, stateDump);
-        break;
       case "ingest_msg.json":
         result = await rpc.ingest(msg as OwnableEvent, info, stateDump);
         break;
@@ -498,13 +500,13 @@ export default class OwnableService {
     return newStateDump;
   }
 
-  async registerPublicEvent(
+  async replayPublicEvent(
     chain: EventChain,
     event: Omit<PublicEvent, "data"> & { data: string | Uint8Array | Binary; subjectId?: string },
     onProgress?: LogProgress
   ): Promise<ReplayAttemptResult> {
     const stateDump = await this.eventChains.getStateDump(chain.id, chain.state.hex);
-    if (!stateDump) throw Error("State mismatch for register public event");
+    if (!stateDump) throw Error("State mismatch for public event replay");
 
     const publicEvent = this.toRegisterRuntimeEvent(event);
     const replayStoreId = this.publicEventReplayStoreId(chain.id);
@@ -523,22 +525,13 @@ export default class OwnableService {
       };
     }
 
-    const replay = await this.replayIndexedPublicEvents(chain.id, stateDump, [publicEvent]);
+    const replay = await withProgress(onProgress)("replayPublicEvent", () =>
+      this.replayIndexedPublicEvents(chain.id, stateDump, [publicEvent])
+    );
     if (replay.appliedReplayKeys.length === 0) {
       return replay;
     }
-    const newStateDump = replay.stateDump;
-
-    await withProgress(onProgress)("signPublicEvent", () =>
-      this.eqty.sign(
-        new Event({
-          "@context": "register_msg.json",
-          ...publicEvent,
-        }).addTo(chain)
-      )
-    );
-
-    await this.store(chain, newStateDump);
+    await this.store(chain, replay.stateDump);
     if (!(await this.stateStore.hasStore(replayStoreId))) {
       await this.stateStore.createStore(replayStoreId);
     }
@@ -551,40 +544,35 @@ export default class OwnableService {
     eventType: string,
     payload: TypedDict,
     onProgress?: LogProgress
-  ): Promise<ReplayAttemptResult> {
-    const stateDump = await this.eventChains.getStateDump(chain.id, chain.state.hex);
-    if (!stateDump) throw Error("State mismatch for emit public event");
-
+  ): Promise<EmitPublicEventObservation> {
     const encodedPayload = await withProgress(onProgress)("encodePublicEvent", () =>
       this.rpc(chain.id).encodePublicEvent(eventType, encode(payload) as Uint8Array)
     );
     const subjectId = this.publicEventSubjectId(chain);
-    const publicEvent = await withProgress(onProgress)("emitPublicEvent", () =>
+    const receipt = await withProgress(onProgress)("emitPublicEvent", () =>
       this.eqty.emitPublicEvent(subjectId, eventType, encodedPayload)
     );
-    if (!this.publicEventSubjectMatches(chain, publicEvent)) {
+    if (!this.publicEventSubjectMatches(chain, receipt)) {
       return {
-        complete: false,
-        stateDump,
-        appliedEvents: [],
-        appliedReplayKeys: [],
-        duplicateReplayKeys: [],
-        appliedPublicEvents: [],
-        duplicatePublicEvents: [],
+        receipt,
         ignoredPublicEvents: [
           {
-            replayKey: publicEventReplayKey(this.toRegisterRuntimeEvent(publicEvent)),
-            event: this.toRegisterRuntimeEvent(publicEvent),
+            replayKey: publicEventReplayKey(this.toRegisterRuntimeEvent(receipt)),
+            event: this.toRegisterRuntimeEvent(receipt),
             reason: "invalid_subject_id",
             cause: {
               expectedSubjectId: subjectId,
-              receivedSubjectId: publicEvent.subjectId,
+              receivedSubjectId: receipt.subjectId,
             },
           },
         ],
       };
     }
-    return this.registerPublicEvent(chain, publicEvent, onProgress);
+    return {
+      receipt,
+      publicEvent: this.toRegisterRuntimeEvent(receipt),
+      ignoredPublicEvents: [],
+    };
   }
 
   async submitAnchors(onProgress?: LogProgress): Promise<string | undefined> {

@@ -1,5 +1,11 @@
 import { withProgress } from "@ownables/core";
 import type { LogProgress } from "@ownables/core";
+import type {
+  IndexedPublicEventsSnapshot,
+  IndexedPublicEventsStreamHandlers,
+  IndexedPublicEventsStreamSubscription,
+  IndexedPublicEventsStreamEvent,
+} from "@ownables/core";
 import JSZip from "jszip";
 
 export interface HubUploadResult {
@@ -28,6 +34,18 @@ export interface HubAvailableOwnablesResponse {
   entries: HubAvailableOwnableEntry[];
 }
 
+export interface HubEventSourceLike {
+  addEventListener(type: string, listener: (event: { data?: string }) => void): void;
+  removeEventListener(type: string, listener: (event: { data?: string }) => void): void;
+  close(): void;
+  onerror: ((event: unknown) => void) | null;
+}
+
+export interface HubAvailableOwnablesStreamHandlers {
+  onEvent(message: { owner: string; entry: HubAvailableOwnableEntry }): void;
+  onError?: (error: unknown) => void;
+}
+
 export const AVAILABLE_OWNABLES_UNAVAILABLE_MESSAGE =
   "Hub available-ownables discovery is enabled, but the Hub discovery endpoint is unavailable.";
 
@@ -35,7 +53,14 @@ export default class HubService {
   constructor(
     private readonly url: string = "",
     private readonly fetchFn: (input: string, init?: RequestInit) => Promise<Response> = (input, init) =>
-      fetch(input, init)
+      fetch(input, init),
+    private readonly eventSourceFactory: (url: string) => HubEventSourceLike = (url) => {
+      const EventSourceCtor = (globalThis as { EventSource?: new (input: string) => HubEventSourceLike }).EventSource;
+      if (!EventSourceCtor) {
+        throw new Error("EventSource is not available in this environment");
+      }
+      return new EventSourceCtor(url);
+    }
   ) {}
 
   get isConfigured(): boolean {
@@ -157,6 +182,75 @@ export default class HubService {
     };
   }
 
+  async loadOwnablePublicEvents(ownableId: string): Promise<IndexedPublicEventsSnapshot> {
+    const response = await this.fetchFn(
+      this.endpoint(`/ownables/${encodeURIComponent(ownableId)}/public-events`)
+    );
+
+    if (!response.ok) {
+      const message = await readError(response);
+      throw new Error(`Hub public-events snapshot failed: ${message}`);
+    }
+
+    return (await response.json()) as IndexedPublicEventsSnapshot;
+  }
+
+  watchOwnablePublicEvents(
+    ownableIds: string[],
+    handlers: IndexedPublicEventsStreamHandlers,
+    options?: { fromBlock?: string | number | bigint }
+  ): IndexedPublicEventsStreamSubscription {
+    const query = new URLSearchParams();
+    for (const ownableId of ownableIds) {
+      query.append("id", ownableId);
+    }
+    if (options?.fromBlock !== undefined) {
+      query.set("from", String(options.fromBlock));
+    }
+
+    const stream = this.eventSourceFactory(
+      this.endpoint(`/ownables/public-events/stream?${query.toString()}`)
+    );
+    const listener = (event: { data?: string }) => {
+      handlers.onEvent(parseJsonMessage<IndexedPublicEventsStreamEvent>(event.data));
+    };
+
+    stream.addEventListener("public-event", listener);
+    stream.onerror = (error) => handlers.onError?.(error);
+
+    return {
+      close: () => {
+        stream.removeEventListener("public-event", listener);
+        stream.close();
+      },
+    };
+  }
+
+  watchAvailableOwnables(
+    ownerAccount: string,
+    handlers: HubAvailableOwnablesStreamHandlers
+  ): IndexedPublicEventsStreamSubscription {
+    const query = new URLSearchParams({
+      owner: ownerAccount,
+    });
+    const stream = this.eventSourceFactory(
+      this.endpoint(`/ownables/available/stream?${query.toString()}`)
+    );
+    const listener = (event: { data?: string }) => {
+      handlers.onEvent(parseJsonMessage<{ owner: string; entry: HubAvailableOwnableEntry }>(event.data));
+    };
+
+    stream.addEventListener("available-ownable", listener);
+    stream.onerror = (error) => handlers.onError?.(error);
+
+    return {
+      close: () => {
+        stream.removeEventListener("available-ownable", listener);
+        stream.close();
+      },
+    };
+  }
+
   async listAvailableOwnables(
     ownerAccount: string
   ): Promise<HubAvailableOwnablesResponse> {
@@ -227,4 +321,12 @@ async function readChainJsonFromBundle(bundleBlob: Blob): Promise<unknown> {
   }
 
   return JSON.parse(await chainEntry.async("text"));
+}
+
+function parseJsonMessage<T>(payload: string | undefined): T {
+  if (!payload) {
+    throw new Error("Hub stream message did not include a JSON payload");
+  }
+
+  return JSON.parse(payload) as T;
 }

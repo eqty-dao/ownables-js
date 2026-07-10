@@ -113,6 +113,8 @@ describe('ReplayAuthorityService', () => {
           { replayKey: publicEventReplayKey(indexedPublicEvents[2]!), event: indexedPublicEvents[2] },
         ],
         ignoredPublicEvents: [],
+        pendingPublicEvents: [],
+        confirmedPendingPublicEvents: [],
       }),
       rpc: vi.fn().mockReturnValue({
         query: vi.fn().mockResolvedValue(ownableInfo),

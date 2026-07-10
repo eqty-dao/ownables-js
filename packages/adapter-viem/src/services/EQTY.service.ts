@@ -11,6 +11,7 @@ import {
   createPublicClient,
   createWalletClient,
   custom,
+  decodeEventLog,
   getAddress,
   parseAbiItem,
   zeroAddress,
@@ -30,6 +31,10 @@ import type {
   EQTYServiceDeps,
   PublicEventClientLike,
 } from "../types/EQTY";
+
+const PUBLIC_EVENT_ABI = parseAbiItem(
+  "event PublicEvent(bytes32 indexed subjectId, address indexed source, string eventType, bytes data, uint64 timestamp)"
+);
 
 /**
  * EQTYService
@@ -147,38 +152,57 @@ export default class EQTYService {
             value: txOptions?.value,
           });
           const receipt = await (this.publicClient as any).waitForTransactionReceipt({ hash: transactionHash });
-          const publicEventAbi = parseAbiItem(
-            'event PublicEvent(bytes32 indexed subjectId, address indexed source, string eventType, bytes data, uint64 timestamp)'
-          );
-          const logs = await (this.publicClient as any).getLogs({
-            address: this.anchorContractAddress,
-            event: publicEventAbi,
-            fromBlock: receipt.blockNumber,
-            toBlock: receipt.blockNumber,
+          const log = receipt.logs.find((entry: any) => {
+            if (entry.address?.toLowerCase?.() !== this.anchorContractAddress.toLowerCase()) {
+              return false;
+            }
+
+            try {
+              const decoded = decodeEventLog({
+                abi: [PUBLIC_EVENT_ABI],
+                data: entry.data,
+                topics: entry.topics,
+              });
+
+              return (
+                decoded.eventName === "PublicEvent" &&
+                (decoded.args.subjectId as string).toLowerCase() === subjectId.toLowerCase()
+              );
+            } catch {
+              return false;
+            }
           });
-          const log = logs.find(
-            (entry: any) =>
-              entry.transactionHash === transactionHash &&
-              entry.args?.subjectId?.toLowerCase?.() === subjectId.toLowerCase()
-          );
 
           if (!log) {
             throw new Error('PublicEvent log not found in transaction receipt');
           }
 
+          const decoded = decodeEventLog({
+            abi: [PUBLIC_EVENT_ABI],
+            data: log.data,
+            topics: log.topics,
+          });
+          const args = decoded.args as {
+            subjectId: string;
+            source: string;
+            eventType: string;
+            data: string | Uint8Array;
+            timestamp?: bigint;
+          };
+
           return {
-            subjectId: log.args.subjectId as string,
-            source: log.args.source as string,
-            eventType: log.args.eventType as string,
+            subjectId: args.subjectId,
+            source: args.source,
+            eventType: args.eventType,
             data:
-              typeof log.args.data === 'string'
-                ? Binary.fromHex(log.args.data).hex
-                : new Binary(log.args.data as Uint8Array).hex,
+              typeof args.data === 'string'
+                ? Binary.fromHex(args.data).hex
+                : new Binary(args.data).hex,
             blockNumber: Number(receipt.blockNumber),
             transactionHash,
             transactionIndex: Number(receipt.transactionIndex ?? receipt.index ?? 0),
             logIndex: Number(log.logIndex),
-            ...(log.args.timestamp !== undefined ? { timestamp: Number(log.args.timestamp) } : {}),
+            ...(args.timestamp !== undefined ? { timestamp: Number(args.timestamp) } : {}),
           };
         },
       };

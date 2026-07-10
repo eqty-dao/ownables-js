@@ -873,7 +873,12 @@ describe('OwnableService', () => {
     expect(register).toHaveBeenCalledTimes(1);
     expect(firstReplay.appliedReplayKeys).toEqual([publicEventReplayKey(event)]);
     expect(duplicateReplay.duplicateReplayKeys).toEqual([publicEventReplayKey(event)]);
-    expect(await stateStore.get(`ownable:${chain.id}.public-event-replays`, publicEventReplayKey(event))).toBe(true);
+    expect(await stateStore.get(`ownable:${chain.id}.public-event-replays`, publicEventReplayKey(event))).toEqual({
+      replayKey: publicEventReplayKey(event),
+      event,
+      status: 'confirmed',
+      sources: ['stream'],
+    });
   });
 
   it('strips receipt-only fields before replaying direct public events', async () => {
@@ -1278,9 +1283,12 @@ describe('OwnableService', () => {
     expect(register).toHaveBeenCalledTimes(1);
   });
 
-  it('encodes, emits, and registers public events', async () => {
+  it('inserts emitted public events as pending until indexed confirmation arrives', async () => {
     const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
     const expectedSubjectId = Binary.fromHex(chain.id).hash().hex;
+    const stateStore = createStateStore();
+    await stateStore.createStore(`ownable:${chain.id}`);
+    await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
     const eqty = {
       address: '0xabc',
       sign: vi.fn(),
@@ -1300,25 +1308,14 @@ describe('OwnableService', () => {
       getStateDump: vi.fn().mockResolvedValue([]),
     };
     const service = createService(
-      {} as any,
+      stateStore as any,
       eventChains as any,
       eqty as any,
       {} as any
     );
     const encodePublicEvent = vi.fn().mockResolvedValue(Uint8Array.from([1, 2, 3]));
     (service as any)._rpc.set(chain.id, { encodePublicEvent });
-    const registerSpy = vi.spyOn(service, 'registerPublicEvent').mockResolvedValue({
-      complete: true,
-      stateDump: [] as any,
-      appliedEvents: [],
-      appliedReplayKeys: [],
-      duplicateReplayKeys: [],
-      appliedPublicEvents: [],
-      duplicatePublicEvents: [],
-      ignoredPublicEvents: [],
-    });
-
-    await service.emitPublicEvent(chain, 'consume', { amount: 1 });
+    const replay = await service.emitPublicEvent(chain, 'consume', { amount: 1 });
 
     expect(encodePublicEvent).toHaveBeenCalledWith('consume', expect.any(Uint8Array));
     expect(eqty.emitPublicEvent).toHaveBeenCalledWith(
@@ -1336,12 +1333,111 @@ describe('OwnableService', () => {
       'consume',
       Uint8Array.from([1, 2, 3])
     );
-    expect(registerSpy).toHaveBeenCalled();
+    expect(replay.appliedReplayKeys).toEqual([]);
+    expect(replay.pendingPublicEvents).toEqual([
+      {
+        replayKey: `0x${'44'.repeat(32)}:9`,
+        event: {
+          source: '0xsource',
+          eventType: 'consume',
+          data: `0x${'33'.repeat(4)}`,
+          blockNumber: 5,
+          transactionHash: `0x${'44'.repeat(32)}`,
+          transactionIndex: 2,
+          logIndex: 9,
+        },
+        status: 'pending',
+        sources: ['local'],
+      },
+    ]);
+    expect(await service.listTrackedPublicEvents(chain.id)).toEqual(replay.pendingPublicEvents);
+  });
+
+  it('persists a provisional pending public event while the emit receipt is still in flight', async () => {
+    const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
+    const expectedSubjectId = Binary.fromHex(chain.id).hash().hex;
+    const stateStore = createStateStore();
+    await stateStore.createStore(`ownable:${chain.id}`);
+    await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
+
+    let resolveReceipt!: (value: any) => void;
+    const receiptPromise = new Promise((resolve) => {
+      resolveReceipt = resolve;
+    });
+
+    const eqty = {
+      address: '0xabc',
+      sign: vi.fn(),
+      emitPublicEvent: vi.fn().mockReturnValue(receiptPromise),
+    };
+    const eventChains = {
+      getStateDump: vi.fn().mockResolvedValue([]),
+    };
+    const service = createService(
+      stateStore as any,
+      eventChains as any,
+      eqty as any,
+      {} as any
+    );
+    const encodePublicEvent = vi.fn().mockResolvedValue(Uint8Array.from([1, 2, 3]));
+    (service as any)._rpc.set(chain.id, { encodePublicEvent });
+
+    const replayPromise = service.emitPublicEvent(chain, 'consume', { amount: 1 });
+
+    await vi.waitFor(async () => {
+      const records = await service.listTrackedPublicEvents(chain.id);
+      expect(records).toHaveLength(1);
+      expect(records[0]).toMatchObject({
+        status: 'pending',
+        sources: ['local'],
+        event: {
+          source: '0xabc',
+          eventType: 'consume',
+          blockNumber: 0,
+        },
+      });
+      expect(records[0]!.replayKey.startsWith(`pending:${expectedSubjectId}:consume:`)).toBe(true);
+    });
+
+    resolveReceipt({
+      subjectId: expectedSubjectId,
+      source: '0xsource',
+      eventType: 'consume',
+      data: `0x${'33'.repeat(4)}`,
+      blockNumber: 5,
+      transactionHash: `0x${'44'.repeat(32)}`,
+      transactionIndex: 2,
+      logIndex: 9,
+      timestamp: 12,
+    });
+
+    const replay = await replayPromise;
+
+    expect(replay.pendingPublicEvents).toEqual([
+      {
+        replayKey: `0x${'44'.repeat(32)}:9`,
+        event: {
+          source: '0xsource',
+          eventType: 'consume',
+          data: `0x${'33'.repeat(4)}`,
+          blockNumber: 5,
+          transactionHash: `0x${'44'.repeat(32)}`,
+          transactionIndex: 2,
+          logIndex: 9,
+        },
+        status: 'pending',
+        sources: ['local'],
+      },
+    ]);
+    expect(await service.listTrackedPublicEvents(chain.id)).toEqual(replay.pendingPublicEvents);
   });
 
   it('silently ignores emitted public events with a mismatched receipt subject', async () => {
     const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
     const expectedSubjectId = Binary.fromHex(chain.id).hash().hex;
+    const stateStore = createStateStore();
+    await stateStore.createStore(`ownable:${chain.id}`);
+    await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
     const eqty = {
       address: '0xabc',
       sign: vi.fn(),
@@ -1361,7 +1457,7 @@ describe('OwnableService', () => {
       getStateDump: vi.fn().mockResolvedValue([['s', 1]]),
     };
     const service = createService(
-      {} as any,
+      stateStore as any,
       eventChains as any,
       eqty as any,
       {} as any
@@ -1394,5 +1490,193 @@ describe('OwnableService', () => {
       },
     ]);
     expect(registerSpy).not.toHaveBeenCalled();
+  });
+
+  it('confirms a pending local public event by replay identity instead of transaction hash alone', async () => {
+    const stateStore = createStateStore();
+    const chain = {
+      id: `0x${'1'.repeat(98)}`,
+      state: { hex: '0xstate' },
+      latestHash: { hex: `0x${'1'.repeat(64)}` },
+      toJSON: vi.fn().mockReturnValue({ id: `0x${'1'.repeat(98)}`, events: [] }),
+      add: vi.fn(),
+      events: [],
+    } as any;
+    await stateStore.createStore(`ownable:${chain.id}`);
+    await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
+    const eqty = {
+      address: '0xabc',
+      sign: vi.fn(async (event: any) => {
+        event.timestamp ??= Date.now();
+        event.signerAddress ??= '0xabc';
+        event.signature = Binary.fromHex(`0x${'11'.repeat(65)}`);
+      }),
+      emitPublicEvent: vi.fn().mockResolvedValue({
+        subjectId: Binary.fromHex(chain.id).hash().hex,
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'33'.repeat(4)}`,
+        blockNumber: 5,
+        transactionHash: `0x${'44'.repeat(32)}`,
+        transactionIndex: 2,
+        logIndex: 9,
+      }),
+      anchor: vi.fn(),
+    };
+    const eventChains = {
+      getStateDump: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([['confirmed', 1]]),
+    };
+    const service = createService(
+      stateStore as any,
+      eventChains as any,
+      eqty as any,
+      {} as any
+    );
+    const encodePublicEvent = vi.fn().mockResolvedValue(Uint8Array.from([1, 2, 3]));
+    const register = vi.fn().mockResolvedValue({ state: [['confirmed', 1]] });
+    (service as any)._rpc.set(chain.id, { encodePublicEvent, register });
+    vi.spyOn(service, 'store').mockResolvedValue(undefined as any);
+
+    await service.emitPublicEvent(chain, 'consume', { amount: 1 });
+
+    const confirmation = await service.applyIndexedPublicEventSnapshot(chain, [
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'77'.repeat(4)}`,
+        blockNumber: 5,
+        transactionHash: `0x${'44'.repeat(32)}`,
+        transactionIndex: 2,
+        logIndex: 8,
+      },
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'33'.repeat(4)}`,
+        blockNumber: 5,
+        transactionHash: `0x${'44'.repeat(32)}`,
+        transactionIndex: 2,
+        logIndex: 9,
+      },
+      {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'33'.repeat(4)}`,
+        blockNumber: 5,
+        transactionHash: `0x${'44'.repeat(32)}`,
+        transactionIndex: 2,
+        logIndex: 9,
+      },
+    ]);
+
+    expect(register).toHaveBeenCalledTimes(2);
+    expect(confirmation.appliedReplayKeys).toEqual([
+      `0x${'44'.repeat(32)}:8`,
+      `0x${'44'.repeat(32)}:9`,
+    ]);
+    expect(confirmation.duplicateReplayKeys).toEqual([`0x${'44'.repeat(32)}:9`]);
+    expect(confirmation.confirmedPendingPublicEvents).toEqual([
+      {
+        replayKey: `0x${'44'.repeat(32)}:9`,
+        event: {
+          source: '0xsource',
+          eventType: 'consume',
+          data: `0x${'33'.repeat(4)}`,
+          blockNumber: 5,
+          transactionHash: `0x${'44'.repeat(32)}`,
+          transactionIndex: 2,
+          logIndex: 9,
+        },
+        status: 'confirmed',
+        sources: ['local', 'snapshot'],
+      },
+    ]);
+    expect(await service.listTrackedPublicEvents(chain.id)).toEqual([
+      {
+        replayKey: `0x${'44'.repeat(32)}:8`,
+        event: {
+          source: '0xsource',
+          eventType: 'consume',
+          data: `0x${'77'.repeat(4)}`,
+          blockNumber: 5,
+          transactionHash: `0x${'44'.repeat(32)}`,
+          transactionIndex: 2,
+          logIndex: 8,
+        },
+        status: 'confirmed',
+        sources: ['snapshot'],
+      },
+      {
+        replayKey: `0x${'44'.repeat(32)}:9`,
+        event: {
+          source: '0xsource',
+          eventType: 'consume',
+          data: `0x${'33'.repeat(4)}`,
+          blockNumber: 5,
+          transactionHash: `0x${'44'.repeat(32)}`,
+          transactionIndex: 2,
+          logIndex: 9,
+        },
+        status: 'confirmed',
+        sources: ['local', 'snapshot'],
+      },
+    ]);
+  });
+
+  it('merges snapshot and stream deliveries idempotently across the same replay identity', async () => {
+    const stateStore = createStateStore();
+    const chain = {
+      id: 'ownable-stream',
+      state: { hex: '0xstate' },
+      latestHash: { hex: `0x${'1'.repeat(64)}` },
+      toJSON: vi.fn().mockReturnValue({ id: 'ownable-stream', events: [] }),
+      add: vi.fn(),
+      events: [],
+    } as any;
+    await stateStore.createStore(`ownable:${chain.id}`);
+    await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
+    const service = createService(
+      stateStore as any,
+      {
+        getStateDump: vi
+          .fn()
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([['confirmed', 1]]),
+      } as any,
+      { address: '0xabc', sign: vi.fn(), anchor: vi.fn() } as any,
+      {} as any
+    );
+    const register = vi.fn().mockResolvedValue({ state: [['confirmed', 1]] });
+    (service as any)._rpc.set(chain.id, { register });
+    vi.spyOn(service, 'store').mockResolvedValue(undefined as any);
+    const event = {
+      source: '0xsource',
+      eventType: 'consume',
+      data: `0x${'11'.repeat(4)}`,
+      blockNumber: 10,
+      transactionHash: `0x${'aa'.repeat(32)}`,
+      transactionIndex: 0,
+      logIndex: 1,
+    };
+
+    const snapshotReplay = await service.applyIndexedPublicEventSnapshot(chain, [event]);
+    const streamReplay = await service.applyIndexedPublicEventStream(chain, [event]);
+
+    expect(snapshotReplay.appliedReplayKeys).toEqual([publicEventReplayKey(event)]);
+    expect(streamReplay.appliedReplayKeys).toEqual([]);
+    expect(streamReplay.duplicateReplayKeys).toEqual([publicEventReplayKey(event)]);
+    expect(register).toHaveBeenCalledTimes(1);
+    expect(await service.listTrackedPublicEvents(chain.id)).toEqual([
+      {
+        replayKey: publicEventReplayKey(event),
+        event,
+        status: 'confirmed',
+        sources: ['snapshot', 'stream'],
+      },
+    ]);
   });
 });

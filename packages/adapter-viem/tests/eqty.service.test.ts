@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Binary } from 'eqty-core';
-import { defineChain } from 'viem';
+import { defineChain, encodeAbiParameters, encodeEventTopics, parseAbiItem } from 'viem';
 import EQTYService from '../src/services/EQTY.service';
+
+const PUBLIC_EVENT_ABI = parseAbiItem(
+  'event PublicEvent(bytes32 indexed subjectId, address indexed source, string eventType, bytes data, uint64 timestamp)'
+);
 
 describe('EQTYService', () => {
   const defaultAnchorAddress = '0x2222222222222222222222222222222222222222' as `0x${string}`;
@@ -325,22 +329,34 @@ describe('EQTYService', () => {
     };
     const publicClient = {
       getBlockNumber: vi.fn().mockResolvedValue(7n),
-      waitForTransactionReceipt: vi.fn().mockResolvedValue({ blockNumber: 7n, transactionIndex: 1 }),
-      getLogs: vi
-        .fn()
-        .mockResolvedValueOnce([
+      waitForTransactionReceipt: vi.fn().mockResolvedValue({
+        blockNumber: 7n,
+        transactionIndex: 1,
+        logs: [
           {
-            transactionHash: '0xtx-public',
-            args: {
-              subjectId: `0x${'33'.repeat(32)}`,
-              source: '0xsource',
-              eventType: 'consume',
-              data: `0x${'11'.repeat(4)}`,
-              timestamp: 9n,
-            },
+            address: localAnchor,
+            topics: encodeEventTopics({
+              abi: [PUBLIC_EVENT_ABI],
+              eventName: 'PublicEvent',
+              args: {
+                subjectId: `0x${'33'.repeat(32)}`,
+                source: '0x1111111111111111111111111111111111111111',
+              },
+            }),
+            data: encodeAbiParameters(
+              [
+                { name: 'eventType', type: 'string' },
+                { name: 'data', type: 'bytes' },
+                { name: 'timestamp', type: 'uint64' },
+              ],
+              ['consume', `0x${'11'.repeat(4)}`, 9n]
+            ),
             logIndex: 4n,
           },
-        ])
+        ],
+      }),
+      getLogs: vi
+        .fn()
         .mockResolvedValueOnce([
           {
             transactionHash: '0xtx-anchor',
@@ -366,7 +382,11 @@ describe('EQTYService', () => {
     await expect(service.submitAnchors()).resolves.toBe('0xtx-anchor');
     await expect(
       service.emitPublicEvent(`0x${'33'.repeat(32)}`, 'consume', Uint8Array.from([1, 2, 3]))
-    ).resolves.toMatchObject({ eventType: 'consume', timestamp: 9 });
+    ).resolves.toMatchObject({
+      eventType: 'consume',
+      source: '0x1111111111111111111111111111111111111111',
+      timestamp: 9,
+    });
     const result = await service.verifyAnchors({ key, value: expected });
 
     expect(anchorClient.anchor).toHaveBeenCalledWith(expect.any(Array), { value: 0n });
@@ -378,10 +398,6 @@ describe('EQTYService', () => {
     );
     expect(publicClient.getLogs).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ address: localAnchor })
-    );
-    expect(publicClient.getLogs).toHaveBeenNthCalledWith(
-      2,
       expect.objectContaining({ address: localAnchor })
     );
     expect(result.details[key.hex]).toMatchObject({

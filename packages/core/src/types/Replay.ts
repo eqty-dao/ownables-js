@@ -33,6 +33,15 @@ export interface ReplayEventMetadata {
   event: IndexedPublicEvent;
 }
 
+export type IndexedPublicEventTransportOrigin = "local" | "snapshot" | "stream";
+
+export type ReconciledPublicEventStatus = "pending" | "confirmed";
+
+export interface ReconciledPublicEvent extends ReplayEventMetadata {
+  status: ReconciledPublicEventStatus;
+  sources: IndexedPublicEventTransportOrigin[];
+}
+
 export interface ReplayIgnoredPublicEvent extends ReplayEventMetadata {
   reason: "register_failed" | "missing_private_prefix" | "missing_public_timestamp" | "invalid_subject_id";
   cause: unknown;
@@ -41,6 +50,39 @@ export interface ReplayIgnoredPublicEvent extends ReplayEventMetadata {
 export interface ReplayAttemptResult extends ReplayAppliedResult {
   complete: boolean;
   ignoredPublicEvents: ReplayIgnoredPublicEvent[];
+  pendingPublicEvents: ReconciledPublicEvent[];
+  confirmedPendingPublicEvents: ReconciledPublicEvent[];
+}
+
+export interface IndexedPublicEventsSnapshot {
+  ownableId: string;
+  publicEvents: IndexedPublicEvent[];
+}
+
+export interface IndexedPublicEventsStreamEvent {
+  ownableId: string;
+  publicEvent: IndexedPublicEvent;
+}
+
+export interface IndexedPublicEventsStreamHandlers {
+  onEvent(message: IndexedPublicEventsStreamEvent): void;
+  onError?: (error: unknown) => void;
+}
+
+export interface IndexedPublicEventsStreamSubscription {
+  close(): void;
+}
+
+export interface IndexedPublicEventsSnapshotSource {
+  loadOwnablePublicEvents(ownableId: string): Promise<IndexedPublicEventsSnapshot>;
+}
+
+export interface IndexedPublicEventsLiveSource {
+  watchOwnablePublicEvents(
+    ownableIds: string[],
+    handlers: IndexedPublicEventsStreamHandlers,
+    options?: { fromBlock?: string | number | bigint }
+  ): IndexedPublicEventsStreamSubscription;
 }
 
 export interface ReplayAuthorityEvaluateInput {

@@ -1,3 +1,17 @@
+# [0.9.0](https://github.com/eqty-dao/ownables-js/compare/v0.8.1...v0.9.0) (2026-07-14)
+
+
+### Bug Fixes
+
+* use released eqty-core ([968853d](https://github.com/eqty-dao/ownables-js/commit/968853d2cf94d56a0c12897f578b3453fb141074))
+
+
+### Features
+
+* add anchor eqty allowance management ([6bab1b7](https://github.com/eqty-dao/ownables-js/commit/6bab1b7c252e84c39e4aa1b7cefdfa2b3a48f97d))
+* align public-events runtime with injected anchor config ([6d24abe](https://github.com/eqty-dao/ownables-js/commit/6d24abe3d5e452f609b710127ee2254bf0966ebb))
+* reconcile indexed public events from hub ([6433bc0](https://github.com/eqty-dao/ownables-js/commit/6433bc03a43f54c6e5bbd92c49a6c9928f2f890f))
+
 ## [0.8.1](https://github.com/eqty-dao/ownables-js/compare/v0.8.0...v0.8.1) (2026-06-28)
 
 

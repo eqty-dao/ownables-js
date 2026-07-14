@@ -1,9 +1,14 @@
 import { Binary, EventChain, IEventChainJSON } from "eqty-core";
 import type { AnchorProvider, KVStore, StateStore } from "../interfaces/core.js";
 import type { StateDump } from "../types/OwnableRuntime.js";
+import type { ReplayAuthorityAnchorEvidence } from "../types/Replay.js";
 import type TypedDict from "../types/TypedDict.js";
 import type { StoredChainInfo } from "../types/EventChainStore.js";
 import type { LoggerLike } from "../logger.js";
+import {
+  validateAnchorsAgainstIndexedRecords,
+  validateAnchorsWithSource,
+} from "./AnchorValidation.service.js";
 
 export default class EventChainService {
   constructor(
@@ -175,8 +180,11 @@ export default class EventChainService {
     await this.idb.deleteStore(/^ownable:.+/);
   }
 
-  public async verify(chain: EventChain) {
+  public async verify(chain: EventChain, anchorEvidence?: ReplayAuthorityAnchorEvidence) {
     const anchors = chain.anchorMap;
-    return await this.eqty.verifyAnchors(...anchors);
+    if (anchorEvidence) {
+      return validateAnchorsAgainstIndexedRecords(anchors, anchorEvidence.indexedRecords);
+    }
+    return await validateAnchorsWithSource(this.eqty, ...anchors);
   }
 }

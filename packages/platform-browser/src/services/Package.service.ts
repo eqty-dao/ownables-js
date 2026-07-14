@@ -1,13 +1,13 @@
-import LocalStorageService from "./LocalStorage.service";
+import LocalStorageService from "./LocalStorage.service.js";
 import type { TypedPackageCapabilities, TypedPackage, TypedPackageStub } from "@ownables/core/types/TypedPackage";
 import type { TypedCosmWasmMsg } from "@ownables/core/types/TypedCosmWasmMsg";
 import type TypedDict from "@ownables/core/types/TypedDict";
 import type { MessageExt } from "@ownables/core/types/MessageInfo";
 import JSZip from "jszip";
 import mime from "mime/lite";
-import IDBService from "./IDB.service";
-import calculateCid from "../utils/calculateCid";
-import { RelayService } from "./Relay.service";
+import IDBService from "./IDB.service.js";
+import calculateCid from "../utils/calculateCid.js";
+import { RelayService } from "./Relay.service.js";
 import { Buffer } from "buffer";
 import { EventChain } from "eqty-core";
 

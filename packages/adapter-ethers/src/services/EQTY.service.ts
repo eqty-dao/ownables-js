@@ -8,6 +8,12 @@ import {
   type Signer,
   type TypedDataDomain,
 } from 'ethers';
+import {
+  buildAnchorValidationResult,
+  normalizeAnchorValidationPairs,
+  ZERO_ANCHOR_VALUE,
+  type AnchorValidationResult,
+} from '@ownables/core';
 import type {
   EthersAnchorClientLike,
   EthersAnchorContractLike,
@@ -21,8 +27,6 @@ import type {
 
 const BASE_CHAIN_ID = 8453;
 const BASE_SEPOLIA_CHAIN_ID = 84532;
-const ZERO_HASH = Binary.fromHex(`0x${'0'.repeat(64)}`);
-
 /* v8 ignore start */
 // Default ethers adapters are integration wiring; DI-based unit tests inject deps instead.
 class EthersSignerAdapter implements EthersSignerLike {
@@ -125,6 +129,7 @@ class EthersPublicEventContract implements EthersPublicEventClientLike {
     }
 
     return {
+      subjectId: parsed.args.subjectId as string,
       source: parsed.args.source as string,
       eventType: parsed.args.eventType as string,
       data: Binary.fromHex(parsed.args.data as string).hex,
@@ -132,6 +137,7 @@ class EthersPublicEventContract implements EthersPublicEventClientLike {
       transactionHash: receipt.hash ?? tx.hash,
       transactionIndex: Number(receipt.index ?? receipt.transactionIndex ?? tx.index ?? 0),
       logIndex: receiptLog.index,
+      timestamp: Number(parsed.args.timestamp),
     };
   }
 }
@@ -170,13 +176,27 @@ class EthersEqtyTokenContract implements EthersEqtyTokenLike {
   constructor(signer: Signer, address: string) {
     this.contract = new Contract(
       address,
-      ['function allowance(address owner, address spender) view returns (uint256)'],
+      [
+        'function allowance(address owner, address spender) view returns (uint256)',
+        'function approve(address spender, uint256 amount) returns (bool)',
+      ],
       signer
     ) as unknown as EthersEqtyTokenLike;
   }
 
   async allowance(owner: string, spender: string): Promise<bigint> {
     return this.contract.allowance(owner, spender);
+  }
+
+  async approve(spender: string, amount: bigint): Promise<string> {
+    const tx = await this.contract.approve?.(spender, amount);
+
+    if (typeof tx === 'string') return tx;
+    if (tx && typeof tx === 'object' && 'hash' in tx && typeof tx.hash === 'string') {
+      return tx.hash;
+    }
+
+    throw new Error(`Unexpected approval tx response: ${String(tx)}`);
   }
 }
 /* v8 ignore stop */
@@ -199,8 +219,8 @@ export default class EQTYService {
     public readonly chainId: number,
     options: EthersServiceOptions = {}
   ) {
-    if (!this.isSupportedChain(chainId)) {
-      throw new Error(`Unsupported chain ID: ${chainId}`);
+    if (!options.deps?.anchor?.contractAddress) {
+      throw new Error('Anchor contract address is required. Provide deps.anchor.contractAddress.');
     }
 
     if (options.ethereumProvider && !options.signer) {
@@ -223,7 +243,7 @@ export default class EQTYService {
         );
       })();
 
-    this.anchorContractAddress = AnchorClient.contractAddress(this.chainId);
+    this.anchorContractAddress = options.deps.anchor.contractAddress;
 
     if (options.deps?.anchorClient) {
       this.anchorClient = options.deps.anchorClient;
@@ -266,7 +286,7 @@ export default class EQTYService {
     if (first instanceof Binary || (first && 'hex' in first)) {
       for (const value of anchors as Array<{ hex: string } | Binary>) {
         const key = toBinary(value);
-        this.anchorQueue.push({ key, value: ZERO_HASH });
+        this.anchorQueue.push({ key, value: ZERO_ANCHOR_VALUE });
       }
       return;
     }
@@ -304,6 +324,37 @@ export default class EQTYService {
     return this.publicEventClient.emitPublicEvent(subjectId, eventType, data, nextTxOptions);
   }
 
+  async getAnchorEqtyAllowance(): Promise<bigint> {
+    const eqtyTokenAddress = await this.feeContract.eqtyToken();
+    if (eqtyTokenAddress === ZeroAddress) {
+      return 0n;
+    }
+
+    const eqtyToken =
+      this.eqtyTokenOverride ?? new EthersEqtyTokenContract(this.signerClient as Signer, eqtyTokenAddress);
+    return eqtyToken.allowance(this.address, this.anchorContractAddress);
+  }
+
+  async setAnchorEqtyAllowance(amount: bigint): Promise<string> {
+    if (amount < 0n) {
+      throw new Error('EQTY allowance amount must be non-negative');
+    }
+
+    const eqtyTokenAddress = await this.feeContract.eqtyToken();
+    if (eqtyTokenAddress === ZeroAddress) {
+      throw new Error('Anchor contract does not expose an EQTY token');
+    }
+
+    const eqtyToken =
+      this.eqtyTokenOverride ?? new EthersEqtyTokenContract(this.signerClient as Signer, eqtyTokenAddress);
+    const approve = eqtyToken.approve;
+    if (!approve) {
+      throw new Error('EQTY token client does not support approve(spender, amount)');
+    }
+
+    return approve.call(eqtyToken, this.anchorContractAddress, amount) as Promise<string>;
+  }
+
   private async resolveAnchorTxOptions(count: number): Promise<{ value?: bigint }> {
     const batchSize = BigInt(count);
     const quotedEqtyCost = await this.feeContract.quoteEqtyCost(batchSize);
@@ -312,15 +363,9 @@ export default class EQTYService {
       return { value: 0n };
     }
 
-    const eqtyTokenAddress = await this.feeContract.eqtyToken();
-    if (eqtyTokenAddress !== ZeroAddress) {
-      const eqtyToken =
-        this.eqtyTokenOverride ?? new EthersEqtyTokenContract(this.signerClient as Signer, eqtyTokenAddress);
-      const allowance = await eqtyToken.allowance(this.address, this.anchorContractAddress);
-
-      if (allowance >= quotedEqtyCost) {
-        return { value: 0n };
-      }
+    const allowance = await this.getAnchorEqtyAllowance();
+    if (allowance >= quotedEqtyCost) {
+      return { value: 0n };
     }
 
     const quotedEthCost = await this.feeContract.quoteEthCost(batchSize);
@@ -333,30 +378,11 @@ export default class EQTYService {
     }
   }
 
-  async verifyAnchors(...anchors: Array<Binary | { hex: string } | { key: Binary | { hex: string }; value: Binary | { hex: string } }>): Promise<{
-    verified: boolean;
-    anchors: Record<string, string | undefined>;
-    map: Record<string, string>;
-  }> {
+  async validateAnchors(...anchors: Array<Binary | { hex: string } | { key: Binary | { hex: string }; value: Binary | { hex: string } }>): Promise<AnchorValidationResult> {
     if (anchors.length === 0) {
-      return { verified: false, anchors: {}, map: {} };
+      return { verified: false, anchors: {}, map: {}, details: {} };
     }
-
-    const toBinary = (value: Binary | { hex: string }): Binary =>
-      value instanceof Binary ? value : Binary.fromHex(value.hex);
-
-    const pairs: Array<{ key: Binary; value: Binary }> = [];
-    const first = anchors[0] as Binary | { hex: string } | { key: Binary | { hex: string }; value: Binary | { hex: string } };
-
-    if (first instanceof Binary || ('hex' in (first as { hex?: string }) && !('key' in (first as { key?: unknown })))) {
-      for (const anchor of anchors as Array<Binary | { hex: string }>) {
-        pairs.push({ key: toBinary(anchor), value: ZERO_HASH });
-      }
-    } else {
-      for (const anchor of anchors as Array<{ key: Binary | { hex: string }; value: Binary | { hex: string } }>) {
-        pairs.push({ key: toBinary(anchor.key), value: toBinary(anchor.value) });
-      }
-    }
+    const pairs = normalizeAnchorValidationPairs(...anchors);
 
     const iface = new Interface([
       'event Anchored(bytes32 indexed key, bytes32 value, address indexed sender, uint64 timestamp)',
@@ -364,12 +390,9 @@ export default class EQTYService {
 
     const currentBlock = await this.provider.getBlockNumber();
     const fromBlock = Math.max(0, currentBlock - 100000);
-    const contractAddress = AnchorClient.contractAddress(this.chainId);
+    const contractAddress = this.anchorContractAddress;
 
-    const txMap: Record<string, string | undefined> = {};
-    const valueMap: Record<string, string> = {};
-    let verified = true;
-
+    const records = [];
     for (const { key, value } of pairs) {
       try {
         const logs = await this.provider.getLogs({
@@ -380,41 +403,40 @@ export default class EQTYService {
         });
 
         if (logs.length === 0) {
-          txMap[key.hex] = undefined;
-          valueMap[key.hex] = value.hex.toLowerCase();
-          verified = false;
+          records.push(undefined);
           continue;
         }
 
         const latest = logs[logs.length - 1];
         if (!latest) {
-          txMap[key.hex] = undefined;
-          valueMap[key.hex] = value.hex.toLowerCase();
-          verified = false;
+          records.push(undefined);
           continue;
         }
         const parsed = iface.parseLog(latest);
         const valueHex = (parsed?.args?.value as string | undefined)?.toLowerCase();
-
-        txMap[key.hex] = latest.transactionHash;
-        valueMap[key.hex] = valueHex ?? value.hex.toLowerCase();
-
-        if (value.hex !== ZERO_HASH.hex && valueHex !== value.hex.toLowerCase()) {
-          verified = false;
-        }
+        records.push({
+          key: key.hex,
+          expectedValue: value.hex.toLowerCase(),
+          value: valueHex ?? value.hex.toLowerCase(),
+          transactionHash: latest.transactionHash,
+          timestamp: Number(parsed?.args?.timestamp),
+          blockNumber: latest.blockNumber,
+          transactionIndex: latest.transactionIndex,
+          logIndex: latest.index,
+          verified: value.hex === ZERO_ANCHOR_VALUE.hex || valueHex === value.hex.toLowerCase(),
+          source: "provider" as const,
+        });
       } catch (error) {
         this.logger.error(`Failed to verify anchor ${key.hex}:`, error);
-        txMap[key.hex] = undefined;
-        valueMap[key.hex] = value.hex.toLowerCase();
-        verified = false;
+        records.push(undefined);
       }
     }
 
-    return {
-      verified,
-      anchors: txMap,
-      map: valueMap,
-    };
+    return buildAnchorValidationResult(pairs, records);
+  }
+
+  async verifyAnchors(...anchors: Array<Binary | { hex: string } | { key: Binary | { hex: string }; value: Binary | { hex: string } }>): Promise<AnchorValidationResult> {
+    return this.validateAnchors(...anchors);
   }
 
   private lockableContract(address: string) {

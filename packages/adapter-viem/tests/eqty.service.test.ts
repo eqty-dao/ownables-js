@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Binary } from 'eqty-core';
+import { defineChain, encodeAbiParameters, encodeEventTopics, parseAbiItem } from 'viem';
 import EQTYService from '../src/services/EQTY.service';
 
+const PUBLIC_EVENT_ABI = parseAbiItem(
+  'event PublicEvent(bytes32 indexed subjectId, address indexed source, string eventType, bytes data, uint64 timestamp)'
+);
+
 describe('EQTYService', () => {
+  const defaultAnchorAddress = '0x2222222222222222222222222222222222222222' as `0x${string}`;
   const logger = {
     debug: vi.fn(),
     info: vi.fn(),
@@ -20,17 +26,60 @@ describe('EQTYService', () => {
   ) =>
     new EQTYService(address, chainId, walletClient, publicClient, ethereumProvider, {
       ...deps,
+      anchor: deps.anchor ?? { contractAddress: defaultAnchorAddress },
       logger: deps.logger ?? logger,
     });
 
-  it('throws for unsupported chain ids', () => {
+  it('requires an explicit anchor contract address', () => {
     expect(
       () =>
-        createService('0xabc', 1, {} as any, {} as any, undefined, {
+        new EQTYService('0xabc', 84532, undefined, undefined, { request: vi.fn() } as any, {
+          anchorClient: { anchor: vi.fn() },
+          signer: {} as any,
+        })
+    ).toThrow('Anchor contract address is required');
+  });
+
+  it('throws for unsupported chain ids without an injected chain', () => {
+    expect(
+      () =>
+        createService('0xabc', 1, undefined, undefined, { request: vi.fn() } as any, {
           anchorClient: { anchor: vi.fn() },
           signer: {} as any,
         })
     ).toThrow('Unsupported chain ID');
+  });
+
+  it('supports a local anchor override on non-Base chains and can bootstrap clients for it', async () => {
+    const localChain = defineChain({
+      id: 31337,
+      name: 'Local',
+      nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+      rpcUrls: { default: { http: ['http://127.0.0.1:8545'] } },
+    });
+
+    const service = createService(
+      '0x1111111111111111111111111111111111111111',
+      31337,
+      undefined,
+      undefined,
+      { request: vi.fn() } as any,
+      {
+        anchor: {
+          contractAddress: '0x2222222222222222222222222222222222222222',
+          chain: localChain,
+        },
+        anchorClient: { anchor: vi.fn() },
+        signer: {} as any,
+      }
+    );
+
+    await expect(service.verifyAnchors()).resolves.toEqual({
+      verified: false,
+      anchors: {},
+      map: {},
+      details: {},
+    });
   });
 
   it('anchors and submits using injected anchor client', async () => {
@@ -69,7 +118,7 @@ describe('EQTYService', () => {
       { anchorClient: { anchor: vi.fn() }, signer: {} as any }
     );
 
-    await expect(service.verifyAnchors()).resolves.toEqual({ verified: false, anchors: {}, map: {} });
+    await expect(service.verifyAnchors()).resolves.toEqual({ verified: false, anchors: {}, map: {}, details: {} });
   });
 
   it('builds default viem clients and anchor client from ethereum provider', async () => {
@@ -82,7 +131,7 @@ describe('EQTYService', () => {
       {}
     );
 
-    await expect(service.verifyAnchors()).resolves.toEqual({ verified: false, anchors: {}, map: {} });
+    await expect(service.verifyAnchors()).resolves.toEqual({ verified: false, anchors: {}, map: {}, details: {} });
   });
 
   it('throws when provider inputs are missing and no ethereum provider is supplied', () => {
@@ -169,6 +218,57 @@ describe('EQTYService', () => {
     expect(feeReader.quoteEthCost).not.toHaveBeenCalled();
   });
 
+  it('reads the current signer allowance against the configured anchor contract', async () => {
+    const feeReader = {
+      quoteEqtyCost: vi.fn(),
+      quoteEthCost: vi.fn(),
+      eqtyToken: vi.fn().mockResolvedValue('0x1111111111111111111111111111111111111111'),
+    };
+    const eqtyToken = {
+      allowance: vi.fn().mockResolvedValue(27n),
+    };
+    const service = createService(
+      '0xabc',
+      84532,
+      { account: '0xabc', signMessage: vi.fn() } as any,
+      { getBlockNumber: vi.fn(), getLogs: vi.fn() } as any,
+      undefined,
+      { anchorClient: { anchor: vi.fn() }, feeReader, eqtyToken, signer: {} as any }
+    );
+
+    await expect(service.getAnchorEqtyAllowance()).resolves.toBe(27n);
+
+    expect(feeReader.eqtyToken).toHaveBeenCalledTimes(1);
+    expect(eqtyToken.allowance).toHaveBeenCalledWith('0xabc', defaultAnchorAddress);
+  });
+
+  it('updates and resets allowance through the EQTY token resolved from the anchor contract', async () => {
+    const feeReader = {
+      quoteEqtyCost: vi.fn(),
+      quoteEthCost: vi.fn(),
+      eqtyToken: vi.fn().mockResolvedValue('0x1111111111111111111111111111111111111111'),
+    };
+    const eqtyToken = {
+      allowance: vi.fn(),
+      approve: vi.fn().mockResolvedValueOnce('0xapprove').mockResolvedValueOnce('0xreset'),
+    };
+    const service = createService(
+      '0xabc',
+      84532,
+      { account: '0xabc', signMessage: vi.fn() } as any,
+      { getBlockNumber: vi.fn(), getLogs: vi.fn() } as any,
+      undefined,
+      { anchorClient: { anchor: vi.fn() }, feeReader, eqtyToken, signer: {} as any }
+    );
+
+    await expect(service.setAnchorEqtyAllowance(42n)).resolves.toBe('0xapprove');
+    await expect(service.setAnchorEqtyAllowance(0n)).resolves.toBe('0xreset');
+
+    expect(feeReader.eqtyToken).toHaveBeenCalledTimes(2);
+    expect(eqtyToken.approve).toHaveBeenNthCalledWith(1, defaultAnchorAddress, 42n);
+    expect(eqtyToken.approve).toHaveBeenNthCalledWith(2, defaultAnchorAddress, 0n);
+  });
+
   it('falls back to ETH payment when allowance is insufficient', async () => {
     const anchorClient = { anchor: vi.fn().mockResolvedValue('0xtx') };
     const feeReader = {
@@ -215,6 +315,96 @@ describe('EQTYService', () => {
 
     expect(anchorClient.anchor).toHaveBeenCalledWith(expect.any(Array), { value: 99n });
     expect(feeReader.quoteEqtyCost).not.toHaveBeenCalled();
+  });
+
+  it('uses the configured local anchor address across fee, emit, and verify paths', async () => {
+    const localAnchor = '0x9999999999999999999999999999999999999999';
+    const key = Binary.fromHex(`0x${'a'.repeat(64)}`);
+    const expected = Binary.fromHex(`0x${'b'.repeat(64)}`);
+    const anchorClient = { anchor: vi.fn().mockResolvedValue('0xtx-anchor') };
+    const walletClient = {
+      account: '0xabc',
+      signMessage: vi.fn().mockResolvedValue('0xproof'),
+      writeContract: vi.fn().mockResolvedValue('0xtx-public'),
+    };
+    const publicClient = {
+      getBlockNumber: vi.fn().mockResolvedValue(7n),
+      waitForTransactionReceipt: vi.fn().mockResolvedValue({
+        blockNumber: 7n,
+        transactionIndex: 1,
+        logs: [
+          {
+            address: localAnchor,
+            topics: encodeEventTopics({
+              abi: [PUBLIC_EVENT_ABI],
+              eventName: 'PublicEvent',
+              args: {
+                subjectId: `0x${'33'.repeat(32)}`,
+                source: '0x1111111111111111111111111111111111111111',
+              },
+            }),
+            data: encodeAbiParameters(
+              [
+                { name: 'eventType', type: 'string' },
+                { name: 'data', type: 'bytes' },
+                { name: 'timestamp', type: 'uint64' },
+              ],
+              ['consume', `0x${'11'.repeat(4)}`, 9n]
+            ),
+            logIndex: 4n,
+          },
+        ],
+      }),
+      getLogs: vi
+        .fn()
+        .mockResolvedValueOnce([
+          {
+            transactionHash: '0xtx-anchor',
+            args: { value: expected.hex, timestamp: 11n },
+            blockNumber: 7n,
+            transactionIndex: 2n,
+            logIndex: 5n,
+          },
+        ]),
+      readContract: vi
+        .fn()
+        .mockResolvedValueOnce(0n)
+        .mockResolvedValueOnce(0n)
+        .mockResolvedValueOnce('0x1111111111111111111111111111111111111111'),
+    };
+    const service = createService('0xabc', 31337, walletClient as any, publicClient as any, undefined, {
+      anchor: { contractAddress: localAnchor as `0x${string}` },
+      anchorClient,
+      signer: {} as any,
+    });
+
+    await service.anchor(Binary.fromHex(`0x${'1'.repeat(64)}`));
+    await expect(service.submitAnchors()).resolves.toBe('0xtx-anchor');
+    await expect(
+      service.emitPublicEvent(`0x${'33'.repeat(32)}`, 'consume', Uint8Array.from([1, 2, 3]))
+    ).resolves.toMatchObject({
+      eventType: 'consume',
+      source: '0x1111111111111111111111111111111111111111',
+      timestamp: 9,
+    });
+    const result = await service.verifyAnchors({ key, value: expected });
+
+    expect(anchorClient.anchor).toHaveBeenCalledWith(expect.any(Array), { value: 0n });
+    expect(walletClient.writeContract).toHaveBeenCalledWith(
+      expect.objectContaining({ address: localAnchor })
+    );
+    expect(publicClient.readContract).toHaveBeenCalledWith(
+      expect.objectContaining({ address: localAnchor })
+    );
+    expect(publicClient.getLogs).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ address: localAnchor })
+    );
+    expect(result.details[key.hex]).toMatchObject({
+      transactionHash: '0xtx-anchor',
+      timestamp: 11,
+      verified: true,
+    });
   });
 
   it('emits public events with EQTY payment when allowance covers the fee', async () => {
@@ -319,6 +509,7 @@ describe('EQTYService', () => {
       verified: false,
       anchors: {},
       map: {},
+      details: {},
     });
 
     const key = Binary.fromHex(`0x${'b'.repeat(64)}`);
@@ -326,6 +517,7 @@ describe('EQTYService', () => {
     const result = await service.verifyAnchors({ key, value });
     expect(result.verified).toBe(false);
     expect(result.anchors[key.hex]).toBeUndefined();
+    expect(result.details[key.hex]?.timestamp).toBeUndefined();
   });
 
   it('provides lockable operations through injected lockable client', async () => {
@@ -434,6 +626,7 @@ describe('EQTYService', () => {
     expect(result.anchors[key1.hex]).toBe('0xtx1');
     expect(result.anchors[key2.hex]).toBeUndefined();
     expect(result.map[key1.hex]).toBe(`0x${'d'.repeat(64)}`);
+    expect(result.details[key1.hex]?.timestamp).toBeUndefined();
   });
 
   it('verifies binary anchors with zero hash defaults and handles bigint log values', async () => {

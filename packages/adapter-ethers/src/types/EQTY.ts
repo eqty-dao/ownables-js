@@ -5,6 +5,7 @@ export type TypedDataField = { name: string; type: string };
 export type TypedDataDomain = EthersTypedDataDomain;
 export type AnchorTxOptions = { value?: bigint };
 export type EmittedPublicEvent = {
+  subjectId: string;
   source: string;
   eventType: string;
   data: string;
@@ -12,6 +13,7 @@ export type EmittedPublicEvent = {
   transactionHash: string;
   transactionIndex: number;
   logIndex: number;
+  timestamp?: number;
 };
 
 export interface EthersAnchorClientLike {
@@ -35,6 +37,7 @@ export interface EthersAnchorFeeContractLike {
 
 export interface EthersEqtyTokenLike {
   allowance(owner: string, spender: string): Promise<bigint>;
+  approve?(spender: string, amount: bigint): Promise<string | { hash?: string } | unknown>;
 }
 
 export interface EthersSignerLike {
@@ -46,8 +49,13 @@ export interface EthersSignerLike {
   ): Promise<string>;
 }
 
+export interface EthersAnchorConfig {
+  contractAddress: `0x${string}`;
+}
+
 export interface EQTYServiceDeps {
   anchorClient?: EthersAnchorClientLike;
+  anchor?: EthersAnchorConfig;
   publicEventClient?: EthersPublicEventClientLike;
   feeContract?: EthersAnchorFeeContractLike;
   eqtyToken?: EthersEqtyTokenLike;

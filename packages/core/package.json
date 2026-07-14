@@ -10,13 +10,15 @@
   "dependencies": {
     "blockstore-core": "^6.1.2",
     "cbor-x": "^1.6.0",
-    "eqty-core": "^1.0.2",
+    "eqty-core": "^1.1.1",
     "ipfs-unixfs-importer": "^16.1.4",
     "jszip": "^3.10.1"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
+    "prepack": "yarn build",
+    "prepare": "yarn build",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "publishConfig": {

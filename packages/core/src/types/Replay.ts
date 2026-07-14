@@ -1,6 +1,7 @@
 import type { PublicEvent } from "./OwnableRuntime.js";
 import type { TypedOwnableInfo } from "./TypedOwnableInfo.js";
 import type { EventChain } from "eqty-core";
+import type { AnchorValidationResult, IndexedAnchorRecord } from "./AnchorValidation.js";
 
 export interface IndexedPublicEvent extends PublicEvent {
   indexedAt?: string;
@@ -9,6 +10,7 @@ export interface IndexedPublicEvent extends PublicEvent {
 export interface ReplayDedupedEvents {
   events: IndexedPublicEvent[];
   duplicateReplayKeys: string[];
+  duplicateEvents: IndexedPublicEvent[];
 }
 
 export interface ReplayFreshnessResult {
@@ -22,29 +24,100 @@ export interface ReplayAppliedResult {
   appliedEvents: IndexedPublicEvent[];
   appliedReplayKeys: string[];
   duplicateReplayKeys: string[];
+  appliedPublicEvents: ReplayEventMetadata[];
+  duplicatePublicEvents: ReplayEventMetadata[];
 }
 
-export interface ReplayAttemptFailure {
+export interface ReplayEventMetadata {
   replayKey: string;
   event: IndexedPublicEvent;
+}
+
+export type IndexedPublicEventTransportOrigin = "local" | "snapshot" | "stream";
+
+export type ReconciledPublicEventStatus = "pending" | "confirmed";
+
+export interface ReconciledPublicEvent extends ReplayEventMetadata {
+  status: ReconciledPublicEventStatus;
+  sources: IndexedPublicEventTransportOrigin[];
+}
+
+export interface ReplayIgnoredPublicEvent extends ReplayEventMetadata {
+  reason: "register_failed" | "missing_private_prefix" | "missing_public_timestamp" | "invalid_subject_id";
   cause: unknown;
 }
 
 export interface ReplayAttemptResult extends ReplayAppliedResult {
   complete: boolean;
-  failure?: ReplayAttemptFailure;
+  ignoredPublicEvents: ReplayIgnoredPublicEvent[];
+  pendingPublicEvents: ReconciledPublicEvent[];
+  confirmedPendingPublicEvents: ReconciledPublicEvent[];
+}
+
+export interface IndexedPublicEventsSnapshot {
+  ownableId: string;
+  publicEvents: IndexedPublicEvent[];
+}
+
+export interface IndexedPublicEventsStreamEvent {
+  ownableId: string;
+  publicEvent: IndexedPublicEvent;
+}
+
+export interface IndexedPublicEventsStreamHandlers {
+  onEvent(message: IndexedPublicEventsStreamEvent): void;
+  onError?: (error: unknown) => void;
+}
+
+export interface IndexedPublicEventsStreamSubscription {
+  close(): void;
+}
+
+export interface IndexedPublicEventsSnapshotSource {
+  loadOwnablePublicEvents(ownableId: string): Promise<IndexedPublicEventsSnapshot>;
+}
+
+export interface IndexedPublicEventsLiveSource {
+  watchOwnablePublicEvents(
+    ownableIds: string[],
+    handlers: IndexedPublicEventsStreamHandlers,
+    options?: { fromBlock?: string | number | bigint }
+  ): IndexedPublicEventsStreamSubscription;
 }
 
 export interface ReplayAuthorityEvaluateInput {
   chain: EventChain;
   stateDump: Array<[ArrayLike<number>, ArrayLike<number>]>;
   indexedPublicEvents: IndexedPublicEvent[];
+  anchorEvidence?: ReplayAuthorityAnchorEvidence;
+  replayContext?: ReplayAuthorityReplayContext;
 }
 
 export interface ReplayAuthorityEvaluateResult {
-  anchorVerification: unknown;
+  anchorVerification: AnchorValidationResult;
   replay: ReplayAttemptResult;
   freshness: ReplayFreshnessResult;
   owner: string;
   ownableInfo: TypedOwnableInfo;
+}
+
+export interface ReplayPrivateEventBoundary {
+  hash: string;
+  timestamp?: number;
+}
+
+export interface ReplayAuthorityAnchorEvidence {
+  indexedRecords: IndexedAnchorRecord[];
+}
+
+export interface ReplayAuthorityReplayContext {
+  privatePrefixLength: number;
+  mode?: "production" | "development";
+}
+
+export interface IndexedPublicReplaySelectionOptions {
+  privateEvents: ReplayPrivateEventBoundary[];
+  privatePrefixLength: number;
+  anchorValidation?: AnchorValidationResult;
+  mode?: "production" | "development";
 }

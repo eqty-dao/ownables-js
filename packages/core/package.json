@@ -10,7 +10,7 @@
   "dependencies": {
     "blockstore-core": "^6.1.2",
     "cbor-x": "^1.6.0",
-    "eqty-core": "file:../../../eqty-core",
+    "eqty-core": "^1.1.1",
     "ipfs-unixfs-importer": "^16.1.4",
     "jszip": "^3.10.1"
   },

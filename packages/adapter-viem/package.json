@@ -9,7 +9,7 @@
   ],
   "dependencies": {
     "@ownables/core": "workspace:*",
-    "eqty-core": "file:../../../eqty-core",
+    "eqty-core": "^1.1.1",
     "viem": "^2.47.4"
   },
   "scripts": {

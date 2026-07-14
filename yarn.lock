@@ -983,7 +983,7 @@ __metadata:
   resolution: "@ownables/adapter-ethers@workspace:packages/adapter-ethers"
   dependencies:
     "@ownables/core": "workspace:*"
-    eqty-core: "file:../../../eqty-core"
+    eqty-core: "npm:^1.1.1"
     ethers: "npm:^6.15.0"
   languageName: unknown
   linkType: soft
@@ -993,7 +993,7 @@ __metadata:
   resolution: "@ownables/adapter-viem@workspace:packages/adapter-viem"
   dependencies:
     "@ownables/core": "workspace:*"
-    eqty-core: "file:../../../eqty-core"
+    eqty-core: "npm:^1.1.1"
     viem: "npm:^2.47.4"
   languageName: unknown
   linkType: soft
@@ -1028,7 +1028,7 @@ __metadata:
   dependencies:
     blockstore-core: "npm:^6.1.2"
     cbor-x: "npm:^1.6.0"
-    eqty-core: "file:../../../eqty-core"
+    eqty-core: "npm:^1.1.1"
     ipfs-unixfs-importer: "npm:^16.1.4"
     jszip: "npm:^3.10.1"
   languageName: unknown
@@ -1042,7 +1042,7 @@ __metadata:
     axios: "npm:^1.13.6"
     blockstore-core: "npm:^6.1.2"
     buffer: "npm:^6.0.3"
-    eqty-core: "file:../../../eqty-core"
+    eqty-core: "npm:^1.1.1"
     ipfs-unixfs-importer: "npm:^16.1.4"
     jszip: "npm:^3.10.1"
     mime: "npm:^4.1.0"
@@ -2752,43 +2752,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"eqty-core@file:../../../eqty-core::locator=%40ownables%2Fadapter-ethers%40workspace%3Apackages%2Fadapter-ethers":
-  version: 1.0.0-alpha.2
-  resolution: "eqty-core@file:../../../eqty-core#../../../eqty-core::hash=21071f&locator=%40ownables%2Fadapter-ethers%40workspace%3Apackages%2Fadapter-ethers"
+"eqty-core@npm:^1.1.1":
+  version: 1.1.1
+  resolution: "eqty-core@npm:1.1.1"
   dependencies:
     "@noble/hashes": "npm:^2.2.0"
     "@scure/base": "npm:^2.2.0"
-  checksum: 10c0/5b79e48d7b7a93a4707331d7cfc931b2a694c96e29ea11eb5fa10374781b7568a1527e1157359b6ff9716f99012a0f3bf4127f2ccfa70eccd6518b40748cf40d
-  languageName: node
-  linkType: hard
-
-"eqty-core@file:../../../eqty-core::locator=%40ownables%2Fadapter-viem%40workspace%3Apackages%2Fadapter-viem":
-  version: 1.0.0-alpha.2
-  resolution: "eqty-core@file:../../../eqty-core#../../../eqty-core::hash=21071f&locator=%40ownables%2Fadapter-viem%40workspace%3Apackages%2Fadapter-viem"
-  dependencies:
-    "@noble/hashes": "npm:^2.2.0"
-    "@scure/base": "npm:^2.2.0"
-  checksum: 10c0/5b79e48d7b7a93a4707331d7cfc931b2a694c96e29ea11eb5fa10374781b7568a1527e1157359b6ff9716f99012a0f3bf4127f2ccfa70eccd6518b40748cf40d
-  languageName: node
-  linkType: hard
-
-"eqty-core@file:../../../eqty-core::locator=%40ownables%2Fcore%40workspace%3Apackages%2Fcore":
-  version: 1.0.0-alpha.2
-  resolution: "eqty-core@file:../../../eqty-core#../../../eqty-core::hash=21071f&locator=%40ownables%2Fcore%40workspace%3Apackages%2Fcore"
-  dependencies:
-    "@noble/hashes": "npm:^2.2.0"
-    "@scure/base": "npm:^2.2.0"
-  checksum: 10c0/5b79e48d7b7a93a4707331d7cfc931b2a694c96e29ea11eb5fa10374781b7568a1527e1157359b6ff9716f99012a0f3bf4127f2ccfa70eccd6518b40748cf40d
-  languageName: node
-  linkType: hard
-
-"eqty-core@file:../../../eqty-core::locator=%40ownables%2Fplatform-browser%40workspace%3Apackages%2Fplatform-browser":
-  version: 1.0.0-alpha.2
-  resolution: "eqty-core@file:../../../eqty-core#../../../eqty-core::hash=21071f&locator=%40ownables%2Fplatform-browser%40workspace%3Apackages%2Fplatform-browser"
-  dependencies:
-    "@noble/hashes": "npm:^2.2.0"
-    "@scure/base": "npm:^2.2.0"
-  checksum: 10c0/5b79e48d7b7a93a4707331d7cfc931b2a694c96e29ea11eb5fa10374781b7568a1527e1157359b6ff9716f99012a0f3bf4127f2ccfa70eccd6518b40748cf40d
+  checksum: 10c0/5c562e2b55aa85d0113b25dca49694846e79698e0f5e65e34a7c6ff0bb0f913aabe430deae2b85cfab5b62a4c1b86200f6d224b93c65af5dbfda4ecccb9f2de6
   languageName: node
   linkType: hard
 

@@ -18,12 +18,8 @@ export interface NodePackageAssetIOOptions {
   zipLoader?: (cid: string) => Promise<unknown>;
 }
 
-export interface CidCalculator {
-  calculate(files: Map<string, Uint8Array>): Promise<string> | string;
-}
-
 export interface BucketArchiveServiceOptions {
   bucket: BucketLike;
-  cidCalculator: CidCalculator;
+  cidService: import('@ownables/core').OwnablePackageCidService;
   rootPrefix?: string;
 }

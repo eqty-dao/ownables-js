@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { decode, encode } from 'cbor-x';
 
 import RNOwnableRPC from '../src/services/RNOwnableRPC.service';
-import { createRNRuntimeRpcProvider } from '../src/services/createRNRuntimeRpcProvider';
+import { RNRuntimeRpcProvider } from '../src/services/RNRuntimeRpcProvider.service';
 import type { RNRuntimeBridge } from '../src/types/PlatformReactNative';
 
 type StateDump = Array<[ArrayLike<number>, ArrayLike<number>]>;
@@ -222,7 +222,7 @@ describe('RNOwnableRPC', () => {
 
   it('creates rpc through provider factory', async () => {
     const bridge = createBridge();
-    const provider = createRNRuntimeRpcProvider({ bridge });
+    const provider = new RNRuntimeRpcProvider({ bridge });
     const rpc = provider.create('ownable-factory');
 
     await rpc.initialize('', Uint8Array.from([0, 97, 115, 109]));

@@ -24,7 +24,7 @@ export default class BucketArchiveService implements ArchiveService {
 
   constructor(options: BucketArchiveServiceOptions) {
     this.bucket = options.bucket;
-    this.cidCalculator = options.cidCalculator;
+    this.cidCalculator = options.cidService;
     this.rootPrefix = options.rootPrefix ?? DEFAULT_ROOT;
   }
 
@@ -74,7 +74,9 @@ export default class BucketArchiveService implements ArchiveService {
       Array.from(files.entries()).sort(([a], [b]) => a.localeCompare(b))
     );
 
-    const cid = await this.cidCalculator.calculate(sorted);
+    const cid = await this.cidCalculator.calculate(
+      Array.from(sorted, ([path, content]) => ({ path, content }))
+    );
 
     for (const [name, contents] of sorted.entries()) {
       await this.bucket.put(`${this.packagePrefix(cid)}/${name}`, contents);

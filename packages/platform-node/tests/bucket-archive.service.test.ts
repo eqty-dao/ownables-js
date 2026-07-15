@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
 
 import BucketArchiveService from '../src/services/BucketArchive.service';
-import { OwnablePackageCidCalculator } from '../src/services/OwnablePackageCid.service';
+import { OwnablePackageCidService } from '@ownables/core';
 
 class InMemoryBucket {
   private readonly map = new Map<string, Uint8Array>();
@@ -27,11 +27,11 @@ class InMemoryBucket {
   }
 }
 
-function cidCalculator(files: Map<string, Uint8Array>): string {
+function cidCalculator(files: Iterable<{ path: string; content: Uint8Array }>): string {
   const hash = createHash('sha256');
-  for (const [name, bytes] of files.entries()) {
-    hash.update(name);
-    hash.update(bytes);
+  for (const { path, content } of files) {
+    hash.update(path);
+    hash.update(content);
   }
   return `cid-${hash.digest('hex').slice(0, 16)}`;
 }
@@ -48,7 +48,7 @@ describe('BucketArchiveService', () => {
   it('imports archive, strips chain file from package zip and persists chain separately', async () => {
     const service = new BucketArchiveService({
       bucket: new InMemoryBucket() as any,
-      cidCalculator: { calculate: cidCalculator },
+      cidService: { calculate: cidCalculator } as any,
     });
 
     const result = await service.importArchive(await makeArchive('eventChain.json'));
@@ -67,7 +67,7 @@ describe('BucketArchiveService', () => {
   it('normalizes chain.json and eventChain.json inputs to same cid', async () => {
     const service = new BucketArchiveService({
       bucket: new InMemoryBucket() as any,
-      cidCalculator: { calculate: cidCalculator },
+      cidService: { calculate: cidCalculator } as any,
     });
 
     const fromEventChain = await service.importArchive(await makeArchive('eventChain.json'));
@@ -82,7 +82,7 @@ describe('BucketArchiveService', () => {
 
     const service = new BucketArchiveService({
       bucket: new InMemoryBucket() as any,
-      cidCalculator: { calculate: cidCalculator },
+      cidService: { calculate: cidCalculator } as any,
     });
 
     await expect(service.importArchive(await zip.generateAsync({ type: 'uint8array' }))).rejects.toThrow(
@@ -95,7 +95,7 @@ describe('BucketArchiveService', () => {
     await bucket.put('archives/packages/cid-manual/file.txt', 'x');
     const service = new BucketArchiveService({
       bucket: bucket as any,
-      cidCalculator: { calculate: cidCalculator },
+      cidService: { calculate: cidCalculator } as any,
     });
 
     await expect(service.hasPackage('cid-manual')).resolves.toBe(true);
@@ -115,7 +115,7 @@ describe('BucketArchiveService', () => {
 
     const service = new BucketArchiveService({
       bucket: bucket as any,
-      cidCalculator: { calculate: cidCalculator },
+      cidService: { calculate: cidCalculator } as any,
     });
 
     await expect(service.readChain('cid-string')).resolves.toEqual({
@@ -124,20 +124,17 @@ describe('BucketArchiveService', () => {
   });
 
   it('calculates deterministic package cids with shared helper', async () => {
-    const calculator = new OwnablePackageCidCalculator();
+    const calculator = new OwnablePackageCidService();
     const cidA = await calculator.calculate(
-      new Map([
-        ['a.txt', Uint8Array.from([1])],
-        ['b.txt', Uint8Array.from([2])],
-      ])
+      [{ path: 'a.txt', content: Uint8Array.from([1]) }, { path: 'b.txt', content: Uint8Array.from([2]) }]
     );
     const cidB = await calculator.calculate(
-      new Map([
-        ['a.txt', Uint8Array.from([1])],
-        ['b.txt', Uint8Array.from([2])],
-        ['chain.json', Uint8Array.from([3])],
-        ['timestamp.txt', Uint8Array.from([4])],
-      ])
+      [
+        { path: 'a.txt', content: Uint8Array.from([1]) },
+        { path: 'b.txt', content: Uint8Array.from([2]) },
+        { path: 'chain.json', content: Uint8Array.from([3]) },
+        { path: 'timestamp.txt', content: Uint8Array.from([4]) },
+      ]
     );
 
     expect(cidA).toBe(cidB);

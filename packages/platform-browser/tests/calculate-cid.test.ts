@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import calculateCid from "../src/utils/calculateCid";
+import { OwnablePackageCidService } from "@ownables/core";
+
+const calculateCid = async (files: File[]) => new OwnablePackageCidService().calculate(
+  await Promise.all(files.map(async (file) => ({ path: file.name, content: new Uint8Array(await file.arrayBuffer()) })))
+);
 
 describe("calculateCid", () => {
   it("ignores chain.json and timestamp.txt when calculating package cid", async () => {

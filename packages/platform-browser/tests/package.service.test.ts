@@ -179,7 +179,7 @@ describe('PackageService', () => {
       keys: vi.fn().mockResolvedValue(['package.json']),
     };
     const service = createService(idb as any, {} as any, localStorage as any, {
-      calculateCidFn: vi.fn().mockResolvedValue('cid-1'),
+      cidService: { calculate: vi.fn().mockResolvedValue('cid-1') } as any,
     });
     vi.spyOn(service as any, 'getPackageJson').mockResolvedValue({
       name: 'ownable-test',
@@ -189,7 +189,7 @@ describe('PackageService', () => {
     vi.spyOn(service as any, 'getCapabilities').mockResolvedValue(capabilities);
     vi.spyOn(service as any, 'storeAssets').mockResolvedValue(undefined);
 
-    const pkg = await service.processPackage([{ name: 'package.json' }] as any);
+    const pkg = await service.processPackage([new File(['{}'], 'package.json', { type: 'application/json' })]);
     expect(pkg?.cid).toBe('cid-1');
     expect(pkg?.keywords).toEqual(['k1']);
     expect(localStorage.set).toHaveBeenCalled();
@@ -217,9 +217,11 @@ describe('PackageService', () => {
       } as any,
       {} as any,
       { get: () => [], set: () => undefined } as any,
-      { calculateCidFn: vi.fn().mockResolvedValue('cid-1') }
+      { cidService: { calculate: vi.fn().mockResolvedValue('cid-1') } as any }
     );
-    vi.spyOn(service as any, 'extractAssets').mockResolvedValue([{ name: 'package.json' }]);
+    vi.spyOn(service as any, 'extractAssets').mockResolvedValue([
+      new File(['{}'], 'package.json', { type: 'application/json' }),
+    ]);
     vi.spyOn(service as any, 'getPackageJson').mockResolvedValue({ name: 'pkg' });
     vi.spyOn(service as any, 'getChainJson').mockResolvedValue({ events: [] });
     vi.spyOn(service as any, 'isCurrentEvent').mockResolvedValue(false);
@@ -802,7 +804,7 @@ describe('PackageService', () => {
       { hasStore: vi.fn().mockResolvedValue(false) } as any,
       {} as any,
       { get: () => [], set: () => undefined } as any,
-      { calculateCidFn: vi.fn().mockResolvedValue('cid-1') }
+      { cidService: { calculate: vi.fn().mockResolvedValue('cid-1') } as any }
     );
     vi.spyOn(service, 'extractAssets').mockResolvedValue([] as any);
     await expect(service.getChainJson('chain.json', new File(['x'], 'x.zip'))).rejects.toThrow(
@@ -846,7 +848,7 @@ describe('PackageService', () => {
           local.splice(0, local.length, ...v);
         },
       } as any,
-      { calculateCidFn: vi.fn().mockResolvedValue('cid-relay') }
+      { cidService: { calculate: vi.fn().mockResolvedValue('cid-relay') } as any }
     );
     vi.spyOn(service as any, 'extractAssets').mockResolvedValue([new File(['{}'], 'package.json')] as any);
     vi.spyOn(service as any, 'getPackageJson').mockResolvedValue({ name: 'relay-pkg', keywords: [] });

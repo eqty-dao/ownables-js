@@ -8,12 +8,7 @@ import {
   type Signer,
   type TypedDataDomain,
 } from 'ethers';
-import {
-  buildAnchorValidationResult,
-  normalizeAnchorValidationPairs,
-  ZERO_ANCHOR_VALUE,
-  type AnchorValidationResult,
-} from '@ownables/core';
+import type { AnchorValidationPair, AnchorValidationRecord, AnchorValidationResult } from '@ownables/core';
 import type {
   EthersAnchorClientLike,
   EthersAnchorContractLike,
@@ -27,6 +22,22 @@ import type {
 
 const BASE_CHAIN_ID = 8453;
 const BASE_SEPOLIA_CHAIN_ID = 84532;
+const ZERO_ANCHOR_VALUE = Binary.fromHex(`0x${'0'.repeat(64)}`);
+const normalizeAnchorValidationPairs = (...anchors: any[]): AnchorValidationPair[] =>
+  anchors.map((anchor) => anchor instanceof Binary || 'hex' in anchor
+    ? { key: anchor instanceof Binary ? anchor : Binary.fromHex(anchor.hex), value: ZERO_ANCHOR_VALUE }
+    : { key: anchor.key instanceof Binary ? anchor.key : Binary.fromHex(anchor.key.hex), value: anchor.value instanceof Binary ? anchor.value : Binary.fromHex(anchor.value.hex) });
+const buildAnchorValidationResult = (pairs: AnchorValidationPair[], records: Array<AnchorValidationRecord | undefined>): AnchorValidationResult => {
+  const result: AnchorValidationResult = { verified: pairs.length > 0, anchors: {}, map: {}, details: {} };
+  pairs.forEach((pair, index) => {
+    const record = records[index] ?? { key: pair.key.hex, expectedValue: pair.value.hex, value: pair.value.hex, verified: pair.value.hex === ZERO_ANCHOR_VALUE.hex, source: 'provider' };
+    result.anchors[pair.key.hex] = record.transactionHash;
+    result.map[pair.key.hex] = record.value;
+    result.details[pair.key.hex] = record;
+    if (!record.transactionHash || !record.verified) result.verified = false;
+  });
+  return result;
+};
 /* v8 ignore start */
 // Default ethers adapters are integration wiring; DI-based unit tests inject deps instead.
 class EthersSignerAdapter implements EthersSignerLike {

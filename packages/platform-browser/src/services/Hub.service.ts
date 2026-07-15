@@ -46,8 +46,7 @@ export interface HubAvailableOwnablesStreamHandlers {
   onError?: (error: unknown) => void;
 }
 
-export const AVAILABLE_OWNABLES_UNAVAILABLE_MESSAGE =
-  "Hub available-ownables discovery is enabled, but the Hub discovery endpoint is unavailable.";
+import { AVAILABLE_OWNABLES_UNAVAILABLE_MESSAGE } from "../constants/hub.js";
 
 export default class HubService {
   constructor(

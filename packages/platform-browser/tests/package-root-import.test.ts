@@ -26,6 +26,8 @@ describe('@ownables/platform-browser package root', () => {
     expect(builtModule.PackageService).toBeTypeOf('function');
     expect(builtModule.IDBService).toBeTypeOf('function');
     expect(builtModule.HubService).toBeTypeOf('function');
-    expect(builtModule.calculateCid).toBeTypeOf('function');
+    expect(builtModule.BrowserRuntimeSourceProvider).toBeTypeOf('function');
+    expect(builtModule.BrowserRuntimeRpcProvider).toBeTypeOf('function');
+    expect(builtModule.calculateCid).toBeUndefined();
   }, 15000);
 });

@@ -6,10 +6,10 @@ import type { MessageExt } from "@ownables/core/types/MessageInfo";
 import JSZip from "jszip";
 import mime from "mime/lite";
 import IDBService from "./IDB.service.js";
-import calculateCid from "../utils/calculateCid.js";
 import { RelayService } from "./Relay.service.js";
 import { Buffer } from "buffer";
 import { EventChain } from "eqty-core";
+import { OwnablePackageCidService } from "@ownables/core";
 
 const getMimeType = (filename: string): string | null | undefined =>
   (mime as any)?.getType?.(filename);
@@ -48,7 +48,7 @@ export default class PackageService {
     options: {
       exampleUrl?: string;
       examples?: TypedPackageStub[];
-      calculateCidFn?: (files: File[]) => Promise<string>;
+      cidService?: OwnablePackageCidService;
       fetchFn?: (input: string, init?: RequestInit) => Promise<Response>;
       fileReaderFactory?: () => FileReader;
       logger?: Pick<Console, "debug" | "info" | "warn" | "error">;
@@ -57,7 +57,13 @@ export default class PackageService {
   ) {
     this.exampleUrl = options.exampleUrl;
     this.examples = options.examples ?? [];
-    this.calculateCidFn = options.calculateCidFn ?? calculateCid;
+    const cidService = options.cidService ?? new OwnablePackageCidService();
+    this.calculateCidFn = async (files) => cidService.calculate(
+      await Promise.all(files.map(async (file) => ({
+        path: file.name,
+        content: new Uint8Array(await file.arrayBuffer()),
+      })))
+    );
     this.fetchFn = options.fetchFn ?? ((input, init) => fetch(input, init));
     this.fileReaderFactory = options.fileReaderFactory ?? (() => new FileReader());
     this.logger = options.logger ?? console;

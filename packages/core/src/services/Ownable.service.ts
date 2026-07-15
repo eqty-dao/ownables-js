@@ -146,9 +146,7 @@ export default class OwnableService {
         ...(pkg.description ? { description: pkg.description } : {}),
       };
 
-      await progress.step('signEvent', () =>
-        this.eqty.sign(new Event(msg).addTo(chain))
-      );
+      await progress.step('signEvent', () => this.eqty.sign(new Event(msg).addTo(chain)));
     }
 
     if (this.anchoring) {

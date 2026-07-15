@@ -32,9 +32,7 @@ describe('ProgressService', () => {
     const meta = vi.fn(() => ({ hash: 'abc' }));
     const progress = new ProgressService(onProgress);
 
-    await expect(
-      progress.step('signEvent', () => Promise.reject(error), meta)
-    ).rejects.toBe(error);
+    await expect(progress.step('signEvent', () => Promise.reject(error), meta)).rejects.toBe(error);
     expect(onProgress).not.toHaveBeenCalled();
     expect(meta).not.toHaveBeenCalled();
   });

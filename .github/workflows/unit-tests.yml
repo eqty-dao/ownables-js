@@ -13,9 +13,6 @@ jobs:
       matrix:
         package:
           - core
-          - notify-core
-          - notify-client
-          - notify-publisher
           - platform-browser
           - adapter-viem
           - adapter-ethers

@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  calculateOwnablePackageCid,
-  type OwnablePackageCidEntry,
-} from '@ownables/core/utils';
+import { calculateOwnablePackageCid, type OwnablePackageCidEntry } from '@ownables/core/utils';
 
 describe('calculateOwnablePackageCid', () => {
   it('normalizes and sorts paths while excluding package metadata', async () => {

@@ -40,8 +40,6 @@ describe('calculateOwnablePackageCid', () => {
       }),
     ];
 
-    await expect(calculateFromFiles(metaOnly)).rejects.toThrow(
-      'Failed to calculate directory CID'
-    );
+    await expect(calculateFromFiles(metaOnly)).rejects.toThrow('Failed to calculate directory CID');
   });
 });

@@ -87,5 +87,4 @@ describe('core package', () => {
     });
     expect(replay.evaluateFreshness(events, ['0xaaa:1', '0xbbb:2']).stale).toBe(false);
   });
-
 });

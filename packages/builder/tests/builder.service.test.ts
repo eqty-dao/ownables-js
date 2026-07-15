@@ -7,14 +7,15 @@ import type * as BuilderModule from "../src";
 import { describe, expect, it, vi } from "vitest";
 import packageJson from "../package.json";
 
-import {
-  buildInstantiateMsg,
-  DOSSIER_BUNDLE_URL,
-  deploy,
-  estimateCost,
-  prepareDossier,
-  prepareOwnable,
-} from "../src";
+import { BuilderService } from "../src";
+
+const packageServiceFor = (service: any) => ({ extractAssets: vi.fn(), ...service });
+const prepareOwnable = (input: any) => new BuilderService({ packageService: packageServiceFor(input.packageService) }).prepareOwnable(input);
+const prepareDossier = (input: any) => new BuilderService({ packageService: input.packageService, fetchFn: input.fetchFn, bundleUrl: input.bundleUrl }).prepareDossier(input);
+const buildInstantiateMsg = (input: any) => new BuilderService({ packageService: packageServiceFor({ processPackage: vi.fn() }) }).buildInstantiateMsg(input);
+const deploy = (adapter: any, params: any) => new BuilderService({ packageService: packageServiceFor({ processPackage: vi.fn() }), deployAdapter: adapter }).deploy(params);
+const estimateCost = (input: any) => new BuilderService({ packageService: packageServiceFor({ processPackage: vi.fn() }) }).estimateCost(input);
+const DOSSIER_BUNDLE_URL = new URL("../src/dossier.zip", import.meta.url).toString();
 
 const execFileAsync = promisify(execFile);
 const REPO_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
@@ -243,8 +244,8 @@ describe("@ownables/builder", () => {
       await access(BUILT_INDEX_PATH);
       await access(BUILT_TYPES_PATH);
       const builtBuilder = (await import(pathToFileURL(BUILT_INDEX_PATH).href)) as typeof BuilderModule;
-      const bundlePath = fileURLToPath(builtBuilder.DOSSIER_BUNDLE_URL);
       const expectedBundlePath = fileURLToPath(new URL("./dossier.zip", pathToFileURL(BUILT_INDEX_PATH)));
+      const bundlePath = expectedBundlePath;
       await access(bundlePath);
       expect(bundlePath).toBe(expectedBundlePath);
       expect(await readFile(bundlePath)).toEqual(seededBundleBytes);
@@ -277,17 +278,16 @@ describe("@ownables/builder", () => {
         });
       });
 
-      const result = await builtBuilder.prepareDossier({
+      const builder = new builtBuilder.BuilderService({ packageService, fetchFn });
+      const result = await builder.prepareDossier({
         name: "Dossier",
         description: "A living file dossier",
-        packageService,
-        fetchFn,
       });
 
       expect(BUILT_INDEX_PATH).toMatch(/packages\/builder\/dist\/builder\/src\/index\.js$/);
       expect(BUILT_TYPES_PATH).toMatch(/packages\/builder\/dist\/builder\/src\/index\.d\.ts$/);
       expect(bundlePath).toMatch(/packages\/builder\/dist\/builder\/src\/dossier\.zip$/);
-      expect(fetchFn).toHaveBeenCalledWith(builtBuilder.DOSSIER_BUNDLE_URL);
+      expect(fetchFn).toHaveBeenCalledWith(pathToFileURL(expectedBundlePath).href);
       expect(extractAssets).toHaveBeenCalledWith(expect.any(File));
       expect(packageService.processPackage).toHaveBeenCalledWith([]);
       expect(result.packageCid).toBe("bafy-built-dossier");

@@ -10,6 +10,7 @@ import type {
   PrepareDossierInput,
   PreparedOwnable,
   PrepareOwnableInput,
+  BuilderServiceOptions,
 } from "../types/Builder";
 import { FIXED_OWNABLE_TYPE } from "../types/Builder";
 
@@ -47,13 +48,24 @@ const withOptionalThumbnail = (files: File[], thumbnail?: File): File[] => {
   ];
 };
 
-export const prepareOwnable = async (
+const DOSSIER_BUNDLE_URL = new URL("../dossier.zip", import.meta.url).toString();
+
+export class BuilderService {
+  private readonly fetchFn: NonNullable<BuilderServiceOptions["fetchFn"]>;
+  private readonly bundleUrl: string;
+
+  constructor(private readonly options: BuilderServiceOptions) {
+    this.fetchFn = options.fetchFn ?? ((resource: string, init?: RequestInit) => fetch(resource, init));
+    this.bundleUrl = options.bundleUrl ?? DOSSIER_BUNDLE_URL;
+  }
+
+ async prepareOwnable(
   input: PrepareOwnableInput
-): Promise<PreparedOwnable> => {
+): Promise<PreparedOwnable> {
   const name = normalize(input.name, "name");
   const description = normalize(input.description, "description");
 
-  const pkg = await input.packageService.processPackage(input.files);
+  const pkg = await this.options.packageService.processPackage(input.files);
   if (!pkg) {
     throw new Error("Failed to process ownable package");
   }
@@ -67,17 +79,14 @@ export const prepareOwnable = async (
       ...(input.keywords !== undefined ? { keywords: input.keywords } : {}),
     },
   };
-};
+ }
 
-export const DOSSIER_BUNDLE_URL = new URL("../dossier.zip", import.meta.url).toString();
-
-export const prepareDossier = async (
+ async prepareDossier(
   input: PrepareDossierInput
-): Promise<PreparedOwnable> => {
+): Promise<PreparedOwnable> {
   const name = normalize(input.name, "name");
   const description = normalize(input.description, "description");
-  const fetchFn = input.fetchFn ?? ((resource: string, init?: RequestInit) => fetch(resource, init));
-  const response = await fetchFn(input.bundleUrl ?? DOSSIER_BUNDLE_URL);
+  const response = await this.fetchFn(this.bundleUrl);
   if (!response.ok) {
     throw new Error(`Failed to load bundled dossier package: ${response.status} ${response.statusText}`);
   }
@@ -86,14 +95,13 @@ export const prepareDossier = async (
     type: "application/zip",
   });
   const files = withOptionalThumbnail(
-    await input.packageService.extractAssets(zipFile),
+    await this.options.packageService.extractAssets(zipFile),
     input.thumbnail
   );
 
-  const prepared = await prepareOwnable({
+  const prepared = await this.prepareOwnable({
     name,
     description,
-    packageService: input.packageService,
     files,
     ...(input.keywords !== undefined ? { keywords: input.keywords } : {}),
   });
@@ -106,11 +114,11 @@ export const prepareDossier = async (
       ...(input.keywords !== undefined ? { keywords: input.keywords } : {}),
     }),
   };
-};
+ }
 
-export const buildInstantiateMsg = (
+ buildInstantiateMsg(
   input: BuildInstantiateMsgInput
-): InstantiateMsgPayload => {
+): InstantiateMsgPayload {
   return {
     name: normalize(input.name, "name"),
     description: normalize(input.description, "description"),
@@ -120,12 +128,13 @@ export const buildInstantiateMsg = (
     keywords: input.keywords ?? [],
     ...(input.nft !== undefined ? { nft: input.nft } : {}),
   };
-};
+ }
 
-export const deploy = async (
-  adapter: BuilderDeployAdapter,
+ async deploy(
   params: DeployParams
-): Promise<DeployResult> => {
+): Promise<DeployResult> {
+  const adapter = this.options.deployAdapter;
+  if (!adapter) throw new Error("BuilderService deploy adapter is not configured");
   const result = await adapter.deployContract({
     wasm: params.wasm,
     instantiateMsg: params.instantiateMsg,
@@ -152,9 +161,9 @@ export const deploy = async (
   }
 
   return result;
-};
+ }
 
-export const estimateCost = (input: EstimateCostInput = {}): CostEstimate => {
+ estimateCost(input: EstimateCostInput = {}): CostEstimate {
   if (input.fallbackEth) {
     return {
       eth: input.fallbackEth,
@@ -178,4 +187,5 @@ export const estimateCost = (input: EstimateCostInput = {}): CostEstimate => {
   }
 
   return estimate;
-};
+ }
+}

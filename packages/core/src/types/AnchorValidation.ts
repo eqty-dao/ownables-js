@@ -38,3 +38,8 @@ export interface IndexedAnchorRecord {
 export interface AnchorValidationSource {
   validateAnchors(...anchors: Array<Binary | { hex: string } | { key: Binary | { hex: string }; value: Binary | { hex: string } }>): Promise<AnchorValidationResult>;
 }
+
+export type AnchorValidationInput =
+  | Binary
+  | { hex: string }
+  | { key: Binary | { hex: string }; value: Binary | { hex: string } };

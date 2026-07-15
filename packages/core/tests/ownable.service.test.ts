@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { Binary, EventChain } from 'eqty-core';
 
 import OwnableService from '../src/services/Ownable.service';
-import { publicEventReplayKey } from '../src/services/ReplayAuthority.service';
+import { PublicEventReplayService } from '../src/services/ReplayAuthority.service';
+
+const replay = new PublicEventReplayService();
+const publicEventReplayKey = replay.key.bind(replay);
 
 const basePkg = {
   title: 'Pkg',
@@ -28,15 +31,16 @@ describe('OwnableService', () => {
     error: vi.fn(),
   };
   const createService = (...args: any[]) =>
-    new OwnableService(
-      args[0],
-      args[1],
-      args[2],
-      args[3],
-      args[4],
-      args[5] ?? (logger as any),
-      args[6]
-    );
+    new OwnableService({
+      stateStore: args[0],
+      eventChains: args[1],
+      anchorProvider: args[2],
+      packages: args[3],
+      runtimeSource: args[4] ?? { getWorkerSource: () => '' },
+      logger: args[5] ?? (logger as any),
+      runtimeRpc: args[6] ?? { create: () => ({}) },
+      replay,
+    });
 
   const createStateStore = () => {
     const stores = new Map<string, Map<string, any>>();
@@ -580,23 +584,25 @@ describe('OwnableService', () => {
     expect(zip.file).toHaveBeenCalledWith('chain.json', JSON.stringify(chain.toJSON()));
   });
 
-  it('covers default runtime source and clearRpc noop branch', () => {
+  it('uses the injected runtime source and covers clearRpc noop branch', () => {
     const localLogger = {
       debug: vi.fn(),
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
     };
-    const service = new OwnableService(
-      {} as any,
-      { anchoring: false } as any,
-      {} as any,
-      {} as any,
-      undefined as any,
-      localLogger as any
-    );
+    const service = new OwnableService({
+      stateStore: {} as any,
+      eventChains: { anchoring: false } as any,
+      anchorProvider: {} as any,
+      packages: {} as any,
+      runtimeSource: { getWorkerSource: () => 'injected' },
+      runtimeRpc: { create: () => ({}) as any },
+      replay,
+      logger: localLogger as any,
+    });
 
-    expect((service as any).runtimeSource.getWorkerSource()).toContain('WASM instantiated successfully');
+    expect((service as any).runtimeSource.getWorkerSource()).toBe('injected');
     expect(() => service.clearRpc('missing')).not.toThrow();
   });
 

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Binary, EventChain } from 'eqty-core';
 
 import EventChainService from '../src/services/EventChain.service';
+import { AnchorValidationService } from '../src/services/AnchorValidation.service';
 
 describe('EventChainService', () => {
   const logger = {
@@ -11,7 +12,7 @@ describe('EventChainService', () => {
     error: vi.fn(),
   };
   const createService = (...args: any[]) =>
-    new EventChainService(args[0], args[1], args[2], logger as any);
+    new EventChainService(args[0], args[1], new AnchorValidationService(args[1]), args[2], logger as any);
 
   const createStateStore = () => {
     const stores = new Map<string, Map<string, any>>();

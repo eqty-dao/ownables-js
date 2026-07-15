@@ -17,11 +17,11 @@ function replaySort(a: IndexedPublicEvent, b: IndexedPublicEvent): number {
   return a.logIndex - b.logIndex;
 }
 
-export function publicEventReplayKey(event: Pick<IndexedPublicEvent, "transactionHash" | "logIndex">): string {
+function publicEventReplayKey(event: Pick<IndexedPublicEvent, "transactionHash" | "logIndex">): string {
   return `${event.transactionHash}:${event.logIndex}`;
 }
 
-export function dedupeIndexedPublicEvents(events: IndexedPublicEvent[]): ReplayDedupedEvents {
+function dedupeIndexedPublicEvents(events: IndexedPublicEvent[]): ReplayDedupedEvents {
   const sorted = [...events].sort(replaySort);
   const seen = new Set<string>();
   const deduped: IndexedPublicEvent[] = [];
@@ -42,7 +42,7 @@ export function dedupeIndexedPublicEvents(events: IndexedPublicEvent[]): ReplayD
   return { events: deduped, duplicateReplayKeys, duplicateEvents };
 }
 
-export function evaluateReplayFreshness(
+function evaluateReplayFreshness(
   indexedEvents: IndexedPublicEvent[],
   appliedReplayKeys: Iterable<string>
 ): ReplayFreshnessResult {
@@ -101,7 +101,7 @@ function resolvePrefixBoundaryTimestamps(
     : { lowerBound: lowerTimestamp, upperBound: upperTimestamp, usedTimestampFallback: true };
 }
 
-export function selectReplayableIndexedPublicEvents(
+function selectReplayableIndexedPublicEvents(
   indexedEvents: IndexedPublicEvent[],
   options: IndexedPublicReplaySelectionOptions
 ): { events: IndexedPublicEvent[]; ignoredPublicEvents: ReplayIgnoredPublicEvent[] } {
@@ -178,6 +178,25 @@ export function selectReplayableIndexedPublicEvents(
 export interface ReplayAuthorityServiceDeps {
   eventChains: EventChainService;
   ownables: OwnableService;
+  replay: PublicEventReplayService;
+}
+
+export class PublicEventReplayService {
+  key(event: Pick<IndexedPublicEvent, "transactionHash" | "logIndex">): string {
+    return publicEventReplayKey(event);
+  }
+
+  dedupe(events: IndexedPublicEvent[]): ReplayDedupedEvents {
+    return dedupeIndexedPublicEvents(events);
+  }
+
+  evaluateFreshness(indexedEvents: IndexedPublicEvent[], appliedReplayKeys: Iterable<string>): ReplayFreshnessResult {
+    return evaluateReplayFreshness(indexedEvents, appliedReplayKeys);
+  }
+
+  selectReplayable(indexedEvents: IndexedPublicEvent[], options: IndexedPublicReplaySelectionOptions) {
+    return selectReplayableIndexedPublicEvents(indexedEvents, options);
+  }
 }
 
 function privateEventsFromChain(chain: EventChain): IndexedPublicReplaySelectionOptions["privateEvents"] {
@@ -206,7 +225,7 @@ export class ReplayAuthorityService {
       input.indexedPublicEvents,
       replayOptions
     );
-    const freshness = evaluateReplayFreshness(input.indexedPublicEvents, replay.appliedReplayKeys);
+    const freshness = this.deps.replay.evaluateFreshness(input.indexedPublicEvents, replay.appliedReplayKeys);
     const ownableInfo = await this.deps.ownables.rpc(input.chain.id).query({ get_info: {} }, replay.stateDump);
 
     return {

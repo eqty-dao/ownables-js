@@ -5,17 +5,16 @@ import type {
   AnchorValidationResult,
   AnchorValidationSource,
   IndexedAnchorRecord,
+  AnchorValidationInput,
 } from "../types/AnchorValidation.js";
 
-export const ZERO_ANCHOR_VALUE = Binary.fromHex(`0x${"0".repeat(64)}`);
-
-type AnchorValidationInput = Binary | { hex: string } | { key: Binary | { hex: string }; value: Binary | { hex: string } };
+const ZERO_ANCHOR_VALUE = Binary.fromHex(`0x${"0".repeat(64)}`);
 
 function toBinary(value: Binary | { hex: string }): Binary {
   return value instanceof Binary ? value : Binary.fromHex(value.hex);
 }
 
-export function normalizeAnchorValidationPairs(...anchors: AnchorValidationInput[]): AnchorValidationPair[] {
+function normalizeAnchorValidationPairs(...anchors: AnchorValidationInput[]): AnchorValidationPair[] {
   if (anchors.length === 0) {
     return [];
   }
@@ -62,7 +61,7 @@ function createValidationRecord(
   };
 }
 
-export function buildAnchorValidationResult(
+function buildAnchorValidationResult(
   pairs: AnchorValidationPair[],
   records: Array<AnchorValidationRecord | undefined>
 ): AnchorValidationResult {
@@ -101,7 +100,7 @@ function indexedAnchorSort(a: IndexedAnchorRecord, b: IndexedAnchorRecord): numb
   return (a.logIndex ?? Number.MIN_SAFE_INTEGER) - (b.logIndex ?? Number.MIN_SAFE_INTEGER);
 }
 
-export function validateAnchorsAgainstIndexedRecords(
+function validateAnchorsAgainstIndexedRecords(
   anchors: AnchorValidationInput[],
   indexedRecords: IndexedAnchorRecord[]
 ): AnchorValidationResult {
@@ -120,16 +119,28 @@ export function validateAnchorsAgainstIndexedRecords(
   return buildAnchorValidationResult(pairs, records);
 }
 
-export async function validateAnchorsWithSource(
-  source: {
-    verifyAnchors(...anchors: AnchorValidationInput[]): Promise<AnchorValidationResult>;
-    validateAnchors?: AnchorValidationSource["validateAnchors"];
-  },
-  ...anchors: AnchorValidationInput[]
-): Promise<AnchorValidationResult> {
-  if (typeof source.validateAnchors === "function") {
-    return source.validateAnchors(...anchors);
+export class AnchorValidationService {
+  constructor(private readonly source?: AnchorValidationSource & {
+    verifyAnchors?(...anchors: AnchorValidationInput[]): Promise<AnchorValidationResult>;
+  }) {}
+
+  validateAgainstIndexedRecords(
+    anchors: AnchorValidationInput[],
+    indexedRecords: IndexedAnchorRecord[]
+  ): AnchorValidationResult {
+    return validateAnchorsAgainstIndexedRecords(anchors, indexedRecords);
   }
 
-  return source.verifyAnchors(...anchors);
+  async validate(...anchors: AnchorValidationInput[]): Promise<AnchorValidationResult> {
+    if (!this.source) {
+      throw new Error("AnchorValidationService source is not configured");
+    }
+    if (typeof this.source.validateAnchors === "function") {
+      return this.source.validateAnchors(...anchors);
+    }
+    if (typeof this.source.verifyAnchors === "function") {
+      return this.source.verifyAnchors(...anchors);
+    }
+    throw new Error("AnchorValidationService source is not configured");
+  }
 }

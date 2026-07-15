@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import OwnableService from '../src/services/Ownable.service';
-import { ReplayAuthorityService, publicEventReplayKey } from '../src/services/ReplayAuthority.service';
+import { PublicEventReplayService, ReplayAuthorityService } from '../src/services/ReplayAuthority.service';
+
+const replay = new PublicEventReplayService();
+const publicEventReplayKey = replay.key.bind(replay);
 
 const makeEvent = (
   transactionHash: string,
@@ -121,7 +124,7 @@ describe('ReplayAuthorityService', () => {
       }),
     } as any;
 
-    const service = new ReplayAuthorityService({ eventChains, ownables });
+    const service = new ReplayAuthorityService({ eventChains, ownables, replay });
     const result = await service.evaluate({
       chain,
       stateDump,
@@ -176,12 +179,15 @@ describe('ReplayAuthorityService', () => {
       .mockRejectedValueOnce(new Error('missing private event'))
       .mockResolvedValueOnce({ state: [['after-third', 1]] });
     const query = vi.fn().mockResolvedValue({ owner: '0x1', issuer: '0x2' });
-    const ownables = new OwnableService(
-      {} as any,
-      {} as any,
-      { address: '0xabc' } as any,
-      {} as any
-    );
+    const ownables = new OwnableService({
+      stateStore: {} as any,
+      eventChains: {} as any,
+      anchorProvider: { address: '0xabc' } as any,
+      packages: {} as any,
+      runtimeSource: { getWorkerSource: () => '' },
+      runtimeRpc: { create: () => ({}) as any },
+      replay,
+    });
     (ownables as any)._rpc.set(chain.id, {
       register,
       query,
@@ -190,6 +196,7 @@ describe('ReplayAuthorityService', () => {
     const service = new ReplayAuthorityService({
       eventChains: { verify: vi.fn().mockResolvedValue({ verified: true, anchors: {}, map: {}, details: {} }) } as any,
       ownables,
+      replay,
     });
 
     const result = await service.evaluate({

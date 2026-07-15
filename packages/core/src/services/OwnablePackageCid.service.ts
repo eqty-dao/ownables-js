@@ -15,8 +15,9 @@ function includeForCid(path: string): boolean {
   return normalized !== "chain.json" && normalized !== "timestamp.txt";
 }
 
-export async function calculateOwnablePackageCid(entries: OwnablePackageCidEntry[]): Promise<string> {
-  const filtered = entries
+export class OwnablePackageCidService {
+ async calculate(entries: Iterable<OwnablePackageCidEntry>): Promise<string> {
+  const filtered = Array.from(entries)
     .map((entry) => ({ path: normalizePath(entry.path), content: entry.content }))
     .filter((entry) => includeForCid(entry.path))
     .sort((a, b) => a.path.localeCompare(b.path))
@@ -32,4 +33,5 @@ export async function calculateOwnablePackageCid(entries: OwnablePackageCidEntry
   throw new Error(
     "Failed to calculate directory CID: importer did not find a directory entry in the input files"
   );
+ }
 }

@@ -34,27 +34,42 @@ import type {
 import EventChainService from "./EventChain.service.js";
 import { withProgress } from "../progress.js";
 import type { LoggerLike } from "../logger.js";
-import WorkerRPC from "./WorkerRPC.service.js";
-import { DEFAULT_WORKER_SOURCE } from "./workerSource.js";
-import { dedupeIndexedPublicEvents, publicEventReplayKey, selectReplayableIndexedPublicEvents } from "./ReplayAuthority.service.js";
+import { PublicEventReplayService } from "./ReplayAuthority.service.js";
+
+export interface OwnableServiceDependencies {
+  stateStore: StateStore;
+  eventChains: EventChainService;
+  anchorProvider: AnchorProvider;
+  packages: PackageAssetIO;
+  runtimeSource: RuntimeSourceProvider;
+  runtimeRpc: RuntimeRPCProvider;
+  replay: PublicEventReplayService;
+  logger?: LoggerLike;
+}
 
 export default class OwnableService {
   private readonly SNAPSHOT_INTERVAL = 50;
   private readonly PUBLIC_EVENT_REPLAY_STORE_SUFFIX = ".public-event-replays";
 
-  constructor(
-    private readonly stateStore: StateStore,
-    private readonly eventChains: EventChainService,
-    private readonly eqty: AnchorProvider,
-    private readonly packages: PackageAssetIO,
-    private readonly runtimeSource: RuntimeSourceProvider = {
-      getWorkerSource: () => DEFAULT_WORKER_SOURCE,
-    },
-    private readonly logger: LoggerLike = console,
-    private readonly runtimeRpc: RuntimeRPCProvider = {
-      create: (id: string) => new WorkerRPC(id),
-    }
-  ) {}
+  private readonly stateStore: StateStore;
+  private readonly eventChains: EventChainService;
+  private readonly eqty: AnchorProvider;
+  private readonly packages: PackageAssetIO;
+  private readonly runtimeSource: RuntimeSourceProvider;
+  private readonly runtimeRpc: RuntimeRPCProvider;
+  private readonly replay: PublicEventReplayService;
+  private readonly logger: LoggerLike;
+
+  constructor(deps: OwnableServiceDependencies) {
+    this.stateStore = deps.stateStore;
+    this.eventChains = deps.eventChains;
+    this.eqty = deps.anchorProvider;
+    this.packages = deps.packages;
+    this.runtimeSource = deps.runtimeSource;
+    this.runtimeRpc = deps.runtimeRpc;
+    this.replay = deps.replay;
+    this.logger = deps.logger ?? console;
+  }
 
   private readonly _rpc = new Map<string, OwnableRPC>();
 
@@ -271,7 +286,7 @@ export default class OwnableService {
     sources: IndexedPublicEventTransportOrigin[]
   ): ReconciledPublicEvent {
     return {
-      replayKey: publicEventReplayKey(event),
+      replayKey: this.replay.key(event),
       event,
       status,
       sources: [...new Set(sources)],
@@ -513,9 +528,9 @@ export default class OwnableService {
       sender: this.eqty.address,
       funds: [],
     };
-    const deduped = dedupeIndexedPublicEvents(indexedPublicEvents);
+    const deduped = this.replay.dedupe(indexedPublicEvents);
     const selected = options
-      ? selectReplayableIndexedPublicEvents(indexedPublicEvents, options)
+      ? this.replay.selectReplayable(indexedPublicEvents, options)
       : { events: deduped.events, ignoredPublicEvents: [] };
     const events = selected.events;
     const duplicateReplayKeys = deduped.duplicateReplayKeys;
@@ -523,7 +538,7 @@ export default class OwnableService {
     const appliedReplayKeys: string[] = [];
     const appliedPublicEvents = [];
     const duplicatePublicEvents = deduped.duplicateEvents.map((event) => ({
-      replayKey: publicEventReplayKey(event),
+      replayKey: this.replay.key(event),
       event,
     }));
     const ignoredPublicEvents = [...selected.ignoredPublicEvents];
@@ -531,7 +546,7 @@ export default class OwnableService {
 
     for (const indexedEvent of events) {
       const runtimeEvent = this.toRegisterRuntimeEvent(indexedEvent);
-      const replayKey = publicEventReplayKey(indexedEvent);
+      const replayKey = this.replay.key(indexedEvent);
       try {
         const { state } = await this.rpc(chainId).register(
           this.toRegisterRpcPayload(runtimeEvent),
@@ -596,7 +611,7 @@ export default class OwnableService {
 
     const replayStoreId = await this.ensureReplayStore(chain.id);
     const base = this.emptyReplayAttemptResult(stateDump);
-    const deduped = dedupeIndexedPublicEvents(indexedPublicEvents);
+    const deduped = this.replay.dedupe(indexedPublicEvents);
     const info: CosmWasmMessageInfo = {
       sender: this.eqty.address,
       funds: [],
@@ -610,7 +625,7 @@ export default class OwnableService {
     let nextState = stateDump;
 
     for (const indexedEvent of deduped.events) {
-      const replayKey = publicEventReplayKey(indexedEvent);
+      const replayKey = this.replay.key(indexedEvent);
       const existing = (await this.stateStore.get(replayStoreId, replayKey).catch(() => undefined)) as
         | ReconciledPublicEvent
         | undefined;
@@ -760,7 +775,7 @@ export default class OwnableService {
       const result = this.emptyReplayAttemptResult(stateDump);
       result.complete = false;
       result.ignoredPublicEvents.push({
-        replayKey: publicEventReplayKey(this.toRegisterRuntimeEvent(publicEvent)),
+        replayKey: this.replay.key(this.toRegisterRuntimeEvent(publicEvent)),
         event: this.toRegisterRuntimeEvent(publicEvent),
         reason: "invalid_subject_id",
         cause: {

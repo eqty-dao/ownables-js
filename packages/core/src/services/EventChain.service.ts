@@ -5,15 +5,13 @@ import type { ReplayAuthorityAnchorEvidence } from "../types/Replay.js";
 import type TypedDict from "../types/TypedDict.js";
 import type { StoredChainInfo } from "../types/EventChainStore.js";
 import type { LoggerLike } from "../logger.js";
-import {
-  validateAnchorsAgainstIndexedRecords,
-  validateAnchorsWithSource,
-} from "./AnchorValidation.service.js";
+import { AnchorValidationService } from "./AnchorValidation.service.js";
 
 export default class EventChainService {
   constructor(
     private idb: StateStore,
     private eqty: AnchorProvider,
+    private readonly anchorValidation: AnchorValidationService,
     private settingsStore?: KVStore,
     private readonly logger: LoggerLike = console
   ) {}
@@ -183,8 +181,8 @@ export default class EventChainService {
   public async verify(chain: EventChain, anchorEvidence?: ReplayAuthorityAnchorEvidence) {
     const anchors = chain.anchorMap;
     if (anchorEvidence) {
-      return validateAnchorsAgainstIndexedRecords(anchors, anchorEvidence.indexedRecords);
+      return this.anchorValidation.validateAgainstIndexedRecords(anchors, anchorEvidence.indexedRecords);
     }
-    return await validateAnchorsWithSource(this.eqty, ...anchors);
+    return await this.anchorValidation.validate(...anchors);
   }
 }

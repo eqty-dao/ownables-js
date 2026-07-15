@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { OwnablePackageCidService } from '@ownables/core';
+import { calculateOwnablePackageCid } from '@ownables/core/utils';
 
-const calculateCid = async (files: File[]) =>
-  new OwnablePackageCidService().calculate(
+const calculateFromFiles = async (files: File[]) =>
+  calculateOwnablePackageCid(
     await Promise.all(
       files.map(async (file) => ({
         path: file.name,
@@ -12,7 +12,7 @@ const calculateCid = async (files: File[]) =>
     )
   );
 
-describe('calculateCid', () => {
+describe('calculateOwnablePackageCid', () => {
   it('ignores chain.json and timestamp.txt when calculating package cid', async () => {
     const packageFiles = [
       new File(['alpha'], 'a.txt', { type: 'text/plain' }),
@@ -26,8 +26,8 @@ describe('calculateCid', () => {
       }),
     ];
 
-    const cidWithoutMeta = await calculateCid(packageFiles);
-    const cidWithMeta = await calculateCid(withMeta);
+    const cidWithoutMeta = await calculateFromFiles(packageFiles);
+    const cidWithMeta = await calculateFromFiles(withMeta);
 
     expect(cidWithMeta).toBe(cidWithoutMeta);
   });
@@ -40,6 +40,8 @@ describe('calculateCid', () => {
       }),
     ];
 
-    await expect(calculateCid(metaOnly)).rejects.toThrow('Failed to calculate directory CID');
+    await expect(calculateFromFiles(metaOnly)).rejects.toThrow(
+      'Failed to calculate directory CID'
+    );
   });
 });

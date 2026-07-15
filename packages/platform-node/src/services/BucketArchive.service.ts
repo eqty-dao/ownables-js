@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 import type { ArchiveService, ImportedArchive } from '@ownables/core';
+import { calculateOwnablePackageCid } from '@ownables/core/utils';
 import type { BucketArchiveServiceOptions } from '../types/PlatformNode';
 
 const DEFAULT_ROOT = 'archives';
@@ -19,12 +20,10 @@ function chainCandidateNames(files: string[]): string[] {
 
 export default class BucketArchiveService implements ArchiveService {
   private readonly bucket;
-  private readonly cidCalculator;
   private readonly rootPrefix;
 
   constructor(options: BucketArchiveServiceOptions) {
     this.bucket = options.bucket;
-    this.cidCalculator = options.cidService;
     this.rootPrefix = options.rootPrefix ?? DEFAULT_ROOT;
   }
 
@@ -73,7 +72,7 @@ export default class BucketArchiveService implements ArchiveService {
 
     const sorted = new Map(Array.from(files.entries()).sort(([a], [b]) => a.localeCompare(b)));
 
-    const cid = await this.cidCalculator.calculate(
+    const cid = await calculateOwnablePackageCid(
       Array.from(sorted, ([path, content]) => ({ path, content }))
     );
 

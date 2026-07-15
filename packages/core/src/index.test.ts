@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import * as Core from './index.js';
-import { OwnablePackageCidService, PublicEventReplayService } from './index.js';
+import { PublicEventReplayService } from './index.js';
 
 describe('core package', () => {
   it('exports class services without legacy function aliases', () => {
     expect(Core.AnchorValidationService).toBeTypeOf('function');
-    expect(Core.OwnablePackageCidService).toBeTypeOf('function');
+    const removedCidService = ['OwnablePackage', 'CidService'].join('');
+    expect((Core as Record<string, unknown>)[removedCidService]).toBeUndefined();
     expect(Core.PublicEventReplayService).toBeTypeOf('function');
     expect((Core as Record<string, unknown>).calculateOwnablePackageCid).toBeUndefined();
     expect((Core as Record<string, unknown>).publicEventReplayKey).toBeUndefined();
@@ -87,20 +88,4 @@ describe('core package', () => {
     expect(replay.evaluateFreshness(events, ['0xaaa:1', '0xbbb:2']).stale).toBe(false);
   });
 
-  it('calculates cid while ignoring chain metadata files', async () => {
-    const cid = new OwnablePackageCidService();
-    const cidA = await cid.calculate([
-      { path: 'a.txt', content: Uint8Array.from([1]) },
-      { path: 'b.txt', content: Uint8Array.from([2]) },
-    ]);
-
-    const cidB = await cid.calculate([
-      { path: 'a.txt', content: Uint8Array.from([1]) },
-      { path: 'b.txt', content: Uint8Array.from([2]) },
-      { path: 'chain.json', content: Uint8Array.from([3]) },
-      { path: 'timestamp.txt', content: Uint8Array.from([4]) },
-    ]);
-
-    expect(cidA).toBe(cidB);
-  });
 });

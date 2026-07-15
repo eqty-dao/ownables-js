@@ -20,6 +20,5 @@ export interface NodePackageAssetIOOptions {
 
 export interface BucketArchiveServiceOptions {
   bucket: BucketLike;
-  cidService: import('@ownables/core').OwnablePackageCidService;
   rootPrefix?: string;
 }

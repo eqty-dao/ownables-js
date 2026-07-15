@@ -13,7 +13,7 @@ import IDBService from './IDB.service.js';
 import { RelayService } from './Relay.service.js';
 import { Buffer } from 'buffer';
 import { EventChain } from 'eqty-core';
-import { OwnablePackageCidService } from '@ownables/core';
+import { calculateOwnablePackageCid } from '@ownables/core/utils';
 
 const getMimeType = (filename: string): string | null | undefined =>
   (mime as any)?.getType?.(filename);
@@ -39,7 +39,6 @@ const isInternalPackage = (pkg: TypedPackage | TypedPackageStub): boolean =>
 export default class PackageService {
   private readonly exampleUrl: string | undefined;
   private readonly examples: TypedPackageStub[];
-  private readonly calculateCidFn: (files: File[]) => Promise<string>;
   private readonly fetchFn: (input: string, init?: RequestInit) => Promise<Response>;
   private readonly fileReaderFactory: () => FileReader;
   private readonly logger: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
@@ -52,7 +51,6 @@ export default class PackageService {
     options: {
       exampleUrl?: string;
       examples?: TypedPackageStub[];
-      cidService?: OwnablePackageCidService;
       fetchFn?: (input: string, init?: RequestInit) => Promise<Response>;
       fileReaderFactory?: () => FileReader;
       logger?: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
@@ -61,16 +59,6 @@ export default class PackageService {
   ) {
     this.exampleUrl = options.exampleUrl;
     this.examples = options.examples ?? [];
-    const cidService = options.cidService ?? new OwnablePackageCidService();
-    this.calculateCidFn = async (files) =>
-      cidService.calculate(
-        await Promise.all(
-          files.map(async (file) => ({
-            path: file.name,
-            content: new Uint8Array(await file.arrayBuffer()),
-          }))
-        )
-      );
     this.fetchFn = options.fetchFn ?? ((input, init) => fetch(input, init));
     this.fileReaderFactory = options.fileReaderFactory ?? (() => new FileReader());
     this.logger = options.logger ?? console;
@@ -470,7 +458,14 @@ export default class PackageService {
       throw new Error('Missing chain.json for relay package');
     }
 
-    const cid = await this.calculateCidFn(files);
+    const cid = await calculateOwnablePackageCid(
+      await Promise.all(
+        files.map(async (file) => ({
+          path: file.name,
+          content: new Uint8Array(await file.arrayBuffer()),
+        }))
+      )
+    );
 
     if (await this.hasPackageAssets(cid)) {
       if (isNotLocal && chainJson && !(await this.isCurrentEvent(chainJson))) {

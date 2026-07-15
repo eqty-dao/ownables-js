@@ -4,6 +4,10 @@ import { EventChain } from 'eqty-core';
 
 import PackageService from '../src/services/Package.service';
 
+vi.mock('@ownables/core/utils', () => ({
+  calculateOwnablePackageCid: vi.fn().mockResolvedValue('cid-1'),
+}));
+
 describe('PackageService', () => {
   const logger = {
     debug: vi.fn(),
@@ -206,9 +210,7 @@ describe('PackageService', () => {
       setAll: vi.fn(),
       keys: vi.fn().mockResolvedValue(['package.json']),
     };
-    const service = createService(idb as any, {} as any, localStorage as any, {
-      cidService: { calculate: vi.fn().mockResolvedValue('cid-1') } as any,
-    });
+    const service = createService(idb as any, {} as any, localStorage as any);
     vi.spyOn(service as any, 'getPackageJson').mockResolvedValue({
       name: 'ownable-test',
       description: 'test desc',
@@ -246,8 +248,7 @@ describe('PackageService', () => {
         keysByPrefix: vi.fn().mockResolvedValue(['cid-1:package.json']),
       } as any,
       {} as any,
-      { get: () => [], set: () => undefined } as any,
-      { cidService: { calculate: vi.fn().mockResolvedValue('cid-1') } as any }
+      { get: () => [], set: () => undefined } as any
     );
     vi.spyOn(service as any, 'extractAssets').mockResolvedValue([
       new File(['{}'], 'package.json', { type: 'application/json' }),
@@ -906,8 +907,7 @@ describe('PackageService', () => {
     const service = createService(
       { hasStore: vi.fn().mockResolvedValue(false) } as any,
       {} as any,
-      { get: () => [], set: () => undefined } as any,
-      { cidService: { calculate: vi.fn().mockResolvedValue('cid-1') } as any }
+      { get: () => [], set: () => undefined } as any
     );
     vi.spyOn(service, 'extractAssets').mockResolvedValue([] as any);
     await expect(service.getChainJson('chain.json', new File(['x'], 'x.zip'))).rejects.toThrow(
@@ -950,8 +950,7 @@ describe('PackageService', () => {
         set: (_k: string, v: any[]) => {
           local.splice(0, local.length, ...v);
         },
-      } as any,
-      { cidService: { calculate: vi.fn().mockResolvedValue('cid-relay') } as any }
+      } as any
     );
     vi.spyOn(service as any, 'extractAssets').mockResolvedValue([
       new File(['{}'], 'package.json'),

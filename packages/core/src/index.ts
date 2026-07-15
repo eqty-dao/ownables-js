@@ -18,7 +18,6 @@ export * from './services/SIWE.service.js';
 export * from './services/AnchorValidation.service.js';
 export { PollingService } from './services/Polling.service.js';
 export * from './services/ReplayAuthority.service.js';
-export * from './services/OwnablePackageCid.service.js';
 export * from './services/Progress.service.js';
 export { default as EventChainService } from './services/EventChain.service.js';
 export { default as OwnableService } from './services/Ownable.service.js';

@@ -11,7 +11,8 @@ Main exports:
 - `SessionStorageService`
 - `PackageService`
 - `RelayService` (legacy/deprecated)
-- `calculateCid`
+- `BrowserRuntimeSourceProvider`
+- `BrowserRuntimeRpcProvider`
 
 Typical usage:
 
@@ -36,6 +37,8 @@ Main exports:
 - `BucketStateStore`
 - `NodeSandboxOwnableRPC`
 - `NodePackageAssetIO`
+- `NodeRuntimeSourceProvider`
+- `NodeRuntimeRpcProvider`
 
 `NodePackageAssetIO` expects resolvers/loaders via `NodePackageAssetIOOptions`.
 
@@ -58,32 +61,29 @@ Use:
 
 Main export:
 
-- `prepareOwnable(input)`
-- `buildInstantiateMsg(input, packageCid, networkId, nft?)`
-- `deploy(adapter, params)`
-- `estimateCost(...)`
+- `BuilderService`
 
 `@ownables/builder` replaces obuilder upload-first flows with direct deploy orchestration.
 
-`prepareOwnable(input)` accepts `File[]`, which works in both modern browsers and Node.js (Node 18+).
+`BuilderService.prepareOwnable(input)` accepts `File[]`, which works in both modern browsers and Node.js (Node 18+). Package, deploy, fetch, and bundle dependencies are constructor-visible.
 
 ### Browser flow
 
 1. Build/select asset files (`File[]`).
-2. Call `prepareOwnable(...)`.
-3. Build instantiate payload with `buildInstantiateMsg(...)`.
-4. Load wasm bytes (`Uint8Array`) and call `deploy(...)`.
+2. Call `builder.prepareOwnable(...)`.
+3. Build instantiate payload with `builder.buildInstantiateMsg(...)`.
+4. Load wasm bytes (`Uint8Array`) and call `builder.deploy(...)`.
 
 ### Node flow
 
 1. Build/select asset files (`File[]`) in Node.
-2. Call `prepareOwnable(...)`.
-3. Build instantiate payload with `buildInstantiateMsg(...)`.
-4. Read wasm bytes (`Uint8Array`) from disk/object storage and call `deploy(...)`.
+2. Call `builder.prepareOwnable(...)`.
+3. Build instantiate payload with `builder.buildInstantiateMsg(...)`.
+4. Read wasm bytes (`Uint8Array`) from disk/object storage and call `builder.deploy(...)`.
 
 ### WASM source in browser
 
-You must provide `wasm: Uint8Array` to `deploy(...)`.
+You must provide `wasm: Uint8Array` to `builder.deploy(...)`.
 
 Use app-local/static assets that are versioned with your app build.
 

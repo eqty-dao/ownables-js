@@ -24,6 +24,12 @@ const BUILT_INDEX_PATH = `${PACKAGE_ROOT}/${packageJson.main}`;
 const BUILT_TYPES_PATH = `${PACKAGE_ROOT}/${packageJson.types}`;
 
 describe("@ownables/builder", () => {
+  it("exports BuilderService without legacy function aliases", async () => {
+    const module = await import("../src");
+    expect(module.BuilderService).toBeTypeOf("function");
+    expect((module as Record<string, unknown>).prepareOwnable).toBeUndefined();
+    expect((module as Record<string, unknown>).DOSSIER_BUNDLE_URL).toBeUndefined();
+  });
   it("prepareOwnable validates metadata and returns package cid", async () => {
     const packageService = {
       processPackage: vi.fn().mockResolvedValue({

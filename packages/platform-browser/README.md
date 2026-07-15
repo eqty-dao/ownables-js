@@ -15,7 +15,8 @@ yarn add @ownables/platform-browser
 - `SessionStorageService`
 - `PackageService`
 - `RelayService` (legacy/deprecated)
-- `calculateCid`
+- `BrowserRuntimeSourceProvider`
+- `BrowserRuntimeRpcProvider`
 
 ## Quick start
 
@@ -39,4 +40,3 @@ const packages = new PackageService(idb, relay, storage);
 yarn workspace @ownables/platform-browser run build
 yarn workspace @ownables/platform-browser run typecheck
 ```
-

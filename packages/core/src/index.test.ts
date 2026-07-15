@@ -1,10 +1,19 @@
 import { describe, expect, it } from 'vitest';
+import * as Core from './index.js';
 import {
   OwnablePackageCidService,
   PublicEventReplayService,
 } from './index.js';
 
 describe('core package', () => {
+  it('exports class services without legacy function aliases', () => {
+    expect(Core.AnchorValidationService).toBeTypeOf('function');
+    expect(Core.OwnablePackageCidService).toBeTypeOf('function');
+    expect(Core.PublicEventReplayService).toBeTypeOf('function');
+    expect((Core as Record<string, unknown>).calculateOwnablePackageCid).toBeUndefined();
+    expect((Core as Record<string, unknown>).publicEventReplayKey).toBeUndefined();
+    expect((Core as Record<string, unknown>).validateAnchorsWithSource).toBeUndefined();
+  });
   it('has test harness', () => {
     expect(true).toBe(true);
   });

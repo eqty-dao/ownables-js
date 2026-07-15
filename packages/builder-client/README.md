@@ -34,6 +34,5 @@ const { requestId } = await builder.upload(zipBlob, {
 
 ## Migration
 
-- `upload(...)` -> `prepareOwnable(...)` + `buildInstantiateMsg(...)` + `deploy(...)`
-- `getTemplateCost(...)` -> `estimateCost(...)`
-
+- `upload(...)` -> `BuilderService.prepareOwnable(...)` + `buildInstantiateMsg(...)` + `deploy(...)`
+- `getTemplateCost(...)` -> `BuilderService.estimateCost(...)`

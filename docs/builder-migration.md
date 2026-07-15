@@ -11,11 +11,11 @@ Use `@ownables/builder` for package preparation and deployment in browser or Nod
 
 - `getTemplateCost(templateId?)`
   - Old: server template cost endpoint.
-  - New: `estimateCost(...)` (local/config or chain-derived).
+  - New: `builder.estimateCost(...)` (local/config or chain-derived).
 
 - `upload(zipFile, options?)`
   - Old: multipart upload to obuilder queue.
-  - New: `prepareOwnable(...)` + `buildInstantiateMsg(...)` + `deploy(...)`.
+  - New: `builder.prepareOwnable(...)` + `builder.buildInstantiateMsg(...)` + `builder.deploy(...)`.
 
 ## Before
 
@@ -37,27 +37,24 @@ const { requestId } = await builder.upload(zipBlob, {
 ## After
 
 ```ts
-import {
-  buildInstantiateMsg,
-  deploy,
-  prepareOwnable,
-} from "@ownables/builder";
+import { BuilderService } from "@ownables/builder";
 
-const prepared = await prepareOwnable({
+const builder = new BuilderService({ packageService, deployAdapter: adapter });
+
+const prepared = await builder.prepareOwnable({
   name: "My Ownable",
   description: "Ownable deployment",
   files,
-  packageService,
 });
 
-const instantiateMsg = buildInstantiateMsg({
+const instantiateMsg = builder.buildInstantiateMsg({
   name: "My Ownable",
   description: "Browser-first ownable",
   packageCid: prepared.packageCid,
   networkId,
 });
 
-const result = await deploy(adapter, {
+const result = await builder.deploy({
   wasm,
   instantiateMsg,
   expectedCodeHash,
@@ -66,7 +63,7 @@ const result = await deploy(adapter, {
 
 ## Browser wasm loading
 
-`deploy(...)` expects `wasm: Uint8Array`. In browser apps, a common pattern is to serve `ownable_bg.wasm` from `public/` and fetch bytes before deploy.
+`builder.deploy(...)` expects `wasm: Uint8Array`. In browser apps, a common pattern is to serve `ownable_bg.wasm` from `public/` and fetch bytes before deploy.
 
 You can also load wasm from a bundler-managed local asset (`src/assets` or equivalent) using the emitted asset URL.
 

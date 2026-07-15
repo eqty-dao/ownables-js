@@ -10,35 +10,29 @@ yarn add @ownables/builder
 
 ## Main exports
 
-- `prepareOwnable(input)`
-- `buildInstantiateMsg(input)`
-- `deploy(adapter, params)`
-- `estimateCost(input?)`
+- `BuilderService`
 
 ## Quick start
 
 ```ts
-import {
-  prepareOwnable,
-  buildInstantiateMsg,
-  deploy,
-} from "@ownables/builder";
+import { BuilderService } from "@ownables/builder";
 
-const prepared = await prepareOwnable({
+const builder = new BuilderService({ packageService, deployAdapter: adapter });
+
+const prepared = await builder.prepareOwnable({
   name: "My Ownable",
   description: "Ownable deployment",
   files,
-  packageService,
 });
 
-const instantiateMsg = buildInstantiateMsg({
+const instantiateMsg = builder.buildInstantiateMsg({
   name: "My Ownable",
   description: "Ownable deployment",
   packageCid: prepared.packageCid,
   networkId,
 });
 
-const result = await deploy(adapter, {
+const result = await builder.deploy({
   wasm,
   instantiateMsg,
   expectedCodeHash,
@@ -47,7 +41,7 @@ const result = await deploy(adapter, {
 
 ## Wasm loading examples
 
-`deploy(...)` expects `wasm: Uint8Array`.
+`builder.deploy(...)` expects `wasm: Uint8Array`.
 
 ### Node.js
 
@@ -91,4 +85,3 @@ yarn workspace @ownables/builder run typecheck
 ```
 
 `prepack` ensures `ownable_bg.wasm` exists before packaging.
-

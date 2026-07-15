@@ -193,15 +193,17 @@ describe('RNOwnableRPC', () => {
       createInstance: vi.fn(() => 'instance:1'),
       loadWasm: vi.fn(),
       disposeInstance: vi.fn(),
-      call: vi.fn(() =>
-        encode({ success: false, error_code: 'E_EXEC', error_message: 'boom' }) as Uint8Array
+      call: vi.fn(
+        () => encode({ success: false, error_code: 'E_EXEC', error_message: 'boom' }) as Uint8Array
       ),
     };
 
     const rpc = new RNOwnableRPC('ownable-1', { bridge });
     await rpc.initialize('', Uint8Array.from([0, 97, 115, 109]));
 
-    await expect(rpc.query({ get_info: {} }, [])).rejects.toThrow('Ownable ABI call failed: E_EXEC boom');
+    await expect(rpc.query({ get_info: {} }, [])).rejects.toThrow(
+      'Ownable ABI call failed: E_EXEC boom'
+    );
   });
 
   it('disposes runtime on terminate', async () => {

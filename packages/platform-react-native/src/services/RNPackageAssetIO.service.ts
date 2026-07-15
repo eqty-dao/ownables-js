@@ -4,7 +4,8 @@ import type { RNPackageAssetIOOptions } from '../types/PlatformReactNative';
 
 class RNFileReaderLike {
   public result: string | ArrayBuffer | null = null;
-  public onload: ((event: { target: { result: string | ArrayBuffer | null } }) => void) | null = null;
+  public onload: ((event: { target: { result: string | ArrayBuffer | null } }) => void) | null =
+    null;
 
   private emitLoad(): void {
     this.onload?.({ target: { result: this.result } });

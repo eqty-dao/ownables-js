@@ -17,7 +17,10 @@ export type EmittedPublicEvent = {
 };
 
 export interface EthersAnchorClientLike {
-  anchor(payload: Array<{ key: Binary; value: Binary }>, txOptions?: AnchorTxOptions): Promise<string>;
+  anchor(
+    payload: Array<{ key: Binary; value: Binary }>,
+    txOptions?: AnchorTxOptions
+  ): Promise<string>;
 }
 
 export interface EthersPublicEventClientLike {

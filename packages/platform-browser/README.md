@@ -26,7 +26,7 @@ import {
   LocalStorageService,
   PackageService,
   RelayService,
-} from "@ownables/platform-browser";
+} from '@ownables/platform-browser';
 
 const idb = new IDBService();
 const storage = new LocalStorageService();

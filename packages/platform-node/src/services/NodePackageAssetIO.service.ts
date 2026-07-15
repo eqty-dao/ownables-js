@@ -5,7 +5,8 @@ import type { NodePackageAssetIOOptions } from '../types/PlatformNode';
 
 class NodeFileReaderLike {
   public result: string | ArrayBuffer | null = null;
-  public onload: ((event: { target: { result: string | ArrayBuffer | null } }) => void) | null = null;
+  public onload: ((event: { target: { result: string | ArrayBuffer | null } }) => void) | null =
+    null;
 
   private emitLoad(): void {
     this.onload?.({ target: { result: this.result } });

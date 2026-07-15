@@ -119,16 +119,14 @@ export default class RNOwnablePersistence {
 
     for (const stored of events) {
       const event = Event.from(stored.eventBin);
-      const refs = (await this.options.backend.listEventAttachmentRefs(ownableId, stored.eventIndex)).sort(
-        (a, b) => a.ordinal - b.ordinal
-      );
+      const refs = (
+        await this.options.backend.listEventAttachmentRefs(ownableId, stored.eventIndex)
+      ).sort((a, b) => a.ordinal - b.ordinal);
 
       for (const ref of refs) {
         const bytes = await this.options.attachmentStore.read(ref.cid);
         if (!bytes) {
-          throw new Error(
-            `attachment_missing: ${ref.cid} for ${ownableId}#${stored.eventIndex}`
-          );
+          throw new Error(`attachment_missing: ${ref.cid} for ${ownableId}#${stored.eventIndex}`);
         }
 
         event.addAttachment(ref.attachmentName, bytes, ref.mediaType);
@@ -183,7 +181,9 @@ export default class RNOwnablePersistence {
     }
   }
 
-  async getLatestSnapshot(ownableId: string): Promise<{ eventIndex: number; blockHash: string; stateDump: StateDump } | null> {
+  async getLatestSnapshot(
+    ownableId: string
+  ): Promise<{ eventIndex: number; blockHash: string; stateDump: StateDump } | null> {
     const snapshots = await this.options.backend.listSnapshots(ownableId);
     if (snapshots.length === 0) return null;
 

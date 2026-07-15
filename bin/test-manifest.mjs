@@ -1,22 +1,22 @@
-import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import JSZip from "jszip";
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import JSZip from 'jszip';
 
 const pkg = process.argv[2]?.trim();
 
 if (!pkg) {
-  throw new Error("Usage: yarn test:manifest <pkg>");
+  throw new Error('Usage: yarn test:manifest <pkg>');
 }
 
 if (!/^[a-zA-Z0-9_-]+$/.test(pkg)) {
   throw new Error(`Invalid package name: ${pkg}`);
 }
 
-const baseDir = resolve("ownables", pkg);
-const manifestPath = resolve(baseDir, "artifacts", "code-hash-manifest.json");
-const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+const baseDir = resolve('ownables', pkg);
+const manifestPath = resolve(baseDir, 'artifacts', 'code-hash-manifest.json');
+const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 
 const includesRequired = (schema, method) =>
   Array.isArray(schema.oneOf) &&
@@ -32,15 +32,15 @@ if (!manifest.generatedAt) {
   throw new Error(`Missing generatedAt in ${manifestPath}`);
 }
 
-if (manifest.artifact && typeof manifest.artifact !== "string") {
+if (manifest.artifact && typeof manifest.artifact !== 'string') {
   throw new Error(`Invalid artifact in ${manifestPath}: expected string`);
 }
 
-if (typeof manifest.artifact === "string") {
-  const artifactPath = resolve(baseDir, "artifacts", manifest.artifact);
+if (typeof manifest.artifact === 'string') {
+  const artifactPath = resolve(baseDir, 'artifacts', manifest.artifact);
   if (existsSync(artifactPath)) {
     const artifact = readFileSync(artifactPath);
-    const actualCodeHash = `0x${createHash("sha256").update(artifact).digest("hex")}`;
+    const actualCodeHash = `0x${createHash('sha256').update(artifact).digest('hex')}`;
 
     if (actualCodeHash.toLowerCase() !== String(manifest.codeHash).toLowerCase()) {
       throw new Error(
@@ -50,105 +50,107 @@ if (typeof manifest.artifact === "string") {
   }
 }
 
-if (pkg === "dossier") {
-  const zipPath = resolve("ownables", `${pkg}.zip`);
+if (pkg === 'dossier') {
+  const zipPath = resolve('ownables', `${pkg}.zip`);
   if (!existsSync(zipPath)) {
     throw new Error(`Missing built package zip for ${pkg}: ${zipPath}`);
   }
 
   const zip = await JSZip.loadAsync(readFileSync(zipPath));
   const files = Object.keys(zip.files);
-  if (files.includes("index.html")) {
-    throw new Error("Dossier package must not include index.html");
+  if (files.includes('index.html')) {
+    throw new Error('Dossier package must not include index.html');
   }
 
-  const packageJsonText = await zip.file("package.json")?.async("string");
-  const querySchemaText = await zip.file("query_msg.json")?.async("string");
-  const executeSchemaText = await zip.file("execute_msg.json")?.async("string");
+  const packageJsonText = await zip.file('package.json')?.async('string');
+  const querySchemaText = await zip.file('query_msg.json')?.async('string');
+  const executeSchemaText = await zip.file('execute_msg.json')?.async('string');
 
   if (!packageJsonText || !querySchemaText || !executeSchemaText) {
-    throw new Error("Dossier package zip must include package.json, query_msg.json, and execute_msg.json");
+    throw new Error(
+      'Dossier package zip must include package.json, query_msg.json, and execute_msg.json'
+    );
   }
 
   const packageJson = JSON.parse(packageJsonText);
   const querySchema = JSON.parse(querySchemaText);
   const executeSchema = JSON.parse(executeSchemaText);
 
-  if (includesRequired(querySchema, "get_widget_state")) {
-    throw new Error("Dossier query schema must not expose get_widget_state");
+  if (includesRequired(querySchema, 'get_widget_state')) {
+    throw new Error('Dossier query schema must not expose get_widget_state');
   }
 
-  for (const method of ["is_locked"]) {
+  for (const method of ['is_locked']) {
     if (includesRequired(querySchema, method)) {
       throw new Error(`Dossier query schema must not expose ${method}`);
     }
   }
 
-  for (const method of ["lock"]) {
+  for (const method of ['lock']) {
     if (includesRequired(executeSchema, method)) {
       throw new Error(`Dossier execute schema must not expose ${method}`);
     }
   }
 
-  for (const method of ["get_attachments", "is_closed"]) {
+  for (const method of ['get_attachments', 'is_closed']) {
     if (!includesRequired(querySchema, method)) {
       throw new Error(`Dossier query schema must expose ${method}`);
     }
   }
 
-  for (const method of ["attach", "close"]) {
+  for (const method of ['attach', 'close']) {
     if (!includesRequired(executeSchema, method)) {
       throw new Error(`Dossier execute schema must expose ${method}`);
     }
   }
 
-  if (JSON.stringify(packageJson.keywords ?? []) !== JSON.stringify(["internal"])) {
+  if (JSON.stringify(packageJson.keywords ?? []) !== JSON.stringify(['internal'])) {
     throw new Error(
       `Dossier package.json must contain keywords ["internal"], got ${JSON.stringify(packageJson.keywords ?? [])}`
     );
   }
 }
 
-if (pkg === "dossier") {
-  const zipPath = resolve("ownables", `${pkg}.zip`);
-  const zipListing = execFileSync("unzip", ["-Z1", zipPath], { encoding: "utf8" })
-    .split("\n")
+if (pkg === 'dossier') {
+  const zipPath = resolve('ownables', `${pkg}.zip`);
+  const zipListing = execFileSync('unzip', ['-Z1', zipPath], { encoding: 'utf8' })
+    .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
 
-  if (zipListing.some((entry) => entry.endsWith("index.html"))) {
+  if (zipListing.some((entry) => entry.endsWith('index.html'))) {
     throw new Error(`Dossier package must omit index.html, but ${zipPath} still contains it`);
   }
 
-  const querySchemaPath = resolve(baseDir, "schema", "query_msg.json");
-  const executeSchemaPath = resolve(baseDir, "schema", "execute_msg.json");
-  const querySchema = JSON.parse(readFileSync(querySchemaPath, "utf8"));
-  const executeSchema = JSON.parse(readFileSync(executeSchemaPath, "utf8"));
+  const querySchemaPath = resolve(baseDir, 'schema', 'query_msg.json');
+  const executeSchemaPath = resolve(baseDir, 'schema', 'execute_msg.json');
+  const querySchema = JSON.parse(readFileSync(querySchemaPath, 'utf8'));
+  const executeSchema = JSON.parse(readFileSync(executeSchemaPath, 'utf8'));
   const queryMethods = querySchema.oneOf?.flatMap((entry) => entry.required ?? []) ?? [];
   const executeMethods = executeSchema.oneOf?.flatMap((entry) => entry.required ?? []) ?? [];
 
-  for (const method of ["get_attachments", "is_closed"]) {
+  for (const method of ['get_attachments', 'is_closed']) {
     if (!queryMethods.includes(method)) {
       throw new Error(`Dossier query schema is missing ${method}`);
     }
   }
 
-  for (const method of ["attach", "close"]) {
+  for (const method of ['attach', 'close']) {
     if (!executeMethods.includes(method)) {
       throw new Error(`Dossier execute schema is missing ${method}`);
     }
   }
 
-  if (queryMethods.includes("get_widget_state")) {
-    throw new Error("Dossier query schema must not expose get_widget_state");
+  if (queryMethods.includes('get_widget_state')) {
+    throw new Error('Dossier query schema must not expose get_widget_state');
   }
 
-  if (queryMethods.includes("is_locked")) {
-    throw new Error("Dossier query schema must not expose is_locked");
+  if (queryMethods.includes('is_locked')) {
+    throw new Error('Dossier query schema must not expose is_locked');
   }
 
-  if (executeMethods.includes("lock")) {
-    throw new Error("Dossier execute schema must not expose lock");
+  if (executeMethods.includes('lock')) {
+    throw new Error('Dossier execute schema must not expose lock');
   }
 }
 

@@ -1,3 +1,3 @@
-export { BuilderService } from "./services/Builder.service";
+export { BuilderService } from './services/Builder.service';
 
-export * from "./types/Builder";
+export * from './types/Builder';

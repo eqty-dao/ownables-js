@@ -1,15 +1,18 @@
-import { ViemSigner } from "eqty-core";
-import type { SIWEMessage, SIWEAuthResult, SIWEClientDeps } from "../types/SIWE.js";
+import { ViemSigner } from 'eqty-core';
+import type { SIWEMessage, SIWEAuthResult, SIWEClientDeps } from '../types/SIWE.js';
 
 export class SIWEClient {
   private readonly domain: string;
-  private readonly version: string = "1";
-  private readonly fetchFn: (input: string, init?: RequestInit) => Promise<{ ok: boolean; json(): Promise<any> }>;
+  private readonly version: string = '1';
+  private readonly fetchFn: (
+    input: string,
+    init?: RequestInit
+  ) => Promise<{ ok: boolean; json(): Promise<any> }>;
   private readonly now: () => Date;
   private readonly nonceGenerator: (() => string) | undefined;
 
   constructor(domain?: string, deps: SIWEClientDeps = {}) {
-    this.domain = domain || "localhost:8000";
+    this.domain = domain || 'localhost:8000';
     this.fetchFn = deps.fetchFn ?? ((input, init) => fetch(input, init));
     this.now = deps.now ?? (() => new Date());
     this.nonceGenerator = deps.nonceGenerator;
@@ -18,20 +21,15 @@ export class SIWEClient {
   generateNonce(): string {
     if (this.nonceGenerator) return this.nonceGenerator();
     return (
-      Math.random().toString(36).substring(2, 15) +
-      Math.random().toString(36).substring(2, 15)
+      Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
     );
   }
 
-  createMessage(
-    address: string,
-    uri: string,
-    chainId: number = 84532
-  ): SIWEMessage {
+  createMessage(address: string, uri: string, chainId: number = 84532): SIWEMessage {
     return {
       domain: this.domain,
       address,
-      statement: "Sign in with Ethereum to the EQTY Relay",
+      statement: 'Sign in with Ethereum to the EQTY Relay',
       uri,
       version: this.version,
       chainId,
@@ -42,40 +40,40 @@ export class SIWEClient {
 
   async signMessage(message: SIWEMessage, signer: ViemSigner): Promise<string> {
     const domain = {
-      name: "Sign-In with Ethereum",
+      name: 'Sign-In with Ethereum',
       version: this.version,
       chainId: message.chainId,
     };
 
     const types = {
       Message: [
-        { name: "domain", type: "string" },
-        { name: "address", type: "address" },
-        { name: "statement", type: "string" },
-        { name: "uri", type: "string" },
-        { name: "version", type: "string" },
-        { name: "chainId", type: "uint256" },
-        { name: "nonce", type: "string" },
-        { name: "issuedAt", type: "string" },
-        { name: "expirationTime", type: "string" },
-        { name: "notBefore", type: "string" },
-        { name: "requestId", type: "string" },
-        { name: "resources", type: "string[]" },
+        { name: 'domain', type: 'string' },
+        { name: 'address', type: 'address' },
+        { name: 'statement', type: 'string' },
+        { name: 'uri', type: 'string' },
+        { name: 'version', type: 'string' },
+        { name: 'chainId', type: 'uint256' },
+        { name: 'nonce', type: 'string' },
+        { name: 'issuedAt', type: 'string' },
+        { name: 'expirationTime', type: 'string' },
+        { name: 'notBefore', type: 'string' },
+        { name: 'requestId', type: 'string' },
+        { name: 'resources', type: 'string[]' },
       ],
     };
 
     const value = {
       domain: message.domain,
       address: message.address,
-      statement: message.statement || "",
+      statement: message.statement || '',
       uri: message.uri,
       version: message.version,
       chainId: message.chainId,
       nonce: message.nonce,
       issuedAt: message.issuedAt,
-      expirationTime: message.expirationTime || "",
-      notBefore: message.notBefore || "",
-      requestId: message.requestId || "",
+      expirationTime: message.expirationTime || '',
+      notBefore: message.notBefore || '',
+      requestId: message.requestId || '',
       resources: message.resources || [],
     };
 
@@ -95,9 +93,9 @@ export class SIWEClient {
       const signature = await this.signMessage(message, signer);
 
       const response = await this.fetchFn(`${relayUrl}/auth/verify`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           message,
@@ -109,7 +107,7 @@ export class SIWEClient {
         const error = await response.json();
         return {
           success: false,
-          error: error.error || "Authentication failed",
+          error: error.error || 'Authentication failed',
         };
       }
 
@@ -123,9 +121,7 @@ export class SIWEClient {
     } catch (error) {
       return {
         success: false,
-        error: `Authentication failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        error: `Authentication failed: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   }
@@ -133,20 +129,18 @@ export class SIWEClient {
   async getNonce(relayUrl: string): Promise<string> {
     try {
       const response = await this.fetchFn(`${relayUrl}/auth/nonce`, {
-        method: "POST",
+        method: 'POST',
       });
 
       if (!response.ok) {
-        throw new Error("Failed to get nonce");
+        throw new Error('Failed to get nonce');
       }
 
       const result = await response.json();
       return result.nonce;
     } catch (error) {
       throw new Error(
-        `Failed to get nonce: ${
-          error instanceof Error ? error.message : String(error)
-        }`
+        `Failed to get nonce: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }

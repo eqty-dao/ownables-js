@@ -190,7 +190,9 @@ export default class RNStateStore implements StateStore {
     for (const target of targets) {
       const prefix = this.storePrefix(target);
       const keys = await this.allKeys();
-      await Promise.all(keys.filter((key) => key.startsWith(prefix)).map((key) => this.backend.delete(key)));
+      await Promise.all(
+        keys.filter((key) => key.startsWith(prefix)).map((key) => this.backend.delete(key))
+      );
     }
   }
 

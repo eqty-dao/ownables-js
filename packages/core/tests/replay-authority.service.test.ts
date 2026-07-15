@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import OwnableService from '../src/services/Ownable.service';
-import { PublicEventReplayService, ReplayAuthorityService } from '../src/services/ReplayAuthority.service';
+import {
+  PublicEventReplayService,
+  ReplayAuthorityService,
+} from '../src/services/ReplayAuthority.service';
 
 const replay = new PublicEventReplayService();
 const publicEventReplayKey = replay.key.bind(replay);
@@ -14,19 +17,17 @@ const makeEvent = (
   timestamp = blockNumber
 ) => {
   const normalizedHash =
-    transactionHash.length === 66
-      ? transactionHash
-      : `0x${transactionHash.slice(2, 3).repeat(64)}`;
+    transactionHash.length === 66 ? transactionHash : `0x${transactionHash.slice(2, 3).repeat(64)}`;
 
   return {
-  source: '0xsource',
-  eventType: 'consume',
-  data: '0x11',
-  blockNumber,
-  transactionHash: normalizedHash,
-  transactionIndex,
-  logIndex,
-  timestamp,
+    source: '0xsource',
+    eventType: 'consume',
+    data: '0x11',
+    blockNumber,
+    transactionHash: normalizedHash,
+    transactionIndex,
+    logIndex,
+    timestamp,
   };
 };
 
@@ -109,11 +110,20 @@ describe('ReplayAuthorityService', () => {
         ],
         duplicateReplayKeys: [publicEventReplayKey(indexedPublicEvents[2]!)],
         appliedPublicEvents: [
-          { replayKey: publicEventReplayKey(indexedPublicEvents[1]!), event: indexedPublicEvents[1] },
-          { replayKey: publicEventReplayKey(indexedPublicEvents[0]!), event: indexedPublicEvents[0] },
+          {
+            replayKey: publicEventReplayKey(indexedPublicEvents[1]!),
+            event: indexedPublicEvents[1],
+          },
+          {
+            replayKey: publicEventReplayKey(indexedPublicEvents[0]!),
+            event: indexedPublicEvents[0],
+          },
         ],
         duplicatePublicEvents: [
-          { replayKey: publicEventReplayKey(indexedPublicEvents[2]!), event: indexedPublicEvents[2] },
+          {
+            replayKey: publicEventReplayKey(indexedPublicEvents[2]!),
+            event: indexedPublicEvents[2],
+          },
         ],
         ignoredPublicEvents: [],
         pendingPublicEvents: [],
@@ -151,7 +161,10 @@ describe('ReplayAuthorityService', () => {
     );
     expect(ownables.rpc).toHaveBeenCalledWith(chain.id);
     expect(result.anchorVerification).toEqual(anchorVerification);
-    expect(result.replay.appliedReplayKeys).toEqual([`0x${'a'.repeat(64)}:8`, `0x${'b'.repeat(64)}:4`]);
+    expect(result.replay.appliedReplayKeys).toEqual([
+      `0x${'a'.repeat(64)}:8`,
+      `0x${'b'.repeat(64)}:4`,
+    ]);
     expect(result.replay.duplicateReplayKeys).toEqual([`0x${'b'.repeat(64)}:4`]);
     expect(result.freshness).toEqual({
       stale: false,
@@ -194,7 +207,9 @@ describe('ReplayAuthorityService', () => {
     });
 
     const service = new ReplayAuthorityService({
-      eventChains: { verify: vi.fn().mockResolvedValue({ verified: true, anchors: {}, map: {}, details: {} }) } as any,
+      eventChains: {
+        verify: vi.fn().mockResolvedValue({ verified: true, anchors: {}, map: {}, details: {} }),
+      } as any,
       ownables,
       replay,
     });

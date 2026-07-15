@@ -73,7 +73,10 @@ describe('OwnableService', () => {
       deleteStore: vi.fn(async (store: string | RegExp) => {
         const keys = Array.from(stores.keys());
         for (const key of keys) {
-          if ((typeof store === 'string' && key === store) || (store instanceof RegExp && store.test(key))) {
+          if (
+            (typeof store === 'string' && key === store) ||
+            (store instanceof RegExp && store.test(key))
+          ) {
             stores.delete(key);
           }
         }
@@ -136,12 +139,7 @@ describe('OwnableService', () => {
 
   it('submits anchors when anchoring is enabled', async () => {
     const eqty = { submitAnchors: vi.fn().mockResolvedValue('0xtx') };
-    const service = createService(
-      {} as any,
-      { anchoring: true } as any,
-      eqty as any,
-      {} as any
-    );
+    const service = createService({} as any, { anchoring: true } as any, eqty as any, {} as any);
 
     await expect(service.submitAnchors()).resolves.toBe('0xtx');
     expect(eqty.submitAnchors).toHaveBeenCalledTimes(1);
@@ -287,13 +285,9 @@ describe('OwnableService', () => {
       type: 'application/pdf',
     });
 
-    await service.execute(
-      chain,
-      { ping: true } as any,
-      [] as any,
-      undefined,
-      [{ name: 'passport.pdf', file: attachment }]
-    );
+    await service.execute(chain, { ping: true } as any, [] as any, undefined, [
+      { name: 'passport.pdf', file: attachment },
+    ]);
 
     const event = sign.mock.calls[0]?.[0];
     expect(event.attachments).toHaveLength(1);
@@ -323,8 +317,16 @@ describe('OwnableService', () => {
     const chain = {
       id: 'chain-apply',
       events: [
-        { parsedData: { '@context': 'instantiate_msg.json', foo: 1 }, signerAddress: '0x1', hash: { hex: '0x1' } },
-        { parsedData: { '@context': 'execute_msg.json', bar: 2 }, signerAddress: '0x2', hash: { hex: '0x2' } },
+        {
+          parsedData: { '@context': 'instantiate_msg.json', foo: 1 },
+          signerAddress: '0x1',
+          hash: { hex: '0x1' },
+        },
+        {
+          parsedData: { '@context': 'execute_msg.json', bar: 2 },
+          signerAddress: '0x2',
+          hash: { hex: '0x2' },
+        },
         {
           parsedData: {
             '@context': 'register_msg.json',
@@ -388,7 +390,11 @@ describe('OwnableService', () => {
     const eventChains = {
       getStateDump: vi.fn().mockResolvedValue([['state', 1]]),
     };
-    const eqty = { address: '0xabc', sign: vi.fn(), submitAnchors: vi.fn().mockResolvedValue('0xtx') };
+    const eqty = {
+      address: '0xabc',
+      sign: vi.fn(),
+      submitAnchors: vi.fn().mockResolvedValue('0xtx'),
+    };
     const service = createService(
       { set: vi.fn().mockResolvedValue(undefined) } as any,
       eventChains as any,
@@ -492,7 +498,11 @@ describe('OwnableService', () => {
   it('retries store writes and throws after repeated verification mismatch', async () => {
     const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
     const stateStore = {
-      get: vi.fn().mockImplementation(async (_store: string, key: string) => (key === 'state' ? 'different' : undefined)),
+      get: vi
+        .fn()
+        .mockImplementation(async (_store: string, key: string) =>
+          key === 'state' ? 'different' : undefined
+        ),
       setAll: vi.fn().mockResolvedValue(undefined),
     };
     const service = createService(
@@ -502,7 +512,9 @@ describe('OwnableService', () => {
       {} as any
     );
 
-    await expect(service.store(chain, [['k', 'v']] as any)).rejects.toThrow('Operation failed after 3 attempts');
+    await expect(service.store(chain, [['k', 'v']] as any)).rejects.toThrow(
+      'Operation failed after 3 attempts'
+    );
     expect(stateStore.setAll).toHaveBeenCalled();
   });
 
@@ -515,7 +527,12 @@ describe('OwnableService', () => {
       events: [{}, {}],
       toJSON: () => ({ id: 'chain-anchor', events: [{}, {}] }),
       startingAfter: vi.fn().mockReturnValue({
-        anchorMap: [{ key: Binary.fromHex(`0x${'1'.repeat(64)}`), value: Binary.fromHex(`0x${'0'.repeat(64)}`) }],
+        anchorMap: [
+          {
+            key: Binary.fromHex(`0x${'1'.repeat(64)}`),
+            value: Binary.fromHex(`0x${'0'.repeat(64)}`),
+          },
+        ],
       }),
     } as any;
     await stateStore.createStore(`ownable:${chain.id}`);
@@ -561,7 +578,9 @@ describe('OwnableService', () => {
       { info: vi.fn().mockReturnValue({ keywords: [] }) } as any
     );
 
-    await expect(service.initStore(chain, 'cid-1', 'msg-1', [['k', 'v']] as any)).resolves.toBeUndefined();
+    await expect(
+      service.initStore(chain, 'cid-1', 'msg-1', [['k', 'v']] as any)
+    ).resolves.toBeUndefined();
   });
 
   it('zips ownable chain and rejects empty chains', async () => {
@@ -579,7 +598,9 @@ describe('OwnableService', () => {
       toJSON: () => ({ id: 'chain-1', events: [{}] }),
     } as any;
 
-    await expect(service.zip({ events: [] } as any)).rejects.toThrow('Cannot zip an empty ownable chain');
+    await expect(service.zip({ events: [] } as any)).rejects.toThrow(
+      'Cannot zip an empty ownable chain'
+    );
     await expect(service.zip(chain)).resolves.toBe(zip);
     expect(zip.file).toHaveBeenCalledWith('chain.json', JSON.stringify(chain.toJSON()));
   });
@@ -622,12 +643,7 @@ describe('OwnableService', () => {
       anchor: vi.fn().mockResolvedValue(undefined),
       submitAnchors: vi.fn().mockResolvedValue('0xtx'),
     };
-    const service = createService(
-      {} as any,
-      { anchoring: true } as any,
-      eqty as any,
-      {} as any
-    );
+    const service = createService({} as any, { anchoring: true } as any, eqty as any, {} as any);
 
     const result = await service.create({ ...basePkg, isDynamic: true } as any);
     expect(result.txHash).toBe('0xtx');
@@ -653,12 +669,7 @@ describe('OwnableService', () => {
       anchor: vi.fn().mockResolvedValue(undefined),
       submitAnchors: vi.fn(),
     };
-    const service = createService(
-      {} as any,
-      { anchoring: false } as any,
-      eqty as any,
-      {} as any
-    );
+    const service = createService({} as any, { anchoring: false } as any, eqty as any, {} as any);
 
     await service.create({
       ...basePkg,
@@ -750,7 +761,12 @@ describe('OwnableService', () => {
       keys: vi.fn().mockResolvedValue(['snapshot_0']),
       get: vi.fn().mockResolvedValue(snapshot),
     };
-    const service = createService(stateStore as any, {} as any, { address: '0xabc' } as any, {} as any);
+    const service = createService(
+      stateStore as any,
+      {} as any,
+      { address: '0xabc' } as any,
+      {} as any
+    );
     const rpc = {
       execute: vi.fn().mockResolvedValue({ state: [['next', 1]] }),
       instantiate: vi.fn().mockResolvedValue({ state: [['init', 1]] }),
@@ -781,7 +797,12 @@ describe('OwnableService', () => {
       hasStore: vi.fn().mockResolvedValue(false),
       keys: vi.fn().mockResolvedValue([]),
     };
-    const service = createService(stateStore as any, {} as any, { address: '0xabc' } as any, {} as any);
+    const service = createService(
+      stateStore as any,
+      {} as any,
+      { address: '0xabc' } as any,
+      {} as any
+    );
     const createSnapshotSpy = vi
       .spyOn(service as any, 'createSnapshot')
       .mockResolvedValue(undefined);
@@ -830,14 +851,9 @@ describe('OwnableService', () => {
       ingest: vi.fn(),
     });
 
-    await expect(service.consume(consumer, consumable)).rejects.toThrow(
-      'No consume event emitted'
-    );
+    await expect(service.consume(consumer, consumable)).rejects.toThrow('No consume event emitted');
 
-    await service.store(
-      { id: 'same-state', state: stateRef, events: [] } as any,
-      [] as any
-    );
+    await service.store({ id: 'same-state', state: stateRef, events: [] } as any, [] as any);
     expect((service as any).stateStore.setAll).not.toHaveBeenCalled();
   });
 
@@ -879,7 +895,9 @@ describe('OwnableService', () => {
     expect(register).toHaveBeenCalledTimes(1);
     expect(firstReplay.appliedReplayKeys).toEqual([publicEventReplayKey(event)]);
     expect(duplicateReplay.duplicateReplayKeys).toEqual([publicEventReplayKey(event)]);
-    expect(await stateStore.get(`ownable:${chain.id}.public-event-replays`, publicEventReplayKey(event))).toEqual({
+    expect(
+      await stateStore.get(`ownable:${chain.id}.public-event-replays`, publicEventReplayKey(event))
+    ).toEqual({
       replayKey: publicEventReplayKey(event),
       event,
       status: 'confirmed',
@@ -937,12 +955,7 @@ describe('OwnableService', () => {
   });
 
   it('replays indexed public events with deterministic dedupe order', async () => {
-    const service = createService(
-      {} as any,
-      {} as any,
-      { address: '0xabc' } as any,
-      {} as any
-    );
+    const service = createService({} as any, {} as any, { address: '0xabc' } as any, {} as any);
     const register = vi
       .fn()
       .mockResolvedValueOnce({ state: [['s1', 1]] })
@@ -978,7 +991,11 @@ describe('OwnableService', () => {
       },
     ];
 
-    const replay = await service.replayIndexedPublicEvents('chain-replay', [] as any, indexedEvents as any);
+    const replay = await service.replayIndexedPublicEvents(
+      'chain-replay',
+      [] as any,
+      indexedEvents as any
+    );
 
     expect(register).toHaveBeenCalledTimes(2);
     expect(replay.appliedReplayKeys).toEqual([`0x${'aa'.repeat(32)}:8`, `0x${'bb'.repeat(32)}:4`]);
@@ -993,12 +1010,7 @@ describe('OwnableService', () => {
   });
 
   it('preserves partial replay progress and records ignored public events without throwing', async () => {
-    const service = createService(
-      {} as any,
-      {} as any,
-      { address: '0xabc' } as any,
-      {} as any
-    );
+    const service = createService({} as any, {} as any, { address: '0xabc' } as any, {} as any);
     const replayFailure = new Error('missing private event');
     const register = vi
       .fn()
@@ -1054,18 +1066,17 @@ describe('OwnableService', () => {
       },
     ]);
 
-    const replay = await service.replayIndexedPublicEvents('chain-replay-failure', [] as any, indexedEvents as any);
+    const replay = await service.replayIndexedPublicEvents(
+      'chain-replay-failure',
+      [] as any,
+      indexedEvents as any
+    );
     expect(replay.complete).toBe(false);
     expect(register).toHaveBeenCalledTimes(4);
   });
 
   it('replays only public events inside the proven private prefix window', async () => {
-    const service = createService(
-      {} as any,
-      {} as any,
-      { address: '0xabc' } as any,
-      {} as any
-    );
+    const service = createService({} as any, {} as any, { address: '0xabc' } as any, {} as any);
     const register = vi.fn().mockResolvedValue({ state: [['inside-window', 1]] });
     (service as any)._rpc.set('chain-replay-window', { register });
     const indexedEvents = [
@@ -1201,12 +1212,7 @@ describe('OwnableService', () => {
   });
 
   it('falls back to private event timestamps only in development mode', async () => {
-    const service = createService(
-      {} as any,
-      {} as any,
-      { address: '0xabc' } as any,
-      {} as any
-    );
+    const service = createService({} as any, {} as any, { address: '0xabc' } as any, {} as any);
     const register = vi.fn().mockResolvedValue({ state: [['dev-window', 1]] });
     (service as any)._rpc.set('chain-replay-development', { register });
     const indexedEvents = [
@@ -1313,12 +1319,7 @@ describe('OwnableService', () => {
     const eventChains = {
       getStateDump: vi.fn().mockResolvedValue([]),
     };
-    const service = createService(
-      stateStore as any,
-      eventChains as any,
-      eqty as any,
-      {} as any
-    );
+    const service = createService(stateStore as any, eventChains as any, eqty as any, {} as any);
     const encodePublicEvent = vi.fn().mockResolvedValue(Uint8Array.from([1, 2, 3]));
     (service as any)._rpc.set(chain.id, { encodePublicEvent });
     const replay = await service.emitPublicEvent(chain, 'consume', { amount: 1 });
@@ -1379,12 +1380,7 @@ describe('OwnableService', () => {
     const eventChains = {
       getStateDump: vi.fn().mockResolvedValue([]),
     };
-    const service = createService(
-      stateStore as any,
-      eventChains as any,
-      eqty as any,
-      {} as any
-    );
+    const service = createService(stateStore as any, eventChains as any, eqty as any, {} as any);
     const encodePublicEvent = vi.fn().mockResolvedValue(Uint8Array.from([1, 2, 3]));
     (service as any)._rpc.set(chain.id, { encodePublicEvent });
 
@@ -1462,12 +1458,7 @@ describe('OwnableService', () => {
     const eventChains = {
       getStateDump: vi.fn().mockResolvedValue([['s', 1]]),
     };
-    const service = createService(
-      stateStore as any,
-      eventChains as any,
-      eqty as any,
-      {} as any
-    );
+    const service = createService(stateStore as any, eventChains as any, eqty as any, {} as any);
     const encodePublicEvent = vi.fn().mockResolvedValue(Uint8Array.from([1, 2, 3]));
     (service as any)._rpc.set(chain.id, { encodePublicEvent });
     const registerSpy = vi.spyOn(service, 'registerPublicEvent');
@@ -1536,12 +1527,7 @@ describe('OwnableService', () => {
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([['confirmed', 1]]),
     };
-    const service = createService(
-      stateStore as any,
-      eventChains as any,
-      eqty as any,
-      {} as any
-    );
+    const service = createService(stateStore as any, eventChains as any, eqty as any, {} as any);
     const encodePublicEvent = vi.fn().mockResolvedValue(Uint8Array.from([1, 2, 3]));
     const register = vi.fn().mockResolvedValue({ state: [['confirmed', 1]] });
     (service as any)._rpc.set(chain.id, { encodePublicEvent, register });

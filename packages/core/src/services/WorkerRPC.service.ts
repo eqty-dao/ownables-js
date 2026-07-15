@@ -265,7 +265,9 @@ export default class WorkerRPC implements OwnableRPC {
 
           try {
             const envelope = decode(
-              event.data.output instanceof Uint8Array ? event.data.output : new Uint8Array(event.data.output)
+              event.data.output instanceof Uint8Array
+                ? event.data.output
+                : new Uint8Array(event.data.output)
             ) as HostAbiEnvelope;
             if (!envelope.success) {
               reject(

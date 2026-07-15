@@ -82,7 +82,11 @@ describe('AuthorityService', () => {
       isUnlockProofValid: async () => true,
     };
 
-    const authority = new AuthorityService(new InMemoryRecordStore() as any, archive as any, lockable as any);
+    const authority = new AuthorityService(
+      new InMemoryRecordStore() as any,
+      archive as any,
+      lockable as any
+    );
 
     const result = await authority.bridgeOwnableArchive(Uint8Array.from([1, 2, 3]));
 
@@ -116,7 +120,9 @@ describe('AuthorityService', () => {
     );
 
     await expect(authority.getUnlockProof('cid-1', '0xowner')).resolves.toBe('0xproof-2');
-    await expect(authority.getUnlockProof('cid-1', '0xnot-owner')).rejects.toThrow(/not current NFT owner/i);
+    await expect(authority.getUnlockProof('cid-1', '0xnot-owner')).rejects.toThrow(
+      /not current NFT owner/i
+    );
   });
 
   it('throws when archive import fails', async () => {
@@ -130,7 +136,9 @@ describe('AuthorityService', () => {
       {} as any
     );
 
-    await expect(authority.bridgeOwnableArchive(Uint8Array.from([1]))).rejects.toThrow('bad archive');
+    await expect(authority.bridgeOwnableArchive(Uint8Array.from([1]))).rejects.toThrow(
+      'bad archive'
+    );
   });
 
   it('throws when NFT is not locked or record/package missing', async () => {
@@ -156,7 +164,9 @@ describe('AuthorityService', () => {
       nft: { network: 'eip155:base', address: '0xabc', id: '1' },
       createdAt: new Date().toISOString(),
     });
-    await expect(authority.getUnlockProof('cid-missing-pkg')).rejects.toThrow('Ownable package with CID is not available');
+    await expect(authority.getUnlockProof('cid-missing-pkg')).rejects.toThrow(
+      'Ownable package with CID is not available'
+    );
   });
 
   it('reads CID lookup and validates proof through gateway', async () => {
@@ -189,7 +199,9 @@ describe('AuthorityService', () => {
         nftOwner: '0xowner',
       })
     );
-    await expect(authority.isUnlockProofValid('eip155:base', '0xabc', '1', '0xproof')).resolves.toBe(true);
+    await expect(
+      authority.isUnlockProofValid('eip155:base', '0xabc', '1', '0xproof')
+    ).resolves.toBe(true);
     await expect(
       authority.getOwnableCidFromNFT({ network: 'eip155:base', address: '0xdef', id: '2' })
     ).rejects.toThrow('No CID available');
@@ -220,12 +232,9 @@ describe('AuthorityService', () => {
       getOwner: async () => '0xowner',
       isUnlockProofValid: async () => true,
     };
-    const authority = new AuthorityService(
-      store as any,
-      archive as any,
-      lockable as any,
-      { now: () => new Date('2026-03-18T12:00:00.000Z') }
-    );
+    const authority = new AuthorityService(store as any, archive as any, lockable as any, {
+      now: () => new Date('2026-03-18T12:00:00.000Z'),
+    });
 
     const bridged = await authority.bridgeOwnableArchive(Uint8Array.from([1]), '0xSigner');
     expect(bridged.prevOwner).toBe('0xSigner');
@@ -249,11 +258,7 @@ describe('AuthorityService', () => {
       }),
       hasPackage: async () => true,
     };
-    const authorityB64 = new AuthorityService(
-      store as any,
-      archiveB64 as any,
-      lockable as any
-    );
+    const authorityB64 = new AuthorityService(store as any, archiveB64 as any, lockable as any);
     await expect(authorityB64.bridgeOwnableArchive(Uint8Array.from([2]))).resolves.toEqual(
       expect.objectContaining({ cid: 'cid-b64' })
     );
@@ -280,9 +285,7 @@ describe('AuthorityService', () => {
         importArchive: async () => ({
           cid: 'cid-2',
           chainJson: {
-            events: [
-              { parsedData: { nft: { network: 'x', address: '0xabc', id: '1' } } },
-            ],
+            events: [{ parsedData: { nft: { network: 'x', address: '0xabc', id: '1' } } }],
           },
         }),
       } as any,
@@ -343,8 +346,6 @@ describe('AuthorityService', () => {
       } as any
     );
 
-    await expect(authority.getUnlockProof('cid-unlocked')).rejects.toThrow(
-      'is not locked on'
-    );
+    await expect(authority.getUnlockProof('cid-unlocked')).rejects.toThrow('is not locked on');
   });
 });

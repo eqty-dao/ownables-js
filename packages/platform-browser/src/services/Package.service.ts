@@ -1,21 +1,25 @@
-import LocalStorageService from "./LocalStorage.service.js";
-import type { TypedPackageCapabilities, TypedPackage, TypedPackageStub } from "@ownables/core/types/TypedPackage";
-import type { TypedCosmWasmMsg } from "@ownables/core/types/TypedCosmWasmMsg";
-import type TypedDict from "@ownables/core/types/TypedDict";
-import type { MessageExt } from "@ownables/core/types/MessageInfo";
-import JSZip from "jszip";
-import mime from "mime/lite";
-import IDBService from "./IDB.service.js";
-import { RelayService } from "./Relay.service.js";
-import { Buffer } from "buffer";
-import { EventChain } from "eqty-core";
-import { OwnablePackageCidService } from "@ownables/core";
+import LocalStorageService from './LocalStorage.service.js';
+import type {
+  TypedPackageCapabilities,
+  TypedPackage,
+  TypedPackageStub,
+} from '@ownables/core/types/TypedPackage';
+import type { TypedCosmWasmMsg } from '@ownables/core/types/TypedCosmWasmMsg';
+import type TypedDict from '@ownables/core/types/TypedDict';
+import type { MessageExt } from '@ownables/core/types/MessageInfo';
+import JSZip from 'jszip';
+import mime from 'mime/lite';
+import IDBService from './IDB.service.js';
+import { RelayService } from './Relay.service.js';
+import { Buffer } from 'buffer';
+import { EventChain } from 'eqty-core';
+import { OwnablePackageCidService } from '@ownables/core';
 
 const getMimeType = (filename: string): string | null | undefined =>
   (mime as any)?.getType?.(filename);
 
-const PACKAGE_ASSET_STORE = "package-assets";
-const ATTACHMENT_PREFIX = "attachment:";
+const PACKAGE_ASSET_STORE = 'package-assets';
+const ATTACHMENT_PREFIX = 'attachment:';
 
 const capabilitiesStaticOwnable = {
   isDynamic: false,
@@ -30,7 +34,7 @@ const capabilitiesStaticOwnable = {
 };
 
 const isInternalPackage = (pkg: TypedPackage | TypedPackageStub): boolean =>
-  Array.isArray(pkg.keywords) && pkg.keywords.includes("internal");
+  Array.isArray(pkg.keywords) && pkg.keywords.includes('internal');
 
 export default class PackageService {
   private readonly exampleUrl: string | undefined;
@@ -38,7 +42,7 @@ export default class PackageService {
   private readonly calculateCidFn: (files: File[]) => Promise<string>;
   private readonly fetchFn: (input: string, init?: RequestInit) => Promise<Response>;
   private readonly fileReaderFactory: () => FileReader;
-  private readonly logger: Pick<Console, "debug" | "info" | "warn" | "error">;
+  private readonly logger: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
   private readonly legacyIdb: IDBService | undefined;
 
   constructor(
@@ -51,19 +55,22 @@ export default class PackageService {
       cidService?: OwnablePackageCidService;
       fetchFn?: (input: string, init?: RequestInit) => Promise<Response>;
       fileReaderFactory?: () => FileReader;
-      logger?: Pick<Console, "debug" | "info" | "warn" | "error">;
+      logger?: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
       legacyIdb?: IDBService;
     } = {}
   ) {
     this.exampleUrl = options.exampleUrl;
     this.examples = options.examples ?? [];
     const cidService = options.cidService ?? new OwnablePackageCidService();
-    this.calculateCidFn = async (files) => cidService.calculate(
-      await Promise.all(files.map(async (file) => ({
-        path: file.name,
-        content: new Uint8Array(await file.arrayBuffer()),
-      })))
-    );
+    this.calculateCidFn = async (files) =>
+      cidService.calculate(
+        await Promise.all(
+          files.map(async (file) => ({
+            path: file.name,
+            content: new Uint8Array(await file.arrayBuffer()),
+          }))
+        )
+      );
     this.fetchFn = options.fetchFn ?? ((input, init) => fetch(input, init));
     this.fileReaderFactory = options.fileReaderFactory ?? (() => new FileReader());
     this.logger = options.logger ?? console;
@@ -71,7 +78,7 @@ export default class PackageService {
   }
 
   list(): Array<TypedPackage | TypedPackageStub> {
-    const local = (this.localStorage.get("packages") || []) as TypedPackage[];
+    const local = (this.localStorage.get('packages') || []) as TypedPackage[];
     for (const pkg of local) {
       pkg.versions = pkg.versions.map(({ date, cid }: { date: Date | string; cid: string }) => ({
         date: new Date(date),
@@ -79,9 +86,7 @@ export default class PackageService {
       }));
     }
 
-    const set = new Map(
-      [...this.examples, ...local].map((pkg) => [pkg.name, pkg])
-    ).values();
+    const set = new Map([...this.examples, ...local].map((pkg) => [pkg.name, pkg])).values();
 
     return Array.from(set)
       .filter((pkg) => !isInternalPackage(pkg))
@@ -96,15 +101,16 @@ export default class PackageService {
   }
 
   maybeInfo(nameOrCid: string, uniqueMessageHash?: string): TypedPackage | undefined {
-    const packages = (this.localStorage.get("packages") ||
-      []) as TypedPackage[];
+    const packages = (this.localStorage.get('packages') || []) as TypedPackage[];
 
     return packages.find(
       (pkg) =>
         (pkg.name === nameOrCid ||
           pkg.versions.some((v: { cid: string }) => v.cid === nameOrCid)) &&
         (!uniqueMessageHash ||
-          pkg.versions.some((v: { uniqueMessageHash?: string }) => v.uniqueMessageHash === uniqueMessageHash))
+          pkg.versions.some(
+            (v: { uniqueMessageHash?: string }) => v.uniqueMessageHash === uniqueMessageHash
+          ))
     );
   }
 
@@ -121,15 +127,11 @@ export default class PackageService {
     isNotLocal?: boolean,
     uniqueMessageHash?: string
   ): TypedPackage {
-    const packages = (this.localStorage.get("packages") ||
-      []) as TypedPackage[];
+    const packages = (this.localStorage.get('packages') || []) as TypedPackage[];
 
     // Locate the package with matching cid and uniqueMessageHash
     let pkg = packages.find(
-      (pkg) =>
-        pkg.name === name &&
-        pkg.cid === cid &&
-        pkg.uniqueMessageHash === uniqueMessageHash
+      (pkg) => pkg.name === name && pkg.cid === cid && pkg.uniqueMessageHash === uniqueMessageHash
     );
 
     if (!pkg) {
@@ -171,9 +173,9 @@ export default class PackageService {
     }
 
     // Save all packages back to LocalStorage under the single "packages" key
-    this.localStorage.set("packages", packages);
+    this.localStorage.set('packages', packages);
 
-    if (!pkg) throw new Error("Failed to create package entry");
+    if (!pkg) throw new Error('Failed to create package entry');
     return pkg;
   }
 
@@ -183,10 +185,10 @@ export default class PackageService {
     if (chain) {
       return await Promise.all(
         Array.from(Object.entries(zip.files))
-          .filter(([filename]) => !filename.startsWith("."))
+          .filter(([filename]) => !filename.startsWith('.'))
           .map(async ([filename, file]) => {
-            const blob = await file.async("blob");
-            const type = getMimeType(filename) || "application/octet-stream";
+            const blob = await file.async('blob');
+            const type = getMimeType(filename) || 'application/octet-stream';
             return new File([blob], filename, { type });
           })
       );
@@ -194,12 +196,10 @@ export default class PackageService {
 
     return await Promise.all(
       Array.from(Object.entries(zip.files))
-        .filter(
-          ([filename]) => !filename.startsWith(".") && filename !== "chain.json"
-        )
+        .filter(([filename]) => !filename.startsWith('.') && filename !== 'chain.json')
         .map(async ([filename, file]) => {
-          const blob = await file.async("blob");
-          const type = getMimeType(filename) || "application/octet-stream";
+          const blob = await file.async('blob');
+          const type = getMimeType(filename) || 'application/octet-stream';
           return new File([blob], filename, { type });
         })
     );
@@ -207,7 +207,7 @@ export default class PackageService {
 
   private async storeAssets(cid: string, files: File[]): Promise<void> {
     const storeName = PACKAGE_ASSET_STORE;
-    
+
     try {
       if (!(await this.idb.hasStore(storeName))) {
         await this.idb.createStore(storeName);
@@ -223,9 +223,11 @@ export default class PackageService {
     } catch (error) {
       // Check for quota errors
       if (error instanceof Error) {
-        if (error.name === 'QuotaExceededError' || 
-            error.message?.includes('quota') ||
-            error.message?.includes('QuotaExceeded')) {
+        if (
+          error.name === 'QuotaExceededError' ||
+          error.message?.includes('quota') ||
+          error.message?.includes('QuotaExceeded')
+        ) {
           throw new Error(
             `Device storage quota exceeded. Please free up space on your device and try again.`
           );
@@ -267,10 +269,8 @@ export default class PackageService {
         );
       }
     } catch (error) {
-      if (error instanceof Error && error.name === "QuotaExceededError") {
-        throw new Error(
-          `Device storage quota exceeded. Please free up space and try again.`
-        );
+      if (error instanceof Error && error.name === 'QuotaExceededError') {
+        throw new Error(`Device storage quota exceeded. Please free up space and try again.`);
       }
       throw error;
     }
@@ -315,9 +315,7 @@ export default class PackageService {
     } catch (error) {
       // Check if it's a quota error
       if (error instanceof Error && error.name === 'QuotaExceededError') {
-        throw new Error(
-          `Device storage quota exceeded. Please free up space and try again.`
-        );
+        throw new Error(`Device storage quota exceeded. Please free up space and try again.`);
       }
       throw error;
     }
@@ -335,7 +333,7 @@ export default class PackageService {
         return; // Success
       } catch (error) {
         this.logger.warn(`Store verification attempt ${attempt}/${maxRetries} failed:`, error);
-        
+
         if (attempt < maxRetries) {
           // Wait before retry (exponential backoff)
           await new Promise((resolve) => setTimeout(resolve, delay * attempt));
@@ -348,11 +346,11 @@ export default class PackageService {
   }
 
   base64ToBuffer(base64: string): Buffer {
-    return Buffer.from(base64, "base64");
+    return Buffer.from(base64, 'base64');
   }
 
   bufferToString(buffer: Buffer): string {
-    return buffer.toString("utf8");
+    return buffer.toString('utf8');
   }
 
   async getChainJson(filename: string, files: any): Promise<any> {
@@ -364,7 +362,7 @@ export default class PackageService {
     const json = JSON.parse(fileContent);
 
     json.events = json.events.map((event: MessageExt) => {
-      if (event.data.startsWith("base64:")) {
+      if (event.data.startsWith('base64:')) {
         const base64Data = event.data.slice(7);
         const bufferData = this.base64ToBuffer(base64Data);
         event.parsedData = JSON.parse(this.bufferToString(bufferData));
@@ -381,85 +379,69 @@ export default class PackageService {
     return JSON.parse(await file.text());
   }
 
-  private async getCapabilities(
-    files: File[]
-  ): Promise<TypedPackageCapabilities> {
-    if (files.findIndex((file) => file.name === "package.json") < 0)
-      throw new Error("Invalid package: missing package.json");
+  private async getCapabilities(files: File[]): Promise<TypedPackageCapabilities> {
+    if (files.findIndex((file) => file.name === 'package.json') < 0)
+      throw new Error('Invalid package: missing package.json');
 
-    if (files.findIndex((file) => file.name === "ownable_bg.wasm") < 0)
+    if (files.findIndex((file) => file.name === 'ownable_bg.wasm') < 0)
       return capabilitiesStaticOwnable;
 
-    const query: TypedCosmWasmMsg = await this.getPackageJson(
-      "query_msg.json",
-      files
-    );
-    const execute: TypedCosmWasmMsg = await this.getPackageJson(
-      "execute_msg.json",
-      files
-    );
+    const query: TypedCosmWasmMsg = await this.getPackageJson('query_msg.json', files);
+    const execute: TypedCosmWasmMsg = await this.getPackageJson('execute_msg.json', files);
 
     const hasMethod = (schema: TypedCosmWasmMsg, find: string) =>
-      schema.oneOf.findIndex((method: { required: string[] }) => method.required.includes(find)) >= 0;
+      schema.oneOf.findIndex((method: { required: string[] }) => method.required.includes(find)) >=
+      0;
 
-    if (!hasMethod(query, "get_info"))
-      throw new Error("Invalid package: missing `get_info` query method");
+    if (!hasMethod(query, 'get_info'))
+      throw new Error('Invalid package: missing `get_info` query method');
 
     return {
       isDynamic: true,
-      hasMetadata: hasMethod(query, "get_metadata"),
-      hasWidgetState: hasMethod(query, "get_widget_state"),
-      hasAttachments: hasMethod(query, "get_attachments") && hasMethod(execute, "attach"),
-      isClosable: hasMethod(query, "is_closed") && hasMethod(execute, "close"),
-      isConsumable: hasMethod(execute, "consume"),
-      isConsumer: hasMethod(query, "is_consumer_of"),
-      isLockable: hasMethod(execute, "lock"),
-      isTransferable: hasMethod(execute, "transfer"),
+      hasMetadata: hasMethod(query, 'get_metadata'),
+      hasWidgetState: hasMethod(query, 'get_widget_state'),
+      hasAttachments: hasMethod(query, 'get_attachments') && hasMethod(execute, 'attach'),
+      isClosable: hasMethod(query, 'is_closed') && hasMethod(execute, 'close'),
+      isConsumable: hasMethod(execute, 'consume'),
+      isConsumer: hasMethod(query, 'is_consumer_of'),
+      isLockable: hasMethod(execute, 'lock'),
+      isTransferable: hasMethod(execute, 'transfer'),
     };
   }
 
   private validatePackageFormat(packageJson: TypedDict, files: File[]): void {
-    const hasWasm = files.some((file) => file.name === "ownable_bg.wasm");
+    const hasWasm = files.some((file) => file.name === 'ownable_bg.wasm');
     if (!hasWasm) return;
 
     const ownablesAbi = packageJson.ownablesAbi;
     const wireFormat = packageJson.wireFormat;
 
-    if (ownablesAbi !== "1") {
+    if (ownablesAbi !== '1') {
       throw new Error(
         `Invalid package: expected package.json ownablesAbi to be "1", got "${String(ownablesAbi)}"`
       );
     }
 
-    if (wireFormat !== "cbor") {
+    if (wireFormat !== 'cbor') {
       throw new Error(
         `Invalid package: expected package.json wireFormat to be "cbor", got "${String(wireFormat)}"`
       );
     }
   }
 
-  async processPackage(
-    message: any,
-    uniqueMessageHash?: string,
-    isNotLocal = false
-  ) {
+  async processPackage(message: any, uniqueMessageHash?: string, isNotLocal = false) {
     let chainJson: any;
     let files: File[];
 
     //Extract files
     if (isNotLocal) {
       files = await this.extractAssets(message.data.buffer, false);
-      chainJson = await this.getChainJson("chain.json", message.data.buffer);
+      chainJson = await this.getChainJson('chain.json', message.data.buffer);
     } else {
       files = message; // Local files
     }
 
-    return this.finalizeImportedPackage(
-      files,
-      chainJson,
-      uniqueMessageHash,
-      isNotLocal
-    );
+    return this.finalizeImportedPackage(files, chainJson, uniqueMessageHash, isNotLocal);
   }
 
   async importFromHub(packageZipFile: File, chainJson: unknown): Promise<TypedPackage> {
@@ -467,7 +449,7 @@ export default class PackageService {
     const pkg = await this.finalizeImportedPackage(files, chainJson, undefined, true);
 
     if (!pkg?.chain) {
-      throw new Error("Hub notification package did not include chain state");
+      throw new Error('Hub notification package did not include chain state');
     }
 
     return pkg;
@@ -479,13 +461,13 @@ export default class PackageService {
     uniqueMessageHash?: string,
     isNotLocal = false
   ) {
-    const packageJson: TypedDict = await this.getPackageJson("package.json", files);
+    const packageJson: TypedDict = await this.getPackageJson('package.json', files);
 
     if (!packageJson) {
-      throw new Error("Missing package.json in extracted assets");
+      throw new Error('Missing package.json in extracted assets');
     }
     if (isNotLocal && !chainJson) {
-      throw new Error("Missing chain.json for relay package");
+      throw new Error('Missing chain.json for relay package');
     }
 
     const cid = await this.calculateCidFn(files);
@@ -497,10 +479,10 @@ export default class PackageService {
       }
     }
 
-    const name = packageJson.name || "Unnamed Package";
+    const name = packageJson.name || 'Unnamed Package';
     const title = name
-      .replace(/^ownable-|-ownable$/, "")
-      .replace(/[-_]+/, " ")
+      .replace(/^ownable-|-ownable$/, '')
+      .replace(/[-_]+/, ' ')
       .replace(/\b\w/, (c: string) => c.toUpperCase());
     const description = packageJson.description;
     const version = packageJson.version;
@@ -545,22 +527,19 @@ export default class PackageService {
     const pkg = await this.processPackage(files);
 
     if (!pkg) {
-      throw new Error(
-        "Failed to process package: duplicate or invalid package."
-      );
+      throw new Error('Failed to process package: duplicate or invalid package.');
     }
 
     // Verify store exists after import
     const hasStore = await this.hasPackageAssets(pkg.cid);
-    
+
     if (!hasStore) {
       // Retry verification in background (non-blocking)
-      this.retryPackageVerification(pkg.cid, files.length, 3, 1000)
-        .catch((error) => {
-          this.logger.error(`Background store verification failed after retries:`, error);
-          // Optionally notify user or log to error tracking service
-        });
-      
+      this.retryPackageVerification(pkg.cid, files.length, 3, 1000).catch((error) => {
+        this.logger.error(`Background store verification failed after retries:`, error);
+        // Optionally notify user or log to error tracking service
+      });
+
       // Still return the package even if verification is pending
       // The background retry will handle it
     } else {
@@ -570,10 +549,9 @@ export default class PackageService {
       } catch (error) {
         // If verification fails, start background retry
         this.logger.warn(`Initial store verification failed, retrying in background:`, error);
-        this.retryPackageVerification(pkg.cid, files.length, 3, 1000)
-          .catch((retryError) => {
-            this.logger.error(`Background store verification failed after retries:`, retryError);
-          });
+        this.retryPackageVerification(pkg.cid, files.length, 3, 1000).catch((retryError) => {
+          this.logger.error(`Background store verification failed after retries:`, retryError);
+        });
       }
     }
 
@@ -596,15 +574,15 @@ export default class PackageService {
         )
         .map((data) => ({
           hash: data.hash,
-          recipient: data.message.recipient || "",
+          recipient: data.message.recipient || '',
           sender: data.message.sender || {},
           size: data.message.data?.length || 0,
           timestamp: new Date(data.message.timestamp || Date.now()),
-          type: data.message.meta?.type || "basic",
+          type: data.message.meta?.type || 'basic',
           data: data.message.data,
           signature: data.message.signature,
           _hash: data.message.hash,
-          parsedData: data.message.parsedData || "",
+          parsedData: data.message.parsedData || '',
           messageHash: data.hash,
           message: data.message,
         }));
@@ -613,9 +591,7 @@ export default class PackageService {
         return null;
       }
 
-      const filteredMessages = await this.relay.checkDuplicateMessage(
-        validMessages
-      );
+      const filteredMessages = await this.relay.checkDuplicateMessage(validMessages);
 
       let triggerRefresh = false;
 
@@ -638,7 +614,7 @@ export default class PackageService {
 
             return pkg;
           } catch (err) {
-            this.logger.error("Error processing data:", err);
+            this.logger.error('Error processing data:', err);
             return null;
           }
         })
@@ -650,7 +626,7 @@ export default class PackageService {
       );
       return [packages, triggerRefresh];
     } catch (error) {
-      this.logger.error("Error:", error);
+      this.logger.error('Error:', error);
       return null;
     }
   }
@@ -658,7 +634,7 @@ export default class PackageService {
   async isCurrentEvent(chainJson: EventChain) {
     let existingChain;
     if (await this.idb.hasStore(`ownable:${chainJson.id}`)) {
-      existingChain = await this.idb.get(`ownable:${chainJson.id}`, "chain");
+      existingChain = await this.idb.get(`ownable:${chainJson.id}`, 'chain');
     }
 
     if (existingChain === undefined || existingChain.events === undefined) {
@@ -674,28 +650,19 @@ export default class PackageService {
   }
 
   async downloadExample(key: string): Promise<TypedPackage> {
-    if (!this.exampleUrl)
-      throw new Error("Unable to download example ownable: URL not configured");
+    if (!this.exampleUrl) throw new Error('Unable to download example ownable: URL not configured');
 
-    const filename = key.replace(/^ownable-/, "") + ".zip";
+    const filename = key.replace(/^ownable-/, '') + '.zip';
 
     const response = await this.fetchFn(`${this.exampleUrl}/${filename}`);
-    if (!response.ok)
-      throw new Error(
-        `Failed to download example ownable: ${response.statusText}`
-      );
+    if (!response.ok) throw new Error(`Failed to download example ownable: ${response.statusText}`);
 
-    const contentType = response.headers.get("Content-Type")?.trim();
-    if (
-      contentType !== "application/zip" &&
-      contentType !== "application/x-zip-compressed"
-    )
-      throw new Error(
-        "Failed to download example ownable: invalid content type"
-      );
+    const contentType = response.headers.get('Content-Type')?.trim();
+    if (contentType !== 'application/zip' && contentType !== 'application/x-zip-compressed')
+      throw new Error('Failed to download example ownable: invalid content type');
 
     const zipFile = new File([await response.blob()], `${key}.zip`, {
-      type: "application/zip",
+      type: 'application/zip',
     });
 
     return this.import(zipFile);
@@ -710,10 +677,7 @@ export default class PackageService {
       const fileReader = this.fileReaderFactory();
       void (async () => {
         if (await this.idb.hasStore(PACKAGE_ASSET_STORE)) {
-          const mediaFile = await this.idb.get(
-            PACKAGE_ASSET_STORE,
-            this.assetKey(cid, name)
-          );
+          const mediaFile = await this.idb.get(PACKAGE_ASSET_STORE, this.assetKey(cid, name));
 
           if (mediaFile) {
             fileReader.onload = (event) => {
@@ -753,14 +717,12 @@ export default class PackageService {
   }
 
   getAssetAsText(cid: string, name: string): Promise<string> {
-    const read = (fr: FileReader, mediaFile: Blob | File) =>
-      fr.readAsText(mediaFile);
+    const read = (fr: FileReader, mediaFile: Blob | File) => fr.readAsText(mediaFile);
     return this.getAsset(cid, name, read) as Promise<string>;
   }
 
   getAssetAsDataUri(cid: string, name: string): Promise<string> {
-    const read = (fr: FileReader, mediaFile: Blob | File) =>
-      fr.readAsDataURL(mediaFile);
+    const read = (fr: FileReader, mediaFile: Blob | File) => fr.readAsDataURL(mediaFile);
     return this.getAsset(cid, name, read) as Promise<string>;
   }
 
@@ -782,15 +744,14 @@ export default class PackageService {
 
   async zip(cid: string): Promise<JSZip> {
     const zip = new JSZip();
-    const files =
-      (await this.idb.hasStore(PACKAGE_ASSET_STORE))
-        ? await this.idb.getAllByPrefix(PACKAGE_ASSET_STORE, this.assetPrefix(cid))
-        : [];
+    const files = (await this.idb.hasStore(PACKAGE_ASSET_STORE))
+      ? await this.idb.getAllByPrefix(PACKAGE_ASSET_STORE, this.assetPrefix(cid))
+      : [];
 
     const packageFiles =
       files.length > 0
         ? files
-        : (this.legacyIdb && (await this.legacyIdb.hasStore(`package:${cid}`)))
+        : this.legacyIdb && (await this.legacyIdb.hasStore(`package:${cid}`))
           ? await this.legacyIdb.getAll(`package:${cid}`)
           : [];
 

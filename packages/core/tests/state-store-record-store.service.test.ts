@@ -28,13 +28,17 @@ class InMemoryStateStore implements StateStore {
   }
 
   async setAll(store: string, map: Record<string, unknown> | Map<unknown, unknown>): Promise<void>;
-  async setAll(data: Record<string, Record<string, unknown> | Map<unknown, unknown>>): Promise<void>;
+  async setAll(
+    data: Record<string, Record<string, unknown> | Map<unknown, unknown>>
+  ): Promise<void>;
   async setAll(
     a: string | Record<string, Record<string, unknown> | Map<unknown, unknown>>,
     b?: Record<string, unknown> | Map<unknown, unknown>
   ): Promise<void> {
     const data: Record<string, Record<string, unknown> | Map<unknown, unknown>> =
-      typeof a === 'string' && b ? { [a]: b } : (a as Record<string, Record<string, unknown> | Map<unknown, unknown>>);
+      typeof a === 'string' && b
+        ? { [a]: b }
+        : (a as Record<string, Record<string, unknown> | Map<unknown, unknown>>);
 
     for (const [store, values] of Object.entries(data)) {
       if (!this.stores.has(store)) this.stores.set(store, new Map());

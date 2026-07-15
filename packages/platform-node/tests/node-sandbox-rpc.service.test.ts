@@ -44,7 +44,10 @@ function buildMockExports() {
     stateDump = [[[1], [2]]];
     return makeEnvelope({
       result: encode({
-        attributes: [{ key: 'method', value: 'instantiate' }, { key: 'sender', value: request.info.sender }],
+        attributes: [
+          { key: 'method', value: 'instantiate' },
+          { key: 'sender', value: request.info.sender },
+        ],
       }),
       mem: { state_dump: stateDump },
     });
@@ -56,7 +59,9 @@ function buildMockExports() {
     return makeEnvelope({
       result: encode({
         attributes: [{ key: 'method', value: 'execute' }],
-        events: [{ type: 'execute', attributes: [{ key: 'action', value: Object.keys(request.msg)[0] }] }],
+        events: [
+          { type: 'execute', attributes: [{ key: 'action', value: Object.keys(request.msg)[0] }] },
+        ],
         data: 'ok',
       }),
       mem: { state_dump: stateDump },
@@ -155,7 +160,11 @@ describe('NodeSandboxOwnableRPC', () => {
     expect(instantiate.attributes.sender).toBe('alice');
     expect(instantiate.state.length).toBe(1);
 
-    const execute = await rpc.execute({ transfer: { to: 'bob' } }, { sender: 'alice', funds: [] }, instantiate.state);
+    const execute = await rpc.execute(
+      { transfer: { to: 'bob' } },
+      { sender: 'alice', funds: [] },
+      instantiate.state
+    );
     expect(execute.attributes.method).toBe('execute');
     expect(execute.events[0]?.attributes.action).toBe('transfer');
     expect(execute.state.length).toBe(2);
@@ -201,7 +210,10 @@ describe('NodeSandboxOwnableRPC', () => {
   it('throws when methods are called before initialize', async () => {
     const rpc = new NodeSandboxOwnableRPC('ownable-1');
     await expect(
-      rpc.instantiate({ ownable_id: 'x', package: 'y', network_id: 1 }, { sender: 'alice', funds: [] })
+      rpc.instantiate(
+        { ownable_id: 'x', package: 'y', network_id: 1 },
+        { sender: 'alice', funds: [] }
+      )
     ).rejects.toThrow('not initialized');
   });
 
@@ -211,12 +223,16 @@ describe('NodeSandboxOwnableRPC', () => {
     );
 
     const rpc = new NodeSandboxOwnableRPC('ownable-1');
-    await expect(rpc.initialize('', Uint8Array.from([0, 97, 115, 109]))).rejects.toThrow('Invalid ownable runtime exports');
+    await expect(rpc.initialize('', Uint8Array.from([0, 97, 115, 109]))).rejects.toThrow(
+      'Invalid ownable runtime exports'
+    );
   });
 
   it('accepts a direct WebAssembly.Instance return shape', async () => {
     const mock = buildMockExports();
-    vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue({ exports: mock.exports } as WebAssembly.Instance);
+    vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue({
+      exports: mock.exports,
+    } as WebAssembly.Instance);
 
     const rpc = new NodeSandboxOwnableRPC('ownable-1');
     await expect(rpc.initialize('', Uint8Array.from([0, 97, 115, 109]))).resolves.toBeUndefined();
@@ -232,7 +248,10 @@ describe('NodeSandboxOwnableRPC', () => {
     rpc.terminate();
 
     await expect(
-      rpc.instantiate({ ownable_id: 'x', package: 'y', network_id: 1 }, { sender: 'alice', funds: [] })
+      rpc.instantiate(
+        { ownable_id: 'x', package: 'y', network_id: 1 },
+        { sender: 'alice', funds: [] }
+      )
     ).rejects.toThrow('not initialized');
   });
 });

@@ -15,19 +15,19 @@ yarn add @ownables/builder
 ## Quick start
 
 ```ts
-import { BuilderService } from "@ownables/builder";
+import { BuilderService } from '@ownables/builder';
 
 const builder = new BuilderService({ packageService, deployAdapter: adapter });
 
 const prepared = await builder.prepareOwnable({
-  name: "My Ownable",
-  description: "Ownable deployment",
+  name: 'My Ownable',
+  description: 'Ownable deployment',
   files,
 });
 
 const instantiateMsg = builder.buildInstantiateMsg({
-  name: "My Ownable",
-  description: "Ownable deployment",
+  name: 'My Ownable',
+  description: 'Ownable deployment',
   packageCid: prepared.packageCid,
   networkId,
 });
@@ -46,17 +46,17 @@ const result = await builder.deploy({
 ### Node.js
 
 ```ts
-import { readFile } from "node:fs/promises";
+import { readFile } from 'node:fs/promises';
 
 async function loadWasmNode(): Promise<Uint8Array> {
-  return await readFile("./ownable_bg.wasm");
+  return await readFile('./ownable_bg.wasm');
 }
 ```
 
 ### Vite
 
 ```ts
-import ownableWasmUrl from "@ownables/builder/ownable_bg.wasm?url";
+import ownableWasmUrl from '@ownables/builder/ownable_bg.wasm?url';
 
 async function loadWasmVite(): Promise<Uint8Array> {
   const res = await fetch(ownableWasmUrl);
@@ -71,7 +71,7 @@ Copy `ownable_bg.wasm` from the npm package to you publicly served folder (typic
 
 ```ts
 async function loadWasmBrowser(): Promise<Uint8Array> {
-  const res = await fetch("/ownable_bg.wasm");
+  const res = await fetch('/ownable_bg.wasm');
   if (!res.ok) throw new Error(`Failed to load wasm: ${res.status}`);
   return new Uint8Array(await res.arrayBuffer());
 }

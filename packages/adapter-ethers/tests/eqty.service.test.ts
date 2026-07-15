@@ -74,7 +74,10 @@ describe('Ethers EQTYService', () => {
       eqtyToken: vi.fn().mockResolvedValue('0x2222222222222222222222222222222222222222'),
     };
     const signer = {
-      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      provider: {
+        getBlockNumber: vi.fn().mockResolvedValue(0),
+        getLogs: vi.fn().mockResolvedValue([]),
+      },
       getAddress: vi.fn().mockResolvedValue('0xabc'),
       signTypedData: vi.fn().mockResolvedValue('0xsig'),
     };
@@ -119,7 +122,10 @@ describe('Ethers EQTYService', () => {
       eqtyToken: vi.fn(),
     };
     const signer = {
-      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      provider: {
+        getBlockNumber: vi.fn().mockResolvedValue(0),
+        getLogs: vi.fn().mockResolvedValue([]),
+      },
       getAddress: vi.fn().mockResolvedValue('0xabc'),
       signTypedData: vi.fn().mockResolvedValue('0xsig'),
     };
@@ -149,7 +155,10 @@ describe('Ethers EQTYService', () => {
       eqtyToken: vi.fn(),
     };
     const signer = {
-      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      provider: {
+        getBlockNumber: vi.fn().mockResolvedValue(0),
+        getLogs: vi.fn().mockResolvedValue([]),
+      },
       getAddress: vi.fn().mockResolvedValue('0xabc'),
       signTypedData: vi.fn().mockResolvedValue('0xsig'),
       signMessage: vi.fn().mockResolvedValue('0xproof'),
@@ -193,7 +202,10 @@ describe('Ethers EQTYService', () => {
       eqtyToken: vi.fn(),
     };
     const signer = {
-      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      provider: {
+        getBlockNumber: vi.fn().mockResolvedValue(0),
+        getLogs: vi.fn().mockResolvedValue([]),
+      },
       getAddress: vi.fn().mockResolvedValue('0xabc'),
       signTypedData: vi.fn().mockResolvedValue('0xsig'),
       signMessage: vi.fn().mockResolvedValue('0xproof'),
@@ -222,7 +234,10 @@ describe('Ethers EQTYService', () => {
       allowance: vi.fn().mockResolvedValue(12n),
     };
     const signer = {
-      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      provider: {
+        getBlockNumber: vi.fn().mockResolvedValue(0),
+        getLogs: vi.fn().mockResolvedValue([]),
+      },
       getAddress: vi.fn().mockResolvedValue('0xabc'),
       signTypedData: vi.fn().mockResolvedValue('0xsig'),
     };
@@ -250,7 +265,10 @@ describe('Ethers EQTYService', () => {
       allowance: vi.fn().mockResolvedValue(27n),
     };
     const signer = {
-      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      provider: {
+        getBlockNumber: vi.fn().mockResolvedValue(0),
+        getLogs: vi.fn().mockResolvedValue([]),
+      },
       getAddress: vi.fn().mockResolvedValue('0xabc'),
       signTypedData: vi.fn().mockResolvedValue('0xsig'),
     };
@@ -276,7 +294,10 @@ describe('Ethers EQTYService', () => {
       approve: vi.fn().mockResolvedValueOnce('0xapprove').mockResolvedValueOnce('0xreset'),
     };
     const signer = {
-      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      provider: {
+        getBlockNumber: vi.fn().mockResolvedValue(0),
+        getLogs: vi.fn().mockResolvedValue([]),
+      },
       getAddress: vi.fn().mockResolvedValue('0xabc'),
       signTypedData: vi.fn().mockResolvedValue('0xsig'),
     };
@@ -368,7 +389,10 @@ describe('Ethers EQTYService', () => {
       allowance: vi.fn().mockResolvedValue(11n),
     };
     const signer = {
-      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      provider: {
+        getBlockNumber: vi.fn().mockResolvedValue(0),
+        getLogs: vi.fn().mockResolvedValue([]),
+      },
       getAddress: vi.fn().mockResolvedValue('0xabc'),
       signTypedData: vi.fn().mockResolvedValue('0xsig'),
     };
@@ -391,7 +415,10 @@ describe('Ethers EQTYService', () => {
       eqtyToken: vi.fn(),
     };
     const signer = {
-      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      provider: {
+        getBlockNumber: vi.fn().mockResolvedValue(0),
+        getLogs: vi.fn().mockResolvedValue([]),
+      },
       getAddress: vi.fn().mockResolvedValue('0xabc'),
       signTypedData: vi.fn().mockResolvedValue('0xsig'),
     };
@@ -426,7 +453,10 @@ describe('Ethers EQTYService', () => {
     };
     const eqtyToken = { allowance: vi.fn().mockResolvedValue(12n) };
     const signer = {
-      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      provider: {
+        getBlockNumber: vi.fn().mockResolvedValue(0),
+        getLogs: vi.fn().mockResolvedValue([]),
+      },
       getAddress: vi.fn().mockResolvedValue('0xabc'),
       signTypedData: vi.fn().mockResolvedValue('0xsig'),
     };
@@ -465,7 +495,10 @@ describe('Ethers EQTYService', () => {
     };
     const eqtyToken = { allowance: vi.fn().mockResolvedValue(11n) };
     const signer = {
-      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      provider: {
+        getBlockNumber: vi.fn().mockResolvedValue(0),
+        getLogs: vi.fn().mockResolvedValue([]),
+      },
       getAddress: vi.fn().mockResolvedValue('0xabc'),
       signTypedData: vi.fn().mockResolvedValue('0xsig'),
     };
@@ -485,7 +518,10 @@ describe('Ethers EQTYService', () => {
 
   it('delegates sign() to subject.signWith', async () => {
     const signer = {
-      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      provider: {
+        getBlockNumber: vi.fn().mockResolvedValue(0),
+        getLogs: vi.fn().mockResolvedValue([]),
+      },
       getAddress: vi.fn().mockResolvedValue('0xabc'),
       signTypedData: vi.fn().mockResolvedValue('0xsig'),
       signMessage: vi.fn().mockResolvedValue('0xproof'),
@@ -536,7 +572,10 @@ describe('Ethers EQTYService', () => {
 
   it('provides lockable operations through injected lockable client', async () => {
     const signer = {
-      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      provider: {
+        getBlockNumber: vi.fn().mockResolvedValue(0),
+        getLogs: vi.fn().mockResolvedValue([]),
+      },
       getAddress: vi.fn().mockResolvedValue('0xabc'),
       signTypedData: vi.fn().mockResolvedValue('0xsig'),
       signMessage: vi.fn().mockResolvedValue('0xproof'),
@@ -562,7 +601,10 @@ describe('Ethers EQTYService', () => {
 
   it('normalizes bigint unlock challenge and signs utf8 challenge payload', async () => {
     const signer = {
-      provider: { getBlockNumber: vi.fn().mockResolvedValue(0), getLogs: vi.fn().mockResolvedValue([]) },
+      provider: {
+        getBlockNumber: vi.fn().mockResolvedValue(0),
+        getLogs: vi.fn().mockResolvedValue([]),
+      },
       getAddress: vi.fn().mockResolvedValue('0xabc'),
       signTypedData: vi.fn().mockResolvedValue('0xsig'),
       signMessage: vi.fn().mockResolvedValue('0xproof'),

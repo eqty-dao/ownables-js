@@ -159,7 +159,7 @@ const ownables = new OwnableService({
 import RNOwnablePersistence from '@ownables/platform-react-native';
 
 const persistence = new RNOwnablePersistence({
-  backend: myOwnablePersistenceBackend,   // implements RNOwnablePersistenceBackend
+  backend: myOwnablePersistenceBackend, // implements RNOwnablePersistenceBackend
   attachmentStore: myAttachmentBlobStore, // implements RNAttachmentBlobStore
   cidCalculator: myCidCalculator,
 });

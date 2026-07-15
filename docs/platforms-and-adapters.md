@@ -22,7 +22,7 @@ import {
   LocalStorageService,
   PackageService,
   RelayService,
-} from "@ownables/platform-browser";
+} from '@ownables/platform-browser';
 
 const idb = new IDBService();
 const storage = new LocalStorageService();
@@ -97,7 +97,7 @@ React example (`public/`):
 
 ```ts
 async function loadWasmFromPublic(): Promise<Uint8Array> {
-  const res = await fetch("/ownable_bg.wasm");
+  const res = await fetch('/ownable_bg.wasm');
   if (!res.ok) throw new Error(`Failed to load wasm: ${res.status}`);
   return new Uint8Array(await res.arrayBuffer());
 }
@@ -106,7 +106,7 @@ async function loadWasmFromPublic(): Promise<Uint8Array> {
 React example (`src/assets`):
 
 ```ts
-import ownableWasmUrl from "./assets/ownable_bg.wasm?url";
+import ownableWasmUrl from './assets/ownable_bg.wasm?url';
 
 async function loadWasmFromAssetUrl(): Promise<Uint8Array> {
   const res = await fetch(ownableWasmUrl);
@@ -118,7 +118,7 @@ async function loadWasmFromAssetUrl(): Promise<Uint8Array> {
 React example (Vite package asset import):
 
 ```ts
-import ownableWasmUrl from "@ownables/builder/ownable_bg.wasm?url";
+import ownableWasmUrl from '@ownables/builder/ownable_bg.wasm?url';
 
 async function loadWasmFromBuilderPackage(): Promise<Uint8Array> {
   const res = await fetch(ownableWasmUrl);

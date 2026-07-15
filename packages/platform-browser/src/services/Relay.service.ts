@@ -1,6 +1,6 @@
-import { EventChain, Message, Relay, Binary, IMessageMeta } from "eqty-core";
-import JSZip from "jszip";
-import mime from "mime/lite";
+import { EventChain, Message, Relay, Binary, IMessageMeta } from 'eqty-core';
+import JSZip from 'jszip';
+import mime from 'mime/lite';
 import {
   SIWEClient,
   withProgress,
@@ -8,7 +8,7 @@ import {
   type AnchorProvider,
   type LogProgress,
   type SIWEAuthResult,
-} from "@ownables/core";
+} from '@ownables/core';
 
 const getMimeType = (filename: string): string | null | undefined =>
   (mime as any)?.getType?.(filename);
@@ -18,15 +18,15 @@ const getMimeType = (filename: string): string | null | undefined =>
  * Prefer hub upload/download with WalletConnect Notify packages.
  */
 export class RelayService {
-  private static readonly STORAGE_PREFIX = "relay_siwe_token:";
+  private static readonly STORAGE_PREFIX = 'relay_siwe_token:';
   private static didWarnDeprecated = false;
 
   public readonly url: string;
   public readonly relay: Relay;
   private readonly siweClient: SIWEClient;
-  private readonly storage: Pick<Storage, "getItem" | "setItem" | "removeItem">;
+  private readonly storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
   private readonly now: () => number;
-  private readonly logger: Pick<Console, "debug" | "info" | "warn" | "error">;
+  private readonly logger: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
   private authToken: string | null = null;
   private authExpiry: number | null = null;
   private readonly storageKey: string;
@@ -37,19 +37,19 @@ export class RelayService {
       relayUrl?: string;
       relayClient?: Relay;
       siweClient?: SIWEClient;
-      storage?: Pick<Storage, "getItem" | "setItem" | "removeItem">;
+      storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
       now?: () => number;
-      logger?: Pick<Console, "debug" | "info" | "warn" | "error">;
+      logger?: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
     } = {}
   ) {
     if (!RelayService.didWarnDeprecated) {
       RelayService.didWarnDeprecated = true;
       (options.logger ?? console).warn(
-        "[@ownables/platform-browser] RelayService is deprecated and will be removed in a future major version. Prefer Hub-backed discovery and import flows."
+        '[@ownables/platform-browser] RelayService is deprecated and will be removed in a future major version. Prefer Hub-backed discovery and import flows.'
       );
     }
 
-    this.url = options.relayUrl ?? "";
+    this.url = options.relayUrl ?? '';
     this.relay = options.relayClient ?? new Relay(`${this.url}`);
     this.siweClient = options.siweClient ?? new SIWEClient();
     this.storage = options.storage ?? localStorage;
@@ -89,7 +89,7 @@ export class RelayService {
   static clearWalletAuth(
     address: string,
     chainId: number,
-    storage: Pick<Storage, "removeItem"> = localStorage
+    storage: Pick<Storage, 'removeItem'> = localStorage
   ): void {
     const key = `${RelayService.STORAGE_PREFIX}${address}:${chainId}`;
     storage.removeItem(key);
@@ -99,7 +99,7 @@ export class RelayService {
     if (!this.url) {
       return {
         success: false,
-        error: "Relay URL is not configured",
+        error: 'Relay URL is not configured',
       };
     }
 
@@ -117,10 +117,10 @@ export class RelayService {
         if (result.expiresIn) {
           const expiresInStr = String(result.expiresIn);
 
-          if (expiresInStr.endsWith("h")) {
+          if (expiresInStr.endsWith('h')) {
             const hours = parseInt(expiresInStr);
             expiresIn = hours * 60 * 60 * 1000;
-          } else if (expiresInStr.endsWith("m")) {
+          } else if (expiresInStr.endsWith('m')) {
             const minutes = parseInt(expiresInStr);
             expiresIn = minutes * 60 * 1000;
           } else {
@@ -138,9 +138,7 @@ export class RelayService {
     } catch (error) {
       return {
         success: false,
-        error: `Authentication failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        error: `Authentication failed: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   }
@@ -192,7 +190,7 @@ export class RelayService {
     onProgress?: LogProgress
   ) {
     if (!recipient) {
-      throw new Error("Recipient not provided");
+      throw new Error('Recipient not provided');
     }
 
     const step = withProgress(onProgress);
@@ -201,15 +199,11 @@ export class RelayService {
       await this.ensureAuthenticated();
 
       const messageContent = Binary.from(content);
-      const message = new Message(
-        messageContent,
-        "application/octet-stream",
-        meta
-      );
+      const message = new Message(messageContent, 'application/octet-stream', meta);
 
       // Step: Sign relay message and send (will be represented as a single UI step)
       await step(
-        "signMessage",
+        'signMessage',
         () => this.eqty.sign(message.to(recipient)),
         () => ({ hash: message.hash.base58 })
       );
@@ -219,10 +213,7 @@ export class RelayService {
           // Queue message hash; actual submission will include any previously queued event anchors
           await this.eqty.anchor(message.hash);
         } catch (error) {
-          this.logger.warn(
-            "RelayService: Failed during anchoring before sending:",
-            error
-          );
+          this.logger.warn('RelayService: Failed during anchoring before sending:', error);
         }
       }
 
@@ -244,18 +235,18 @@ export class RelayService {
       );
 
       let messageData;
-      if (response && typeof response === "object") {
-        if ("message" in response) {
+      if (response && typeof response === 'object') {
+        if ('message' in response) {
           messageData = response.message;
         } else {
           messageData = response;
         }
       } else {
-        throw new Error("Invalid response format");
+        throw new Error('Invalid response format');
       }
 
       if (!messageData) {
-        throw new Error("No message data found in response");
+        throw new Error('No message data found in response');
       }
 
       const message = Message.from(messageData);
@@ -271,9 +262,7 @@ export class RelayService {
     if (!list) return [];
 
     const ownableData = await Promise.all(
-      list.messages.map(async (response: any) =>
-        this.readMessage(response.hash).catch(() => null)
-      )
+      list.messages.map(async (response: any) => this.readMessage(response.hash).catch(() => null))
     );
 
     return ownableData.filter((data) => data !== null);
@@ -283,10 +272,7 @@ export class RelayService {
     try {
       await this.ensureAuthenticated();
 
-      await this.relay.delete(
-        `messages/${this.eqty.address}/${hash}`,
-        this.getAuthHeaders()
-      );
+      await this.relay.delete(`messages/${this.eqty.address}/${hash}`, this.getAuthHeaders());
     } catch (error) {
       throw new Error(`Failed to remove ownable from Relay: ${error}`);
     }
@@ -296,7 +282,7 @@ export class RelayService {
     if (!this.url) return false;
 
     try {
-      await this.relay.get("");
+      await this.relay.get('');
       return true;
     } catch (error) {
       return false;
@@ -343,24 +329,20 @@ export class RelayService {
   }
 
   async extractAssets(zipFile: File | JSZip): Promise<File[]> {
-    const zip =
-      zipFile instanceof JSZip ? zipFile : await JSZip.loadAsync(zipFile);
+    const zip = zipFile instanceof JSZip ? zipFile : await JSZip.loadAsync(zipFile);
 
     return await Promise.all(
       Object.entries(zip.files)
-        .filter(([filename]) => !filename.startsWith("."))
+        .filter(([filename]) => !filename.startsWith('.'))
         .map(async ([filename, file]) => {
-          const blob = await file.async("blob");
-          const type = getMimeType(filename) || "application/octet-stream";
+          const blob = await file.async('blob');
+          const type = getMimeType(filename) || 'application/octet-stream';
           return new File([blob], filename, { type });
         })
     );
   }
 
-  private async getChainJson(
-    filename: string,
-    files: File[]
-  ): Promise<EventChain> {
+  private async getChainJson(filename: string, files: File[]): Promise<EventChain> {
     const file = files.find((f) => f.name === filename);
     if (!file) throw new Error(`Invalid package: missing ${filename}`);
     return JSON.parse(await file.text());
@@ -385,7 +367,7 @@ export class RelayService {
       }
 
       const assets = await this.extractAssets(data.buffer);
-      const chain = await this.getChainJson("chain.json", assets);
+      const chain = await this.getChainJson('chain.json', assets);
 
       const currentLength = uniqueItems.get(chain.id)?.eventsLength || 0;
       if (chain.events.length > currentLength) {

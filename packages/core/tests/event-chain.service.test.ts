@@ -12,7 +12,13 @@ describe('EventChainService', () => {
     error: vi.fn(),
   };
   const createService = (...args: any[]) =>
-    new EventChainService(args[0], args[1], new AnchorValidationService(args[1]), args[2], logger as any);
+    new EventChainService(
+      args[0],
+      args[1],
+      new AnchorValidationService(args[1]),
+      args[2],
+      logger as any
+    );
 
   const createStateStore = () => {
     const stores = new Map<string, Map<string, any>>();
@@ -67,11 +73,15 @@ describe('EventChainService', () => {
 
   it('delegates verify to anchor provider', async () => {
     const eqty = {
-      verifyAnchors: vi.fn().mockResolvedValue({ verified: true, anchors: {}, map: {}, details: {} }),
+      verifyAnchors: vi
+        .fn()
+        .mockResolvedValue({ verified: true, anchors: {}, map: {}, details: {} }),
     };
 
     const service = createService({} as any, eqty as any);
-    const result = await service.verify({ anchorMap: [{ key: { hex: '0x1' }, value: { hex: '0x2' } }] } as any);
+    const result = await service.verify({
+      anchorMap: [{ key: { hex: '0x1' }, value: { hex: '0x2' } }],
+    } as any);
 
     expect(result.verified).toBe(true);
     expect(eqty.verifyAnchors).toHaveBeenCalledTimes(1);
@@ -139,10 +149,14 @@ describe('EventChainService', () => {
   it('stores chain state and queues anchors when anchoring is enabled', async () => {
     const idb = createStateStore();
     const eqty = { anchor: vi.fn(), verifyAnchors: vi.fn() };
-    const service = createService(idb as any, eqty as any, {
-      get: vi.fn().mockReturnValue(true),
-      set: vi.fn(),
-    } as any);
+    const service = createService(
+      idb as any,
+      eqty as any,
+      {
+        get: vi.fn().mockReturnValue(true),
+        set: vi.fn(),
+      } as any
+    );
 
     const chain = {
       id: 'chain-1',
@@ -164,10 +178,14 @@ describe('EventChainService', () => {
   it('skips store write when state did not change', async () => {
     const idb = createStateStore();
     const eqty = { anchor: vi.fn(), verifyAnchors: vi.fn() };
-    const service = createService(idb as any, eqty as any, {
-      get: vi.fn().mockReturnValue(false),
-      set: vi.fn(),
-    } as any);
+    const service = createService(
+      idb as any,
+      eqty as any,
+      {
+        get: vi.fn().mockReturnValue(false),
+        set: vi.fn(),
+      } as any
+    );
 
     const chain = {
       id: 'chain-skip',

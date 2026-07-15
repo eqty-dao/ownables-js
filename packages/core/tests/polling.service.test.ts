@@ -19,8 +19,7 @@ describe('PollingService', () => {
     warn: vi.fn(),
     error: vi.fn(),
   };
-  const createService = (...args: any[]) =>
-    new PollingService(args[0], args[1], logger as any);
+  const createService = (...args: any[]) => new PollingService(args[0], args[1], logger as any);
 
   it('stores messageCount and returns new hashes count', async () => {
     const localStorage = createKVStore({ packages: [{ uniqueMessageHash: 'a' }] });
@@ -64,9 +63,12 @@ describe('PollingService', () => {
 
     const service = createService(relay as any, localStorage as any);
     await expect(service.checkForNewHashes('0xabc')).resolves.toBe(7);
-    expect(relay.relay.get).toHaveBeenCalledWith('messages/0xabc', expect.objectContaining({
-      'If-Modified-Since': 'Mon, 01 Jan 2026 00:00:00 GMT',
-    }));
+    expect(relay.relay.get).toHaveBeenCalledWith(
+      'messages/0xabc',
+      expect.objectContaining({
+        'If-Modified-Since': 'Mon, 01 Jan 2026 00:00:00 GMT',
+      })
+    );
   });
 
   it('returns 0 when relay is unavailable', async () => {
@@ -91,7 +93,9 @@ describe('PollingService', () => {
       isAvailable: vi.fn().mockResolvedValue(true),
       ensureAuthenticated: vi.fn().mockResolvedValue(true),
       getAuthHeaders: vi.fn().mockReturnValue({}),
-      relay: { get: vi.fn().mockResolvedValue({ status: 200, data: { messages: [] }, headers: {} }) },
+      relay: {
+        get: vi.fn().mockResolvedValue({ status: 200, data: { messages: [] }, headers: {} }),
+      },
     };
     const service = createService(relay as any, localStorage as any);
     const onUpdate = vi.fn();
@@ -181,10 +185,7 @@ describe('PollingService', () => {
       await vi.advanceTimersByTimeAsync(12);
       stop();
       expect(checkSpy).toHaveBeenCalled();
-      expect(logger.error).toHaveBeenCalledWith(
-        'Polling error:',
-        expect.any(Error)
-      );
+      expect(logger.error).toHaveBeenCalledWith('Polling error:', expect.any(Error));
     } finally {
       vi.useRealTimers();
     }

@@ -19,9 +19,7 @@ export default class LocalStorageService {
   append(key: string, value: any): void {
     const list = this.get(`${this.prefix}${key}`) || [];
     if (!Array.isArray(list))
-      throw new Error(
-        `Unable to append value in local storage: "${key} is not an array"`
-      );
+      throw new Error(`Unable to append value in local storage: "${key} is not an array"`);
 
     list.push(value);
     this.set(`${this.prefix}${key}`, list);
@@ -56,7 +54,7 @@ export default class LocalStorageService {
       throw new Error(`"${this.prefix}${key}" is not an array in local storage`);
 
     const updatedList =
-      typeof list[0] === "object"
+      typeof list[0] === 'object'
         ? list.filter((item: any) => item[value] !== value)
         : list.filter((item: any) => item !== value);
 

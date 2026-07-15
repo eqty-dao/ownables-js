@@ -1,6 +1,6 @@
-import { EventChain, Event, Binary } from "eqty-core";
-import { encode } from "cbor-x";
-import type TypedDict from "../types/TypedDict.js";
+import { EventChain, Event, Binary } from 'eqty-core';
+import { encode } from 'cbor-x';
+import type TypedDict from '../types/TypedDict.js';
 import type {
   AnchorProvider,
   PackageAssetIO,
@@ -8,10 +8,10 @@ import type {
   RuntimeSourceProvider,
   StateStore,
   LogProgress,
-} from "../interfaces/core.js";
-import JSZip from "jszip";
-import type { TypedPackage } from "../types/TypedPackage.js";
-import type { TypedOwnableInfo } from "../types/TypedOwnableInfo.js";
+} from '../interfaces/core.js';
+import JSZip from 'jszip';
+import type { TypedPackage } from '../types/TypedPackage.js';
+import type { TypedOwnableInfo } from '../types/TypedOwnableInfo.js';
 import type {
   CosmWasmMessageInfo,
   CosmWasmEvent,
@@ -23,18 +23,18 @@ import type {
   RuntimePublicEvent,
   StateDump,
   StateSnapshot,
-} from "../types/OwnableRuntime.js";
+} from '../types/OwnableRuntime.js';
 import type {
   IndexedPublicEvent,
   IndexedPublicEventTransportOrigin,
   IndexedPublicReplaySelectionOptions,
   ReconciledPublicEvent,
   ReplayAttemptResult,
-} from "../types/Replay.js";
-import EventChainService from "./EventChain.service.js";
-import { withProgress } from "../progress.js";
-import type { LoggerLike } from "../logger.js";
-import { PublicEventReplayService } from "./ReplayAuthority.service.js";
+} from '../types/Replay.js';
+import EventChainService from './EventChain.service.js';
+import { withProgress } from '../progress.js';
+import type { LoggerLike } from '../logger.js';
+import { PublicEventReplayService } from './ReplayAuthority.service.js';
 
 export interface OwnableServiceDependencies {
   stateStore: StateStore;
@@ -49,7 +49,7 @@ export interface OwnableServiceDependencies {
 
 export default class OwnableService {
   private readonly SNAPSHOT_INTERVAL = 50;
-  private readonly PUBLIC_EVENT_REPLAY_STORE_SUFFIX = ".public-event-replays";
+  private readonly PUBLIC_EVENT_REPLAY_STORE_SUFFIX = '.public-event-replays';
 
   private readonly stateStore: StateStore;
   private readonly eventChains: EventChainService;
@@ -116,10 +116,8 @@ export default class OwnableService {
     if (this._rpc.has(id)) return;
 
     const js = this.runtimeSource.getWorkerSource();
-    const wasm = (await this.packages.getAsset(
-      cid,
-      "ownable_bg.wasm",
-      (fr, file) => (fr as FileReader).readAsArrayBuffer(file as Blob | File)
+    const wasm = (await this.packages.getAsset(cid, 'ownable_bg.wasm', (fr, file) =>
+      (fr as FileReader).readAsArrayBuffer(file as Blob | File)
     )) as ArrayBuffer;
 
     const rpc = this.runtimeRpc.create(id);
@@ -138,7 +136,7 @@ export default class OwnableService {
 
     if (pkg.isDynamic || this.anchoring) {
       const msg: any = {
-        "@context": "instantiate_msg.json",
+        '@context': 'instantiate_msg.json',
         ownable_id: chain.id,
         package: pkg.cid,
         network_id: networkId,
@@ -147,7 +145,7 @@ export default class OwnableService {
         ...(pkg.description ? { description: pkg.description } : {}),
       };
 
-      await withProgress(onProgress)("signEvent", () =>
+      await withProgress(onProgress)('signEvent', () =>
         this.eqty.sign(new Event(msg).addTo(chain))
       );
     }
@@ -160,20 +158,14 @@ export default class OwnableService {
     if (anchors.length > 0) {
       // Queue anchors and submit as single tx
       await this.eqty.anchor(...anchors);
-      const txHash = await withProgress(onProgress)("anchorEvent", () =>
-        this.eqty.submitAnchors()
-      );
+      const txHash = await withProgress(onProgress)('anchorEvent', () => this.eqty.submitAnchors());
       return txHash ? { chain, txHash } : { chain };
     }
 
     return { chain };
   }
 
-  async init(
-    chain: any,
-    cid: string,
-    uniqueMessageHash?: string
-  ): Promise<void> {
+  async init(chain: any, cid: string, uniqueMessageHash?: string): Promise<void> {
     if (!this._rpc.has(chain.id)) {
       await this.initWorker(chain.id, cid);
     }
@@ -209,26 +201,22 @@ export default class OwnableService {
       const keys = await this.stateStore.keys(snapshotStoreId);
       if (keys.length > 3) {
         const sortedKeys = keys
-          .map((key) => parseInt(key.replace("snapshot_", "")))
+          .map((key) => parseInt(key.replace('snapshot_', '')))
           .sort((a, b) => b - a);
 
         // Delete oldest snapshots, keep the 3 most recent
-        const keysToDelete = sortedKeys
-          .slice(3)
-          .map((index) => `snapshot_${index}`);
+        const keysToDelete = sortedKeys.slice(3).map((index) => `snapshot_${index}`);
 
         for (const key of keysToDelete) {
           await this.stateStore.delete(snapshotStoreId, key);
         }
       }
     } catch (error) {
-      this.logger.error("Error creating snapshot:", error);
+      this.logger.error('Error creating snapshot:', error);
     }
   }
 
-  private async getLatestSnapshot(
-    chainId: string
-  ): Promise<StateSnapshot | null> {
+  private async getLatestSnapshot(chainId: string): Promise<StateSnapshot | null> {
     const storeId = `ownable:${chainId}`;
     const snapshotStoreId = `${storeId}.snapshots`;
     const exist = await this.stateStore.hasStore(snapshotStoreId);
@@ -241,7 +229,7 @@ export default class OwnableService {
     if (snapshots.length === 0) return null;
 
     const latestKey = snapshots
-      .map((key) => parseInt(key.replace("snapshot_", "")))
+      .map((key) => parseInt(key.replace('snapshot_', '')))
       .sort((a, b) => b - a)[0];
 
     return await this.stateStore.get(snapshotStoreId, `snapshot_${latestKey}`);
@@ -257,13 +245,11 @@ export default class OwnableService {
 
     const snapshots = await this.stateStore.keys(snapshotStoreId);
     const sortedKeys = snapshots
-      .map((key) => parseInt(key.replace("snapshot_", "")))
+      .map((key) => parseInt(key.replace('snapshot_', '')))
       .sort((a, b) => a - b);
 
     return Promise.all(
-      sortedKeys.map((index) =>
-        this.stateStore.get(snapshotStoreId, `snapshot_${index}`)
-      )
+      sortedKeys.map((index) => this.stateStore.get(snapshotStoreId, `snapshot_${index}`))
     );
   }
 
@@ -282,7 +268,7 @@ export default class OwnableService {
 
   private replayRecord(
     event: IndexedPublicEvent,
-    status: ReconciledPublicEvent["status"],
+    status: ReconciledPublicEvent['status'],
     sources: IndexedPublicEventTransportOrigin[]
   ): ReconciledPublicEvent {
     return {
@@ -375,29 +361,30 @@ export default class OwnableService {
         transactionIndex: 0,
         logIndex: 0,
       },
-      status: "pending",
-      sources: ["local"],
+      status: 'pending',
+      sources: ['local'],
     };
   }
 
   private toRegisterRuntimeEvent(
-    event: Omit<PublicEvent, "data"> & { data: string | Uint8Array | Binary; subjectId?: string }
+    event: Omit<PublicEvent, 'data'> & { data: string | Uint8Array | Binary; subjectId?: string }
   ): PublicEvent {
-    const { subjectId: _subjectId, timestamp: _timestamp, ...publicEvent } = event as typeof event & {
+    const {
+      subjectId: _subjectId,
+      timestamp: _timestamp,
+      ...publicEvent
+    } = event as typeof event & {
       timestamp?: number;
     };
     return {
       ...publicEvent,
-      data:
-        typeof publicEvent.data === "string"
-          ? publicEvent.data
-          : new Binary(event.data).hex,
+      data: typeof publicEvent.data === 'string' ? publicEvent.data : new Binary(event.data).hex,
     };
   }
 
   private publicEventSubjectMatches(
     chain: EventChain,
-    event: Pick<EmittedPublicEventReceipt, "subjectId">
+    event: Pick<EmittedPublicEventReceipt, 'subjectId'>
   ): boolean {
     return event.subjectId.toLowerCase() === this.publicEventSubjectId(chain).toLowerCase();
   }
@@ -421,20 +408,20 @@ export default class OwnableService {
       sender: event.signerAddress || this.eqty.address,
       funds: [],
     } as CosmWasmMessageInfo;
-    const { "@context": context, ...msg } = event.parsedData;
+    const { '@context': context, ...msg } = event.parsedData;
 
     let result;
     switch (context) {
-      case "instantiate_msg.json":
+      case 'instantiate_msg.json':
         result = await rpc.instantiate(msg, info);
         break;
-      case "execute_msg.json":
+      case 'execute_msg.json':
         result = await rpc.execute(msg, info, stateDump);
         break;
-      case "register_msg.json":
+      case 'register_msg.json':
         result = await rpc.register(this.toRegisterRpcPayload(msg as PublicEvent), info, stateDump);
         break;
-      case "ingest_msg.json":
+      case 'ingest_msg.json':
         result = await rpc.ingest(msg as OwnableEvent, info, stateDump);
         break;
       default:
@@ -448,10 +435,7 @@ export default class OwnableService {
     return result;
   }
 
-  async apply(
-    partialChain: EventChain,
-    stateDump: StateDump
-  ): Promise<StateDump> {
+  async apply(partialChain: EventChain, stateDump: StateDump): Promise<StateDump> {
     const rpc = this.rpc(partialChain.id);
     const snapshot = await this.getLatestSnapshot(partialChain.id);
     let startIndex = 0;
@@ -469,11 +453,7 @@ export default class OwnableService {
     const BATCH_SIZE = 10;
     const totalEvents = partialChain.events.length;
 
-    for (
-      let batchStart = startIndex;
-      batchStart < totalEvents;
-      batchStart += BATCH_SIZE
-    ) {
+    for (let batchStart = startIndex; batchStart < totalEvents; batchStart += BATCH_SIZE) {
       const batchEnd = Math.min(batchStart + BATCH_SIZE, totalEvents);
       const batch = partialChain.events.slice(batchStart, batchEnd);
 
@@ -483,13 +463,7 @@ export default class OwnableService {
         if (!event) continue;
 
         try {
-          const result = await this.applyEvent(
-            rpc,
-            event,
-            stateDump,
-            partialChain,
-            globalIndex
-          );
+          const result = await this.applyEvent(rpc, event, stateDump, partialChain, globalIndex);
           stateDump = result.state;
         } catch (error) {
           this.logger.error(`Error applying event at index ${globalIndex}:`, error);
@@ -564,7 +538,7 @@ export default class OwnableService {
         ignoredPublicEvents.push({
           replayKey,
           event: indexedEvent,
-          reason: "register_failed",
+          reason: 'register_failed',
           cause,
         });
       }
@@ -589,7 +563,7 @@ export default class OwnableService {
     indexedPublicEvents: IndexedPublicEvent[],
     onProgress?: LogProgress
   ): Promise<ReplayAttemptResult> {
-    return this.reconcileIndexedPublicEvents(chain, indexedPublicEvents, "snapshot", onProgress);
+    return this.reconcileIndexedPublicEvents(chain, indexedPublicEvents, 'snapshot', onProgress);
   }
 
   async applyIndexedPublicEventStream(
@@ -597,7 +571,7 @@ export default class OwnableService {
     indexedPublicEvents: IndexedPublicEvent[],
     onProgress?: LogProgress
   ): Promise<ReplayAttemptResult> {
-    return this.reconcileIndexedPublicEvents(chain, indexedPublicEvents, "stream", onProgress);
+    return this.reconcileIndexedPublicEvents(chain, indexedPublicEvents, 'stream', onProgress);
   }
 
   private async reconcileIndexedPublicEvents(
@@ -607,7 +581,7 @@ export default class OwnableService {
     onProgress?: LogProgress
   ): Promise<ReplayAttemptResult> {
     const stateDump = await this.eventChains.getStateDump(chain.id, chain.state.hex);
-    if (!stateDump) throw Error("State mismatch for register public event");
+    if (!stateDump) throw Error('State mismatch for register public event');
 
     const replayStoreId = await this.ensureReplayStore(chain.id);
     const base = this.emptyReplayAttemptResult(stateDump);
@@ -619,21 +593,21 @@ export default class OwnableService {
 
     base.duplicateReplayKeys.push(...deduped.duplicateReplayKeys);
     base.duplicatePublicEvents.push(
-      ...deduped.duplicateEvents.map((event) => this.replayRecord(event, "confirmed", [source]))
+      ...deduped.duplicateEvents.map((event) => this.replayRecord(event, 'confirmed', [source]))
     );
 
     let nextState = stateDump;
 
     for (const indexedEvent of deduped.events) {
       const replayKey = this.replay.key(indexedEvent);
-      const existing = (await this.stateStore.get(replayStoreId, replayKey).catch(() => undefined)) as
-        | ReconciledPublicEvent
-        | undefined;
+      const existing = (await this.stateStore
+        .get(replayStoreId, replayKey)
+        .catch(() => undefined)) as ReconciledPublicEvent | undefined;
 
-      if (existing?.status === "confirmed") {
+      if (existing?.status === 'confirmed') {
         const updated = this.replayRecord(
           existing.event,
-          "confirmed",
+          'confirmed',
           this.mergeReplayRecordSources(existing.sources, source)
         );
         await this.stateStore.set(replayStoreId, replayKey, updated);
@@ -651,10 +625,10 @@ export default class OwnableService {
         );
         nextState = state;
 
-        await withProgress(onProgress)("signPublicEvent", () =>
+        await withProgress(onProgress)('signPublicEvent', () =>
           this.eqty.sign(
             new Event({
-              "@context": "register_msg.json",
+              '@context': 'register_msg.json',
               ...runtimeEvent,
             }).addTo(chain)
           )
@@ -664,8 +638,8 @@ export default class OwnableService {
 
         const confirmedRecord = this.replayRecord(
           indexedEvent,
-          "confirmed",
-          existing?.status === "pending"
+          'confirmed',
+          existing?.status === 'pending'
             ? this.mergeReplayRecordSources(existing.sources, source)
             : [source]
         );
@@ -674,14 +648,14 @@ export default class OwnableService {
         base.appliedEvents.push(indexedEvent);
         base.appliedReplayKeys.push(replayKey);
         base.appliedPublicEvents.push({ replayKey, event: indexedEvent });
-        if (existing?.status === "pending") {
+        if (existing?.status === 'pending') {
           base.confirmedPendingPublicEvents.push(confirmedRecord);
         }
       } catch (cause) {
         base.ignoredPublicEvents.push({
           replayKey,
           event: indexedEvent,
-          reason: "register_failed",
+          reason: 'register_failed',
           cause,
         });
       }
@@ -702,24 +676,20 @@ export default class OwnableService {
     attachments: EventAttachmentInput[] = []
   ): Promise<StateDump> {
     const info = { sender: this.eqty.address, funds: [] } as CosmWasmMessageInfo;
-    const { state: newStateDump } = await this.rpc(chain.id).execute(
-      msg,
-      info,
-      stateDump
-    );
+    const { state: newStateDump } = await this.rpc(chain.id).execute(msg, info, stateDump);
 
-    delete msg["@context"]; // Shouldn't be set
+    delete msg['@context']; // Shouldn't be set
 
-    const event = new Event({ "@context": "execute_msg.json", ...msg }).addTo(chain);
+    const event = new Event({ '@context': 'execute_msg.json', ...msg }).addTo(chain);
     for (const attachment of attachments) {
       event.addAttachment(
         attachment.name,
         new Uint8Array(await attachment.file.arrayBuffer()),
-        attachment.file.type || "application/octet-stream"
+        attachment.file.type || 'application/octet-stream'
       );
     }
 
-    await withProgress(onProgress)("signEvent", () => this.eqty.sign(event));
+    await withProgress(onProgress)('signEvent', () => this.eqty.sign(event));
 
     // Store without submitting anchors yet; submission is controlled by caller
     await this.store(chain, newStateDump);
@@ -729,7 +699,7 @@ export default class OwnableService {
 
   async registerPublicEvent(
     chain: EventChain,
-    event: Omit<PublicEvent, "data"> & { data: string | Uint8Array | Binary; subjectId?: string },
+    event: Omit<PublicEvent, 'data'> & { data: string | Uint8Array | Binary; subjectId?: string },
     onProgress?: LogProgress
   ): Promise<ReplayAttemptResult> {
     const publicEvent = this.toRegisterRuntimeEvent(event);
@@ -743,9 +713,9 @@ export default class OwnableService {
     onProgress?: LogProgress
   ): Promise<ReplayAttemptResult> {
     const stateDump = await this.eventChains.getStateDump(chain.id, chain.state.hex);
-    if (!stateDump) throw Error("State mismatch for emit public event");
+    if (!stateDump) throw Error('State mismatch for emit public event');
 
-    const encodedPayload = await withProgress(onProgress)("encodePublicEvent", () =>
+    const encodedPayload = await withProgress(onProgress)('encodePublicEvent', () =>
       this.rpc(chain.id).encodePublicEvent(eventType, encode(payload) as Uint8Array)
     );
     const subjectId = this.publicEventSubjectId(chain);
@@ -763,7 +733,7 @@ export default class OwnableService {
 
     let publicEvent: EmittedPublicEventReceipt;
     try {
-      publicEvent = await withProgress(onProgress)("emitPublicEvent", () =>
+      publicEvent = await withProgress(onProgress)('emitPublicEvent', () =>
         this.eqty.emitPublicEvent(subjectId, eventType, encodedPayload)
       );
     } catch (cause) {
@@ -777,7 +747,7 @@ export default class OwnableService {
       result.ignoredPublicEvents.push({
         replayKey: this.replay.key(this.toRegisterRuntimeEvent(publicEvent)),
         event: this.toRegisterRuntimeEvent(publicEvent),
-        reason: "invalid_subject_id",
+        reason: 'invalid_subject_id',
         cause: {
           expectedSubjectId: subjectId,
           receivedSubjectId: publicEvent.subjectId,
@@ -787,7 +757,7 @@ export default class OwnableService {
     }
 
     const runtimeEvent = this.toRegisterRuntimeEvent(publicEvent);
-    const pendingRecord = this.replayRecord(runtimeEvent, "pending", ["local"]);
+    const pendingRecord = this.replayRecord(runtimeEvent, 'pending', ['local']);
     await this.stateStore.delete(replayStoreId, provisionalPendingRecord.replayKey);
     await this.stateStore.set(replayStoreId, pendingRecord.replayKey, pendingRecord);
 
@@ -798,9 +768,7 @@ export default class OwnableService {
 
   async submitAnchors(onProgress?: LogProgress): Promise<string | undefined> {
     if (!this.anchoring) return undefined;
-    return await withProgress(onProgress)("anchor", () =>
-      this.eqty.submitAnchors()
-    );
+    return await withProgress(onProgress)('anchor', () => this.eqty.submitAnchors());
   }
 
   async canConsume(
@@ -828,7 +796,7 @@ export default class OwnableService {
 
       return result === true;
     } catch (error) {
-      this.logger.warn("Error checking canConsume:", error);
+      this.logger.warn('Error checking canConsume:', error);
       return false;
     }
   }
@@ -843,25 +811,23 @@ export default class OwnableService {
       funds: [],
     };
     const consumeMessage = { consume: {} };
-    const consumerState = await this.eventChains.getStateDump(
-      consumer.id,
-      consumer.state.hex
-    );
+    const consumerState = await this.eventChains.getStateDump(consumer.id, consumer.state.hex);
     const consumableState = await this.eventChains.getStateDump(
       consumable.id,
       consumable.state.hex
     );
-    if (!consumerState || !consumableState)
-      throw Error("State mismatch for consume");
+    if (!consumerState || !consumableState) throw Error('State mismatch for consume');
 
-    const { events, state: consumableStateDump } = await this.rpc(
-      consumable.id
-    ).execute(consumeMessage, info, consumableState);
+    const { events, state: consumableStateDump } = await this.rpc(consumable.id).execute(
+      consumeMessage,
+      info,
+      consumableState
+    );
 
     const consumeEvent:
       | { contract?: string; type: string; attributes: TypedDict<string> }
-      | undefined = events.find((event) => event.type === "consume");
-    if (!consumeEvent) throw Error("No consume event emitted");
+      | undefined = events.find((event) => event.type === 'consume');
+    if (!consumeEvent) throw Error('No consume event emitted');
     const consumableInfo = (await this.rpc(consumable.id).query(
       { get_info: {} },
       consumableStateDump
@@ -877,22 +843,22 @@ export default class OwnableService {
       eventType: consumeEvent.type,
     };
 
-    const { state: consumerStateDump } = await this.rpc(
-      consumer.id
-    ).ingest(ingestEvent, info, consumerState);
+    const { state: consumerStateDump } = await this.rpc(consumer.id).ingest(
+      ingestEvent,
+      info,
+      consumerState
+    );
 
-    await withProgress(onProgress)("signConsumableEvent", () =>
+    await withProgress(onProgress)('signConsumableEvent', () =>
       this.eqty.sign(
-        new Event({ "@context": "execute_msg.json", ...consumeMessage }).addTo(
-          consumable
-        )
+        new Event({ '@context': 'execute_msg.json', ...consumeMessage }).addTo(consumable)
       )
     );
 
-    await withProgress(onProgress)("signConsumerEvent", () =>
+    await withProgress(onProgress)('signConsumerEvent', () =>
       this.eqty.sign(
         new Event({
-          "@context": "ingest_msg.json",
+          '@context': 'ingest_msg.json',
           ...ingestEvent,
         }).addTo(consumer)
       )
@@ -901,7 +867,7 @@ export default class OwnableService {
     // Store both chains; emit anchor progress only once to represent anchoring both
     // Queue anchors for both chains without submitting yet
     await this.store(consumable, consumableStateDump);
-    await this.stateStore.set(`ownable:${consumable.id}`, "isConsumed", true);
+    await this.stateStore.set(`ownable:${consumable.id}`, 'isConsumed', true);
     await this.store(consumer, consumerStateDump);
 
     // Submit a single anchor tx for both
@@ -925,9 +891,7 @@ export default class OwnableService {
       }
     }
 
-    throw new Error(
-      `Operation failed after ${maxRetries} attempts. Last error: `
-    );
+    throw new Error(`Operation failed after ${maxRetries} attempts. Last error: `);
   }
 
   async initStore(
@@ -947,8 +911,7 @@ export default class OwnableService {
       created: new Date(),
       latestHash: chain.latestHash.hex,
       keywords: this.packages.info(pkg).keywords,
-      uniqueMessageHash: this.packages.info(pkg, uniqueMessageHash)
-        .uniqueMessageHash,
+      uniqueMessageHash: this.packages.info(pkg, uniqueMessageHash).uniqueMessageHash,
     };
 
     const stores = [storeId];
@@ -974,7 +937,7 @@ export default class OwnableService {
         await this.stateStore.setAll(data);
       } catch (error) {
         // If setAll fails, attempt to clean up
-        this.logger.error("Failed to set data, cleaning up stores...");
+        this.logger.error('Failed to set data, cleaning up stores...');
         await Promise.all(
           stores.map((store) => this.stateStore.deleteStore(store).catch(() => {}))
         );
@@ -982,15 +945,12 @@ export default class OwnableService {
       }
 
       const verifyData = await Promise.all([
-        this.stateStore.get(storeId, "state"),
+        this.stateStore.get(storeId, 'state'),
         stateDump ? this.stateStore.getAll(stateStoreId) : Promise.resolve(null),
       ]);
 
-      if (
-        verifyData[0] !== chainData.state ||
-        (stateDump && !verifyData[1]?.length)
-      ) {
-        throw new Error("Data verification failed after write");
+      if (verifyData[0] !== chainData.state || (stateDump && !verifyData[1]?.length)) {
+        throw new Error('Data verification failed after write');
       }
     });
   }
@@ -1001,7 +961,7 @@ export default class OwnableService {
     const stateStoreId = `${storeId}.state`;
 
     await this.retryOperation(async () => {
-      const storedState = await this.stateStore.get(storeId, "state");
+      const storedState = await this.stateStore.get(storeId, 'state');
       if (storedState === chain.state) return;
 
       const data = {
@@ -1014,13 +974,8 @@ export default class OwnableService {
       };
 
       if (this.anchoring) {
-        const previousHash = await this.stateStore.get(
-          `ownable:${chain.id}`,
-          "latestHash"
-        );
-        anchors.push(
-          ...chain.startingAfter(Binary.fromHex(previousHash)).anchorMap
-        );
+        const previousHash = await this.stateStore.get(`ownable:${chain.id}`, 'latestHash');
+        anchors.push(...chain.startingAfter(Binary.fromHex(previousHash)).anchorMap);
       }
 
       if (anchors.length > 0) {
@@ -1036,9 +991,9 @@ export default class OwnableService {
       }
 
       // Verify write
-      const verifyState = await this.stateStore.get(storeId, "state");
+      const verifyState = await this.stateStore.get(storeId, 'state');
       if (verifyState !== chain.state.hex) {
-        throw new Error("State verification failed after write");
+        throw new Error('State verification failed after write');
       }
     });
   }
@@ -1053,11 +1008,11 @@ export default class OwnableService {
 
   async zip(chain: EventChain): Promise<JSZip> {
     const firstEvent = chain.events[0];
-    if (!firstEvent) throw new Error("Cannot zip an empty ownable chain");
+    if (!firstEvent) throw new Error('Cannot zip an empty ownable chain');
     const packageCid: string = firstEvent.parsedData.package;
 
     const zip = await this.packages.zip(packageCid);
-    zip.file("chain.json", JSON.stringify(chain.toJSON()));
+    zip.file('chain.json', JSON.stringify(chain.toJSON()));
 
     return zip;
   }

@@ -56,23 +56,22 @@ export default class BucketArchiveService implements ArchiveService {
       throw new Error("Invalid package: 'eventChain.json' or 'chain.json' is required");
     }
 
-    const chainFileName = candidates.includes('eventChain.json')
-      ? 'eventChain.json'
-      : 'chain.json';
+    const chainFileName = candidates.includes('eventChain.json') ? 'eventChain.json' : 'chain.json';
 
     const chainBytes = files.get(chainFileName);
     if (!chainBytes) {
       throw new Error(`Missing chain payload at ${chainFileName}`);
     }
 
-    const chainJson = JSON.parse(Buffer.from(chainBytes).toString('utf8')) as Record<string, unknown>;
+    const chainJson = JSON.parse(Buffer.from(chainBytes).toString('utf8')) as Record<
+      string,
+      unknown
+    >;
 
     files.delete('eventChain.json');
     files.delete('chain.json');
 
-    const sorted = new Map(
-      Array.from(files.entries()).sort(([a], [b]) => a.localeCompare(b))
-    );
+    const sorted = new Map(Array.from(files.entries()).sort(([a], [b]) => a.localeCompare(b)));
 
     const cid = await this.cidCalculator.calculate(
       Array.from(sorted, ([path, content]) => ({ path, content }))

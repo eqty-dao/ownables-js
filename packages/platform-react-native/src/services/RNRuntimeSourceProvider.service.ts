@@ -3,5 +3,7 @@ import type { RNRuntimeSourceProviderOptions } from '../types/PlatformReactNativ
 
 export class RNRuntimeSourceProvider implements RuntimeSourceProvider {
   constructor(private readonly options: RNRuntimeSourceProviderOptions = {}) {}
-  getWorkerSource(): string { return this.options.workerSource ?? ''; }
+  getWorkerSource(): string {
+    return this.options.workerSource ?? '';
+  }
 }

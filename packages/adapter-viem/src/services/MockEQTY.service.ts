@@ -1,7 +1,7 @@
-import { Binary, Event, Message } from "eqty-core";
-import type { TypedDataDomain, TypedDataField } from "../types/EQTY";
+import { Binary, Event, Message } from 'eqty-core';
+import type { TypedDataDomain, TypedDataField } from '../types/EQTY';
 
-const DUMMY_SIG = `0x${"1".repeat(130)}`;
+const DUMMY_SIG = `0x${'1'.repeat(130)}`;
 
 class MockSigner {
   constructor(private readonly address: string) {}
@@ -43,7 +43,7 @@ export default class MockEQTYService {
     if (first instanceof Binary || (first && first.hex)) {
       for (const value of anchors as Array<any>) {
         const v = toBinary(value);
-        this.anchorQueue.push({ key: v, value: Binary.fromHex(`0x${"0".repeat(64)}`) });
+        this.anchorQueue.push({ key: v, value: Binary.fromHex(`0x${'0'.repeat(64)}`) });
       }
       return;
     }
@@ -56,7 +56,7 @@ export default class MockEQTYService {
   async submitAnchors(_txOptions?: { value?: bigint }): Promise<string | undefined> {
     if (this.anchorQueue.length === 0) return undefined;
     this.anchorQueue = [];
-    return `0x${"a".repeat(64)}`;
+    return `0x${'a'.repeat(64)}`;
   }
 
   async emitPublicEvent(
@@ -71,7 +71,7 @@ export default class MockEQTYService {
       eventType,
       data: new Binary(data).hex,
       blockNumber: 1,
-      transactionHash: `0x${"c".repeat(64)}`,
+      transactionHash: `0x${'c'.repeat(64)}`,
       transactionIndex: 0,
       logIndex: 0,
       timestamp: 1,
@@ -98,8 +98,8 @@ export default class MockEQTYService {
     if (first instanceof Binary || (first && first.hex)) {
       for (const anchor of anchors as Array<any>) {
         const key = toBinary(anchor).hex;
-        hashMap[key] = `0x${"b".repeat(64)}`;
-        map[key] = Binary.fromHex(`0x${"0".repeat(64)}`).hex.toLowerCase();
+        hashMap[key] = `0x${'b'.repeat(64)}`;
+        map[key] = Binary.fromHex(`0x${'0'.repeat(64)}`).hex.toLowerCase();
       }
       return { verified: true, anchors: hashMap, map };
     }
@@ -107,7 +107,7 @@ export default class MockEQTYService {
     for (const anchor of anchors as Array<any>) {
       const key = toBinary(anchor.key).hex;
       const value = toBinary(anchor.value).hex.toLowerCase();
-      hashMap[key] = `0x${"b".repeat(64)}`;
+      hashMap[key] = `0x${'b'.repeat(64)}`;
       map[key] = value;
     }
 
@@ -128,11 +128,17 @@ export default class MockEQTYService {
   }
 
   async signUnlockChallenge(challenge: string): Promise<string> {
-    const hex = challenge.startsWith('0x') ? challenge.slice(2) : Buffer.from(challenge, 'utf8').toString('hex');
+    const hex = challenge.startsWith('0x')
+      ? challenge.slice(2)
+      : Buffer.from(challenge, 'utf8').toString('hex');
     return `0x${hex.padEnd(130, '1').slice(0, 130)}`;
   }
 
-  async isUnlockProofValid(_contractAddress: string, _tokenId: string, proof: string): Promise<boolean> {
+  async isUnlockProofValid(
+    _contractAddress: string,
+    _tokenId: string,
+    proof: string
+  ): Promise<boolean> {
     return proof.startsWith('0x') && proof.length >= 4;
   }
 }

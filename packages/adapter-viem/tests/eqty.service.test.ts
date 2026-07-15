@@ -41,12 +41,11 @@ describe('EQTYService', () => {
   });
 
   it('throws for unsupported chain ids without an injected chain', () => {
-    expect(
-      () =>
-        createService('0xabc', 1, undefined, undefined, { request: vi.fn() } as any, {
-          anchorClient: { anchor: vi.fn() },
-          signer: {} as any,
-        })
+    expect(() =>
+      createService('0xabc', 1, undefined, undefined, { request: vi.fn() } as any, {
+        anchorClient: { anchor: vi.fn() },
+        signer: {} as any,
+      })
     ).toThrow('Unsupported chain ID');
   });
 
@@ -91,14 +90,21 @@ describe('EQTYService', () => {
     };
     const signer = {} as any;
 
-    const service = createService('0xabc', 84532, {} as any, {
-      getBlockNumber: vi.fn(),
-      getLogs: vi.fn(),
-    } as any, undefined, {
-      anchorClient,
-      feeReader,
-      signer,
-    });
+    const service = createService(
+      '0xabc',
+      84532,
+      {} as any,
+      {
+        getBlockNumber: vi.fn(),
+        getLogs: vi.fn(),
+      } as any,
+      undefined,
+      {
+        anchorClient,
+        feeReader,
+        signer,
+      }
+    );
 
     await service.anchor(Binary.fromHex('0x' + '1'.repeat(64)));
     const tx = await service.submitAnchors();
@@ -113,12 +119,20 @@ describe('EQTYService', () => {
       '0xabc',
       8453,
       { account: '0xabc', signMessage: vi.fn().mockResolvedValue('0xproof') } as any,
-      { getBlockNumber: vi.fn().mockResolvedValue(1n), getLogs: vi.fn().mockResolvedValue([]) } as any,
+      {
+        getBlockNumber: vi.fn().mockResolvedValue(1n),
+        getLogs: vi.fn().mockResolvedValue([]),
+      } as any,
       undefined,
       { anchorClient: { anchor: vi.fn() }, signer: {} as any }
     );
 
-    await expect(service.verifyAnchors()).resolves.toEqual({ verified: false, anchors: {}, map: {}, details: {} });
+    await expect(service.verifyAnchors()).resolves.toEqual({
+      verified: false,
+      anchors: {},
+      map: {},
+      details: {},
+    });
   });
 
   it('builds default viem clients and anchor client from ethereum provider', async () => {
@@ -131,7 +145,12 @@ describe('EQTYService', () => {
       {}
     );
 
-    await expect(service.verifyAnchors()).resolves.toEqual({ verified: false, anchors: {}, map: {}, details: {} });
+    await expect(service.verifyAnchors()).resolves.toEqual({
+      verified: false,
+      anchors: {},
+      map: {},
+      details: {},
+    });
   });
 
   it('throws when provider inputs are missing and no ethereum provider is supplied', () => {
@@ -148,12 +167,22 @@ describe('EQTYService', () => {
       eqtyToken: vi.fn(),
     };
     const walletClient = { account: '0xabc', signMessage: vi.fn() };
-    const publicClient = { getBlockNumber: vi.fn().mockResolvedValue(1n), getLogs: vi.fn().mockResolvedValue([]) };
-    const service = createService('0xabc', 84532, walletClient as any, publicClient as any, undefined, {
-      anchorClient,
-      feeReader,
-      signer: {} as any,
-    });
+    const publicClient = {
+      getBlockNumber: vi.fn().mockResolvedValue(1n),
+      getLogs: vi.fn().mockResolvedValue([]),
+    };
+    const service = createService(
+      '0xabc',
+      84532,
+      walletClient as any,
+      publicClient as any,
+      undefined,
+      {
+        anchorClient,
+        feeReader,
+        signer: {} as any,
+      }
+    );
 
     const hash = Binary.fromHex(`0x${'a'.repeat(64)}`);
     await service.anchor(hash);
@@ -355,28 +384,33 @@ describe('EQTYService', () => {
           },
         ],
       }),
-      getLogs: vi
-        .fn()
-        .mockResolvedValueOnce([
-          {
-            transactionHash: '0xtx-anchor',
-            args: { value: expected.hex, timestamp: 11n },
-            blockNumber: 7n,
-            transactionIndex: 2n,
-            logIndex: 5n,
-          },
-        ]),
+      getLogs: vi.fn().mockResolvedValueOnce([
+        {
+          transactionHash: '0xtx-anchor',
+          args: { value: expected.hex, timestamp: 11n },
+          blockNumber: 7n,
+          transactionIndex: 2n,
+          logIndex: 5n,
+        },
+      ]),
       readContract: vi
         .fn()
         .mockResolvedValueOnce(0n)
         .mockResolvedValueOnce(0n)
         .mockResolvedValueOnce('0x1111111111111111111111111111111111111111'),
     };
-    const service = createService('0xabc', 31337, walletClient as any, publicClient as any, undefined, {
-      anchor: { contractAddress: localAnchor as `0x${string}` },
-      anchorClient,
-      signer: {} as any,
-    });
+    const service = createService(
+      '0xabc',
+      31337,
+      walletClient as any,
+      publicClient as any,
+      undefined,
+      {
+        anchor: { contractAddress: localAnchor as `0x${string}` },
+        anchorClient,
+        signer: {} as any,
+      }
+    );
 
     await service.anchor(Binary.fromHex(`0x${'1'.repeat(64)}`));
     await expect(service.submitAnchors()).resolves.toBe('0xtx-anchor');
@@ -499,11 +533,21 @@ describe('EQTYService', () => {
 
   it('verifies anchors for empty and no-log responses', async () => {
     const walletClient = { account: '0xabc', signMessage: vi.fn() };
-    const publicClient = { getBlockNumber: vi.fn().mockResolvedValue(3n), getLogs: vi.fn().mockResolvedValue([]) };
-    const service = createService('0xabc', 84532, walletClient as any, publicClient as any, undefined, {
-      anchorClient: { anchor: vi.fn() },
-      signer: {} as any,
-    });
+    const publicClient = {
+      getBlockNumber: vi.fn().mockResolvedValue(3n),
+      getLogs: vi.fn().mockResolvedValue([]),
+    };
+    const service = createService(
+      '0xabc',
+      84532,
+      walletClient as any,
+      publicClient as any,
+      undefined,
+      {
+        anchorClient: { anchor: vi.fn() },
+        signer: {} as any,
+      }
+    );
 
     await expect(service.verifyAnchors()).resolves.toEqual({
       verified: false,
@@ -532,14 +576,21 @@ describe('EQTYService', () => {
       signMessage: vi.fn().mockResolvedValue('0xproof'),
     };
 
-    const service = createService('0xabc', 84532, walletClient as any, {
-      getBlockNumber: vi.fn(),
-      getLogs: vi.fn(),
-    } as any, undefined, {
-      anchorClient: { anchor: vi.fn() },
-      signer: {} as any,
-      lockableClient,
-    });
+    const service = createService(
+      '0xabc',
+      84532,
+      walletClient as any,
+      {
+        getBlockNumber: vi.fn(),
+        getLogs: vi.fn(),
+      } as any,
+      undefined,
+      {
+        anchorClient: { anchor: vi.fn() },
+        signer: {} as any,
+        lockableClient,
+      }
+    );
 
     await expect(service.getOwner('0xdef', '1')).resolves.toBe('0xowner');
     await expect(service.isLocked('0xdef', '1')).resolves.toBe(true);
@@ -549,19 +600,26 @@ describe('EQTYService', () => {
   });
 
   it('requires wallet account to sign unlock challenge', async () => {
-    const service = createService('0xabc', 84532, {} as any, {
-      getBlockNumber: vi.fn(),
-      getLogs: vi.fn(),
-    } as any, undefined, {
-      anchorClient: { anchor: vi.fn() },
-      signer: {} as any,
-      lockableClient: {
-        ownerOf: vi.fn(),
-        isLocked: vi.fn(),
-        unlockChallenge: vi.fn(),
-        isUnlockProofValid: vi.fn(),
-      },
-    });
+    const service = createService(
+      '0xabc',
+      84532,
+      {} as any,
+      {
+        getBlockNumber: vi.fn(),
+        getLogs: vi.fn(),
+      } as any,
+      undefined,
+      {
+        anchorClient: { anchor: vi.fn() },
+        signer: {} as any,
+        lockableClient: {
+          ownerOf: vi.fn(),
+          isLocked: vi.fn(),
+          unlockChallenge: vi.fn(),
+          isUnlockProofValid: vi.fn(),
+        },
+      }
+    );
 
     await expect(service.signUnlockChallenge(`0x${'2'.repeat(64)}`)).rejects.toThrow(
       'Wallet client account is required'
@@ -583,10 +641,17 @@ describe('EQTYService', () => {
       account: '0xabc',
       signMessage: vi.fn().mockResolvedValue('0xproof'),
     };
-    const service = createService('0xabc', 84532, walletClient as any, publicClient as any, undefined, {
-      anchorClient: { anchor: vi.fn() } as any,
-      signer: {} as any,
-    });
+    const service = createService(
+      '0xabc',
+      84532,
+      walletClient as any,
+      publicClient as any,
+      undefined,
+      {
+        anchorClient: { anchor: vi.fn() } as any,
+        signer: {} as any,
+      }
+    );
 
     await expect(service.getOwner('0xdef', '1')).resolves.toBe('0xowner');
     await expect(service.isLocked('0xdef', '1')).resolves.toBe(true);

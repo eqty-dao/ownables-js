@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as Core from './index.js';
-import {
-  OwnablePackageCidService,
-  PublicEventReplayService,
-} from './index.js';
+import { OwnablePackageCidService, PublicEventReplayService } from './index.js';
 
 describe('core package', () => {
   it('exports class services without legacy function aliases', () => {

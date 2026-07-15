@@ -1,6 +1,6 @@
-import type { KVStore } from "../interfaces/core.js";
-import type { RelayPollingClient } from "../types/Polling.js";
-import type { LoggerLike } from "../logger.js";
+import type { KVStore } from '../interfaces/core.js';
+import type { RelayPollingClient } from '../types/Polling.js';
+import type { LoggerLike } from '../logger.js';
 
 /**
  * @deprecated Relay polling is legacy and will be removed in a future major version.
@@ -22,7 +22,7 @@ export class PollingService {
    * Fetch new message hashes from the server and compare with client hashes.
    */
   async checkForNewHashes(address: string) {
-    const pkgs = this.localStorage.get("packages") || [];
+    const pkgs = this.localStorage.get('packages') || [];
     const clientHashes = pkgs.map((msg: any) => {
       return msg.uniqueMessageHash;
     });
@@ -38,10 +38,10 @@ export class PollingService {
       const headers: Record<string, string> = {
         ...this.relay.getAuthHeaders(),
       };
-      const lastModified = this.localStorage.get("lastModified");
+      const lastModified = this.localStorage.get('lastModified');
 
       if (lastModified) {
-        headers["If-Modified-Since"] = lastModified;
+        headers['If-Modified-Since'] = lastModified;
       }
 
       const response = await this.relay.relay.get(
@@ -53,32 +53,29 @@ export class PollingService {
       const responseData = response as any;
 
       if (responseData.status === 304) {
-        return this.localStorage.get("messageCount") || 0;
+        return this.localStorage.get('messageCount') || 0;
       }
 
       if (responseData.status === 200) {
-        const messages =
-          responseData.data?.messages || responseData.messages || [];
+        const messages = responseData.data?.messages || responseData.messages || [];
         const serverHashes = messages
           .filter((message: any) => message.hash)
           .map((message: any) => message.hash);
 
-        const newLastModified = responseData.headers?.["last-modified"];
+        const newLastModified = responseData.headers?.['last-modified'];
         if (newLastModified) {
-          this.localStorage.set("lastModified", newLastModified);
+          this.localStorage.set('lastModified', newLastModified);
         }
-        const newHashes = serverHashes.filter(
-          (hash: string) => !clientHashes.includes(hash)
-        );
+        const newHashes = serverHashes.filter((hash: string) => !clientHashes.includes(hash));
 
-        this.localStorage.set("messageCount", newHashes.length);
+        this.localStorage.set('messageCount', newHashes.length);
 
         return newHashes.length;
       }
 
       this.consecutiveFailures = 0;
     } catch (error) {
-      this.logger.error("Error fetching message hashes:", error);
+      this.logger.error('Error fetching message hashes:', error);
 
       this.consecutiveFailures++;
 
@@ -99,11 +96,7 @@ export class PollingService {
   /**
    * Start polling for message hash updates.
    */
-  startPolling(
-    address: string,
-    onUpdate: (count: number) => void,
-    interval = 15000
-  ): () => void {
+  startPolling(address: string, onUpdate: (count: number) => void, interval = 15000): () => void {
     if (this.intervalId) {
       return () => {};
     }
@@ -115,7 +108,7 @@ export class PollingService {
         const newCount = await this.checkForNewHashes(address);
         onUpdate(newCount);
       } catch (error) {
-        this.logger.error("Polling error:", error);
+        this.logger.error('Polling error:', error);
       }
     };
 
@@ -137,6 +130,6 @@ export class PollingService {
    * Clear cached headers and hashes
    */
   clearCache() {
-    this.localStorage.remove("lastModified");
+    this.localStorage.remove('lastModified');
   }
 }

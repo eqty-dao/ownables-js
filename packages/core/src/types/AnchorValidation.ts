@@ -1,4 +1,4 @@
-import type { Binary } from "eqty-core";
+import type { Binary } from 'eqty-core';
 
 export interface AnchorValidationPair {
   key: Binary;
@@ -15,7 +15,7 @@ export interface AnchorValidationRecord {
   transactionIndex?: number;
   logIndex?: number;
   verified: boolean;
-  source: "provider" | "indexed";
+  source: 'provider' | 'indexed';
 }
 
 export interface AnchorValidationResult {
@@ -36,7 +36,11 @@ export interface IndexedAnchorRecord {
 }
 
 export interface AnchorValidationSource {
-  validateAnchors(...anchors: Array<Binary | { hex: string } | { key: Binary | { hex: string }; value: Binary | { hex: string } }>): Promise<AnchorValidationResult>;
+  validateAnchors(
+    ...anchors: Array<
+      Binary | { hex: string } | { key: Binary | { hex: string }; value: Binary | { hex: string } }
+    >
+  ): Promise<AnchorValidationResult>;
 }
 
 export type AnchorValidationInput =

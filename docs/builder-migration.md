@@ -20,7 +20,7 @@ Use `@ownables/builder` for package preparation and deployment in browser or Nod
 ## Before
 
 ```ts
-import { BuilderService } from "@ownables/builder-client";
+import { BuilderService } from '@ownables/builder-client';
 
 const builder = new BuilderService(chainId, {
   url: import.meta.env.VITE_OBUILDER,
@@ -29,7 +29,7 @@ const builder = new BuilderService(chainId, {
 
 const { requestId } = await builder.upload(zipBlob, {
   templateId: 1,
-  name: "My Ownable",
+  name: 'My Ownable',
   sender: address,
 });
 ```
@@ -37,19 +37,19 @@ const { requestId } = await builder.upload(zipBlob, {
 ## After
 
 ```ts
-import { BuilderService } from "@ownables/builder";
+import { BuilderService } from '@ownables/builder';
 
 const builder = new BuilderService({ packageService, deployAdapter: adapter });
 
 const prepared = await builder.prepareOwnable({
-  name: "My Ownable",
-  description: "Ownable deployment",
+  name: 'My Ownable',
+  description: 'Ownable deployment',
   files,
 });
 
 const instantiateMsg = builder.buildInstantiateMsg({
-  name: "My Ownable",
-  description: "Browser-first ownable",
+  name: 'My Ownable',
+  description: 'Browser-first ownable',
   packageCid: prepared.packageCid,
   networkId,
 });
@@ -70,7 +70,7 @@ You can also load wasm from a bundler-managed local asset (`src/assets` or equiv
 You can also load wasm directly from the builder package in Vite-style setups:
 
 ```ts
-import ownableWasmUrl from "@ownables/builder/ownable_bg.wasm?url";
+import ownableWasmUrl from '@ownables/builder/ownable_bg.wasm?url';
 
 async function loadWasmFromBuilderPackage(): Promise<Uint8Array> {
   const res = await fetch(ownableWasmUrl);
@@ -83,7 +83,7 @@ React example (`public/`):
 
 ```ts
 async function loadWasmFromPublic(): Promise<Uint8Array> {
-  const res = await fetch("/ownable_bg.wasm");
+  const res = await fetch('/ownable_bg.wasm');
   if (!res.ok) throw new Error(`Failed to load wasm: ${res.status}`);
   return new Uint8Array(await res.arrayBuffer());
 }
@@ -92,7 +92,7 @@ async function loadWasmFromPublic(): Promise<Uint8Array> {
 React example (`src/assets`):
 
 ```ts
-import ownableWasmUrl from "./assets/ownable_bg.wasm?url";
+import ownableWasmUrl from './assets/ownable_bg.wasm?url';
 
 async function loadWasmFromAssetUrl(): Promise<Uint8Array> {
   const res = await fetch(ownableWasmUrl);

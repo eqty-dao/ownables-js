@@ -10,7 +10,7 @@
     "build": "yarn workspaces foreach -A -t run build",
     "build:packages": "yarn workspaces foreach -A -t --no-private run build",
     "build:ownable": "bash bin/ownables-build.sh",
-    "clean": "yarn workspaces foreach -A run clean",
+    "clean": "yarn workspaces foreach -A run clean && rm -rf packages/notify-client/dist packages/notify-core/dist packages/notify-publisher/dist",
     "typecheck": "yarn workspaces foreach -A -t run typecheck",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

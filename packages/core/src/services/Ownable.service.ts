@@ -32,9 +32,9 @@ import type {
   ReplayAttemptResult,
 } from '../types/Replay.js';
 import EventChainService from './EventChain.service.js';
-import { withProgress } from '../progress.js';
 import type { LoggerLike } from '../logger.js';
 import { PublicEventReplayService } from './ReplayAuthority.service.js';
+import { ProgressService } from './Progress.service.js';
 
 export interface OwnableServiceDependencies {
   stateStore: StateStore;
@@ -129,6 +129,7 @@ export default class OwnableService {
     pkg: TypedPackage,
     onProgress?: LogProgress
   ): Promise<{ chain: EventChain; txHash?: string }> {
+    const progress = new ProgressService(onProgress);
     const address = this.eqty.address;
     const networkId = this.eqty.chainId;
     const chain = EventChain.create(address, networkId);
@@ -145,7 +146,7 @@ export default class OwnableService {
         ...(pkg.description ? { description: pkg.description } : {}),
       };
 
-      await withProgress(onProgress)('signEvent', () =>
+      await progress.step('signEvent', () =>
         this.eqty.sign(new Event(msg).addTo(chain))
       );
     }
@@ -158,7 +159,7 @@ export default class OwnableService {
     if (anchors.length > 0) {
       // Queue anchors and submit as single tx
       await this.eqty.anchor(...anchors);
-      const txHash = await withProgress(onProgress)('anchorEvent', () => this.eqty.submitAnchors());
+      const txHash = await progress.step('anchorEvent', () => this.eqty.submitAnchors());
       return txHash ? { chain, txHash } : { chain };
     }
 
@@ -580,6 +581,7 @@ export default class OwnableService {
     source: IndexedPublicEventTransportOrigin,
     onProgress?: LogProgress
   ): Promise<ReplayAttemptResult> {
+    const progress = new ProgressService(onProgress);
     const stateDump = await this.eventChains.getStateDump(chain.id, chain.state.hex);
     if (!stateDump) throw Error('State mismatch for register public event');
 
@@ -625,7 +627,7 @@ export default class OwnableService {
         );
         nextState = state;
 
-        await withProgress(onProgress)('signPublicEvent', () =>
+        await progress.step('signPublicEvent', () =>
           this.eqty.sign(
             new Event({
               '@context': 'register_msg.json',
@@ -675,6 +677,7 @@ export default class OwnableService {
     onProgress?: LogProgress,
     attachments: EventAttachmentInput[] = []
   ): Promise<StateDump> {
+    const progress = new ProgressService(onProgress);
     const info = { sender: this.eqty.address, funds: [] } as CosmWasmMessageInfo;
     const { state: newStateDump } = await this.rpc(chain.id).execute(msg, info, stateDump);
 
@@ -689,7 +692,7 @@ export default class OwnableService {
       );
     }
 
-    await withProgress(onProgress)('signEvent', () => this.eqty.sign(event));
+    await progress.step('signEvent', () => this.eqty.sign(event));
 
     // Store without submitting anchors yet; submission is controlled by caller
     await this.store(chain, newStateDump);
@@ -712,10 +715,11 @@ export default class OwnableService {
     payload: TypedDict,
     onProgress?: LogProgress
   ): Promise<ReplayAttemptResult> {
+    const progress = new ProgressService(onProgress);
     const stateDump = await this.eventChains.getStateDump(chain.id, chain.state.hex);
     if (!stateDump) throw Error('State mismatch for emit public event');
 
-    const encodedPayload = await withProgress(onProgress)('encodePublicEvent', () =>
+    const encodedPayload = await progress.step('encodePublicEvent', () =>
       this.rpc(chain.id).encodePublicEvent(eventType, encode(payload) as Uint8Array)
     );
     const subjectId = this.publicEventSubjectId(chain);
@@ -733,7 +737,7 @@ export default class OwnableService {
 
     let publicEvent: EmittedPublicEventReceipt;
     try {
-      publicEvent = await withProgress(onProgress)('emitPublicEvent', () =>
+      publicEvent = await progress.step('emitPublicEvent', () =>
         this.eqty.emitPublicEvent(subjectId, eventType, encodedPayload)
       );
     } catch (cause) {
@@ -768,7 +772,7 @@ export default class OwnableService {
 
   async submitAnchors(onProgress?: LogProgress): Promise<string | undefined> {
     if (!this.anchoring) return undefined;
-    return await withProgress(onProgress)('anchor', () => this.eqty.submitAnchors());
+    return await new ProgressService(onProgress).step('anchor', () => this.eqty.submitAnchors());
   }
 
   async canConsume(
@@ -806,6 +810,7 @@ export default class OwnableService {
     consumable: EventChain,
     onProgress?: LogProgress
   ): Promise<void> {
+    const progress = new ProgressService(onProgress);
     const info: CosmWasmMessageInfo = {
       sender: this.eqty.address,
       funds: [],
@@ -849,13 +854,13 @@ export default class OwnableService {
       consumerState
     );
 
-    await withProgress(onProgress)('signConsumableEvent', () =>
+    await progress.step('signConsumableEvent', () =>
       this.eqty.sign(
         new Event({ '@context': 'execute_msg.json', ...consumeMessage }).addTo(consumable)
       )
     );
 
-    await withProgress(onProgress)('signConsumerEvent', () =>
+    await progress.step('signConsumerEvent', () =>
       this.eqty.sign(
         new Event({
           '@context': 'ingest_msg.json',

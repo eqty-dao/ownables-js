@@ -3,7 +3,7 @@ import JSZip from 'jszip';
 import mime from 'mime/lite';
 import {
   SIWEClient,
-  withProgress,
+  ProgressService,
   type MessageExt,
   type AnchorProvider,
   type LogProgress,
@@ -15,7 +15,7 @@ const getMimeType = (filename: string): string | null | undefined =>
 
 /**
  * @deprecated Relay transport is legacy and will be removed in a future major version.
- * Prefer hub upload/download with WalletConnect Notify packages.
+ * Prefer Hub-backed discovery and import flows.
  */
 export class RelayService {
   private static readonly STORAGE_PREFIX = 'relay_siwe_token:';
@@ -193,7 +193,7 @@ export class RelayService {
       throw new Error('Recipient not provided');
     }
 
-    const step = withProgress(onProgress);
+    const progress = new ProgressService(onProgress);
 
     try {
       await this.ensureAuthenticated();
@@ -202,7 +202,7 @@ export class RelayService {
       const message = new Message(messageContent, 'application/octet-stream', meta);
 
       // Step: Sign relay message and send (will be represented as a single UI step)
-      await step(
+      await progress.step(
         'signMessage',
         () => this.eqty.sign(message.to(recipient)),
         () => ({ hash: message.hash.base58 })

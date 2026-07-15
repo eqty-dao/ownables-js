@@ -7,7 +7,7 @@ export { BrowserRuntimeSourceProvider } from './services/BrowserRuntimeSourcePro
 export { BrowserRuntimeRpcProvider } from './services/BrowserRuntimeRpcProvider.service.js';
 /**
  * @deprecated Relay transport is legacy and will be removed in a future major version.
- * Prefer hub upload/download with WalletConnect Notify packages.
+ * Prefer Hub-backed discovery and import flows.
  */
 export { RelayService } from './services/Relay.service.js';
 export { default as SessionStorageService } from './services/SessionStorage.service.js';

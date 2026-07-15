@@ -1,4 +1,4 @@
-import { withProgress } from '@ownables/core';
+import { ProgressService } from '@ownables/core';
 import type { LogProgress } from '@ownables/core';
 import type {
   IndexedPublicEventsSnapshot,
@@ -122,9 +122,9 @@ export default class HubService {
     filename = 'ownable.zip',
     onProgress?: LogProgress
   ): Promise<HubUploadResult> {
-    const step = withProgress(onProgress);
+    const progress = new ProgressService(onProgress);
 
-    return await step('hubUpload', async () => {
+    return await progress.step('hubUpload', async () => {
       const form = new FormData();
       const buffer = new ArrayBuffer(content.byteLength);
       new Uint8Array(buffer).set(content);
@@ -145,9 +145,9 @@ export default class HubService {
   }
 
   async downloadOwnable(ownableId: string, onProgress?: LogProgress): Promise<File> {
-    const step = withProgress(onProgress);
+    const progress = new ProgressService(onProgress);
 
-    return await step('hubDownload', async () => {
+    return await progress.step('hubDownload', async () => {
       const bundleUrl = this.parseHubDownloadUrl(this.getOwnableBundleUrl(ownableId));
       const response = await this.fetchFn(bundleUrl.toString());
 

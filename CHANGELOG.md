@@ -1,3 +1,11 @@
+## [0.9.1](https://github.com/eqty-dao/ownables-js/compare/v0.9.0...v0.9.1) (2026-08-15)
+
+
+### Bug Fixes
+
+* close service boundary QC findings ([d6dc668](https://github.com/eqty-dao/ownables-js/commit/d6dc668defdf58b03d412f85dd6d0afc26982af6))
+* resolve package CID utility tests ([843e957](https://github.com/eqty-dao/ownables-js/commit/843e95745b1a392460d0bb6aad3b26ed1e503a7c))
+
 # [0.9.0](https://github.com/eqty-dao/ownables-js/compare/v0.8.1...v0.9.0) (2026-07-14)
 
 ### Bug Fixes

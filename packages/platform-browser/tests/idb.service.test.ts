@@ -57,7 +57,7 @@ function createFakeIndexedDb() {
           const target = stores.get(name) ?? new Map<string, any>();
           stores.set(name, target);
 
-          const mkReq = <T,>(fn: () => T): FakeRequest => {
+          const mkReq = <T>(fn: () => T): FakeRequest => {
             const req: FakeRequest = {};
             queueMicrotask(() => {
               try {
@@ -258,7 +258,9 @@ describe('IDBService', () => {
 
     await service.createStore('one', 'two', 'tmp:1');
     await expect(service.hasStore('one')).resolves.toBe(true);
-    await expect(service.listStores()).resolves.toEqual(expect.arrayContaining(['one', 'two', 'tmp:1']));
+    await expect(service.listStores()).resolves.toEqual(
+      expect.arrayContaining(['one', 'two', 'tmp:1'])
+    );
 
     await service.deleteStore('one');
     await expect(service.hasStore('one')).resolves.toBe(false);
@@ -389,7 +391,9 @@ describe('IDBService', () => {
     const apiUpgradeError = {
       open: () => {
         const req: FakeRequest = {};
-        queueMicrotask(() => req.onerror?.({ target: { error: new Error('upgrade open failed') } } as any));
+        queueMicrotask(() =>
+          req.onerror?.({ target: { error: new Error('upgrade open failed') } } as any)
+        );
         return req as any;
       },
       deleteDatabase: () => ({}) as any,
@@ -423,7 +427,9 @@ describe('IDBService', () => {
       ...apiVerifyFail,
       deleteDatabase: () => {
         const req: FakeRequest = {};
-        queueMicrotask(() => req.onerror?.({ target: { error: new Error('delete db failed') } } as any));
+        queueMicrotask(() =>
+          req.onerror?.({ target: { error: new Error('delete db failed') } } as any)
+        );
         return req as any;
       },
     } as unknown as IDBFactory;

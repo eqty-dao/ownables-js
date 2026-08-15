@@ -49,7 +49,10 @@ export default class MockEQTYService {
       return;
     }
 
-    for (const anchor of anchors as Array<{ key: Binary | { hex: string }; value: Binary | { hex: string } }>) {
+    for (const anchor of anchors as Array<{
+      key: Binary | { hex: string };
+      value: Binary | { hex: string };
+    }>) {
       this.anchorQueue.push({ key: toBinary(anchor.key), value: toBinary(anchor.value) });
     }
   }
@@ -85,7 +88,11 @@ export default class MockEQTYService {
     }
   }
 
-  async verifyAnchors(...anchors: Array<Binary | { hex: string } | { key: Binary | { hex: string }; value: Binary | { hex: string } }>): Promise<{
+  async verifyAnchors(
+    ...anchors: Array<
+      Binary | { hex: string } | { key: Binary | { hex: string }; value: Binary | { hex: string } }
+    >
+  ): Promise<{
     verified: boolean;
     anchors: Record<string, string | undefined>;
     map: Record<string, string>;
@@ -107,7 +114,10 @@ export default class MockEQTYService {
       return { verified: true, anchors: txMap, map: valueMap };
     }
 
-    for (const anchor of anchors as Array<{ key: Binary | { hex: string }; value: Binary | { hex: string } }>) {
+    for (const anchor of anchors as Array<{
+      key: Binary | { hex: string };
+      value: Binary | { hex: string };
+    }>) {
       const key = toBinary(anchor.key).hex;
       const value = toBinary(anchor.value).hex.toLowerCase();
       txMap[key] = `0x${'b'.repeat(64)}`;
@@ -131,11 +141,17 @@ export default class MockEQTYService {
   }
 
   async signUnlockChallenge(challenge: string): Promise<string> {
-    const hex = challenge.startsWith('0x') ? challenge.slice(2) : Buffer.from(challenge, 'utf8').toString('hex');
+    const hex = challenge.startsWith('0x')
+      ? challenge.slice(2)
+      : Buffer.from(challenge, 'utf8').toString('hex');
     return `0x${hex.padEnd(130, '1').slice(0, 130)}`;
   }
 
-  async isUnlockProofValid(_contractAddress: string, _tokenId: string, proof: string): Promise<boolean> {
+  async isUnlockProofValid(
+    _contractAddress: string,
+    _tokenId: string,
+    proof: string
+  ): Promise<boolean> {
     return proof.startsWith('0x') && proof.length >= 4;
   }
 }

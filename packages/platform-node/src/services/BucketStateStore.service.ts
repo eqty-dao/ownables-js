@@ -48,7 +48,10 @@ function deserialize(value: Uint8Array | Buffer | string | undefined): unknown {
 }
 
 export default class BucketStateStore implements StateStore {
-  constructor(private readonly bucket: BucketLike, private readonly rootPrefix = ROOT_PREFIX) {}
+  constructor(
+    private readonly bucket: BucketLike,
+    private readonly rootPrefix = ROOT_PREFIX
+  ) {}
 
   private markerPath(store: string): string {
     return `${this.rootPrefix}/${encodeStore(store)}/${STORE_MARKER}`;
@@ -86,9 +89,7 @@ export default class BucketStateStore implements StateStore {
         .map((path) => this.bucket.get(path))
     );
 
-    return values
-      .map((v) => deserialize(v))
-      .filter((v) => v !== undefined);
+    return values.map((v) => deserialize(v)).filter((v) => v !== undefined);
   }
 
   async getMap(store: string): Promise<Map<unknown, unknown>> {

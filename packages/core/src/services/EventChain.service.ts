@@ -1,29 +1,27 @@
-import { Binary, EventChain, IEventChainJSON } from "eqty-core";
-import type { AnchorProvider, KVStore, StateStore } from "../interfaces/core.js";
-import type { StateDump } from "../types/OwnableRuntime.js";
-import type { ReplayAuthorityAnchorEvidence } from "../types/Replay.js";
-import type TypedDict from "../types/TypedDict.js";
-import type { StoredChainInfo } from "../types/EventChainStore.js";
-import type { LoggerLike } from "../logger.js";
-import {
-  validateAnchorsAgainstIndexedRecords,
-  validateAnchorsWithSource,
-} from "./AnchorValidation.service.js";
+import { Binary, EventChain, IEventChainJSON } from 'eqty-core';
+import type { AnchorProvider, KVStore, StateStore } from '../interfaces/core.js';
+import type { StateDump } from '../types/OwnableRuntime.js';
+import type { ReplayAuthorityAnchorEvidence } from '../types/Replay.js';
+import type TypedDict from '../types/TypedDict.js';
+import type { StoredChainInfo } from '../types/EventChainStore.js';
+import type { LoggerLike } from '../logger.js';
+import { AnchorValidationService } from './AnchorValidation.service.js';
 
 export default class EventChainService {
   constructor(
     private idb: StateStore,
     private eqty: AnchorProvider,
+    private readonly anchorValidation: AnchorValidationService,
     private settingsStore?: KVStore,
     private readonly logger: LoggerLike = console
   ) {}
 
   get anchoring(): boolean {
-    return Boolean(this.settingsStore?.get("anchoring"));
+    return Boolean(this.settingsStore?.get('anchoring'));
   }
 
   setAnchoring(enabled: boolean): void {
-    this.settingsStore?.set("anchoring", enabled);
+    this.settingsStore?.set('anchoring', enabled);
   }
 
   async loadAll(): Promise<
@@ -39,7 +37,7 @@ export default class EventChainService {
   > {
     const ids = (await this.idb.listStores())
       .filter((name) => name.match(/^ownable:\w+$/))
-      .map((name) => name.replace(/^ownable:(\w+)$/, "$1"));
+      .map((name) => name.replace(/^ownable:(\w+)$/, '$1'));
 
     const BATCH_SIZE = 10;
     const results: Array<any> = [];
@@ -47,7 +45,7 @@ export default class EventChainService {
     const isFulfilled = <T>(
       result: PromiseSettledResult<T>
     ): result is PromiseFulfilledResult<T> => {
-      return result.status === "fulfilled";
+      return result.status === 'fulfilled';
     };
 
     for (let i = 0; i < ids.length; i += BATCH_SIZE) {
@@ -71,9 +69,7 @@ export default class EventChainService {
       );
     }
 
-    return results.sort(
-      ({ created: a }, { created: b }) => a.getTime() - b.getTime()
-    );
+    return results.sort(({ created: a }, { created: b }) => a.getTime() - b.getTime());
   }
 
   async load(id: string): Promise<{
@@ -122,14 +118,11 @@ export default class EventChainService {
     const data: TypedDict<TypedDict | Map<any, any>> = {};
 
     for (const { chain, stateDump } of chains) {
-      const storedState = await this.idb.get(`ownable:${chain.id}`, "state");
+      const storedState = await this.idb.get(`ownable:${chain.id}`, 'state');
       if (storedState === chain.state) continue;
 
       if (this.anchoring) {
-        const previousHash = await this.idb.get(
-          `ownable:${chain.id}`,
-          "latestHash"
-        );
+        const previousHash = await this.idb.get(`ownable:${chain.id}`, 'latestHash');
         const newAnchors = previousHash
           ? chain.startingAfter(Binary.fromHex(previousHash)).anchorMap
           : chain.anchorMap;
@@ -154,15 +147,11 @@ export default class EventChainService {
     }
   }
 
-  async getStateDump(
-    id: string,
-    state: string | Binary
-  ): Promise<StateDump | null> {
+  async getStateDump(id: string, state: string | Binary): Promise<StateDump | null> {
     const storedState = (await this.idb.hasStore(`ownable:${id}`))
-      ? await this.idb.get(`ownable:${id}`, "state")
+      ? await this.idb.get(`ownable:${id}`, 'state')
       : undefined;
-    if (storedState !== (state instanceof Binary ? state.hex : state))
-      return null;
+    if (storedState !== (state instanceof Binary ? state.hex : state)) return null;
 
     return this.getCurrentStateDump(id);
   }
@@ -183,8 +172,11 @@ export default class EventChainService {
   public async verify(chain: EventChain, anchorEvidence?: ReplayAuthorityAnchorEvidence) {
     const anchors = chain.anchorMap;
     if (anchorEvidence) {
-      return validateAnchorsAgainstIndexedRecords(anchors, anchorEvidence.indexedRecords);
+      return this.anchorValidation.validateAgainstIndexedRecords(
+        anchors,
+        anchorEvidence.indexedRecords
+      );
     }
-    return await validateAnchorsWithSource(this.eqty, ...anchors);
+    return await this.anchorValidation.validate(...anchors);
   }
 }

@@ -18,7 +18,7 @@ yarn add @ownables/builder-client
 ## Legacy usage
 
 ```ts
-import { BuilderService } from "@ownables/builder-client";
+import { BuilderService } from '@ownables/builder-client';
 
 const builder = new BuilderService(chainId, {
   url: import.meta.env.VITE_OBUILDER,
@@ -27,13 +27,12 @@ const builder = new BuilderService(chainId, {
 
 const { requestId } = await builder.upload(zipBlob, {
   templateId: 1,
-  name: "My Ownable",
+  name: 'My Ownable',
   sender: address,
 });
 ```
 
 ## Migration
 
-- `upload(...)` -> `prepareOwnable(...)` + `buildInstantiateMsg(...)` + `deploy(...)`
-- `getTemplateCost(...)` -> `estimateCost(...)`
-
+- `upload(...)` -> `BuilderService.prepareOwnable(...)` + `buildInstantiateMsg(...)` + `deploy(...)`
+- `getTemplateCost(...)` -> `BuilderService.estimateCost(...)`

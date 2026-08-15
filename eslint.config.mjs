@@ -5,13 +5,7 @@ import eslintConfigPrettier from 'eslint-config-prettier';
 
 export default tseslint.config(
   {
-    ignores: [
-      '**/dist/**',
-      '**/coverage/**',
-      '**/node_modules/**',
-      '.yarn/**',
-      '**/*.d.ts'
-    ]
+    ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**', '.yarn/**', '**/*.d.ts'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -19,16 +13,16 @@ export default tseslint.config(
     files: ['**/*.js', '**/*.mjs'],
     languageOptions: {
       globals: {
-        ...globals.node
-      }
-    }
+        ...globals.node,
+      },
+    },
   },
   {
     files: ['**/*.ts'],
     languageOptions: {
       globals: {
-        ...globals.node
-      }
+        ...globals.node,
+      },
     },
     rules: {
       '@typescript-eslint/no-unused-vars': [
@@ -37,14 +31,11 @@ export default tseslint.config(
           argsIgnorePattern: '^_',
           caughtErrorsIgnorePattern: '^_',
           destructuredArrayIgnorePattern: '^_',
-          varsIgnorePattern: '^_'
-        }
+          varsIgnorePattern: '^_',
+        },
       ],
-      '@typescript-eslint/consistent-type-imports': [
-        'error',
-        { prefer: 'type-imports' }
-      ]
-    }
+      '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports' }],
+    },
   },
   {
     files: ['packages/**/*.{ts,js,mjs,cjs}'],
@@ -56,50 +47,51 @@ export default tseslint.config(
             {
               group: ['@ownables/*/dist/*', '@ownables/*/src/*', '../ownables-js/*'],
               message:
-                'Import from published package entrypoints or repo path aliases instead of build artifacts, source internals, or sibling checkouts.'
-            }
-          ]
-        }
-      ]
-    }
+                'Import from published package entrypoints or repo path aliases instead of build artifacts, source internals, or sibling checkouts.',
+            },
+          ],
+        },
+      ],
+    },
   },
   {
     files: ['**/*.test.ts'],
     languageOptions: {
       globals: {
         ...globals.node,
-        ...globals.jest
-      }
+        ...globals.jest,
+      },
     },
     rules: {
-      '@typescript-eslint/no-explicit-any': 'off'
-    }
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
   },
   {
-    files: [
-      'packages/platform-browser/src/**/*.ts',
-      'packages/platform-browser/tests/**/*.ts'
-    ],
+    files: ['packages/platform-browser/src/**/*.ts', 'packages/platform-browser/tests/**/*.ts'],
     languageOptions: {
       globals: {
-        ...globals.browser
-      }
-    }
+        ...globals.browser,
+      },
+    },
   },
   {
     files: [
       'packages/platform-react-native/src/**/*.ts',
-      'packages/platform-react-native/tests/**/*.ts'
+      'packages/platform-react-native/tests/**/*.ts',
     ],
     languageOptions: {
       globals: {
         ...globals.browser,
-        ...globals.node
-      }
-    }
+        ...globals.node,
+      },
+    },
   },
   {
-    files: ['packages/*/src/services/**/*.ts', 'packages/*/src/types/**/*.ts', 'packages/*/src/interfaces/**/*.ts'],
+    files: [
+      'packages/*/src/services/**/*.ts',
+      'packages/*/src/types/**/*.ts',
+      'packages/*/src/interfaces/**/*.ts',
+    ],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/consistent-type-imports': 'off',
@@ -110,8 +102,8 @@ export default tseslint.config(
       'no-useless-catch': 'off',
       'no-empty': 'off',
       'no-case-declarations': 'off',
-      'preserve-caught-error': 'off'
-    }
+      'preserve-caught-error': 'off',
+    },
   },
   eslintConfigPrettier
 );

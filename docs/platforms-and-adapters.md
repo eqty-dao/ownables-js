@@ -11,7 +11,8 @@ Main exports:
 - `SessionStorageService`
 - `PackageService`
 - `RelayService` (legacy/deprecated)
-- `calculateCid`
+- `BrowserRuntimeSourceProvider`
+- `BrowserRuntimeRpcProvider`
 
 Typical usage:
 
@@ -21,7 +22,7 @@ import {
   LocalStorageService,
   PackageService,
   RelayService,
-} from "@ownables/platform-browser";
+} from '@ownables/platform-browser';
 
 const idb = new IDBService();
 const storage = new LocalStorageService();
@@ -36,6 +37,8 @@ Main exports:
 - `BucketStateStore`
 - `NodeSandboxOwnableRPC`
 - `NodePackageAssetIO`
+- `NodeRuntimeSourceProvider`
+- `NodeRuntimeRpcProvider`
 
 `NodePackageAssetIO` expects resolvers/loaders via `NodePackageAssetIOOptions`.
 
@@ -58,32 +61,29 @@ Use:
 
 Main export:
 
-- `prepareOwnable(input)`
-- `buildInstantiateMsg(input, packageCid, networkId, nft?)`
-- `deploy(adapter, params)`
-- `estimateCost(...)`
+- `BuilderService`
 
 `@ownables/builder` replaces obuilder upload-first flows with direct deploy orchestration.
 
-`prepareOwnable(input)` accepts `File[]`, which works in both modern browsers and Node.js (Node 18+).
+`BuilderService.prepareOwnable(input)` accepts `File[]`, which works in both modern browsers and Node.js (Node 18+). Package, deploy, fetch, and bundle dependencies are constructor-visible.
 
 ### Browser flow
 
 1. Build/select asset files (`File[]`).
-2. Call `prepareOwnable(...)`.
-3. Build instantiate payload with `buildInstantiateMsg(...)`.
-4. Load wasm bytes (`Uint8Array`) and call `deploy(...)`.
+2. Call `builder.prepareOwnable(...)`.
+3. Build instantiate payload with `builder.buildInstantiateMsg(...)`.
+4. Load wasm bytes (`Uint8Array`) and call `builder.deploy(...)`.
 
 ### Node flow
 
 1. Build/select asset files (`File[]`) in Node.
-2. Call `prepareOwnable(...)`.
-3. Build instantiate payload with `buildInstantiateMsg(...)`.
-4. Read wasm bytes (`Uint8Array`) from disk/object storage and call `deploy(...)`.
+2. Call `builder.prepareOwnable(...)`.
+3. Build instantiate payload with `builder.buildInstantiateMsg(...)`.
+4. Read wasm bytes (`Uint8Array`) from disk/object storage and call `builder.deploy(...)`.
 
 ### WASM source in browser
 
-You must provide `wasm: Uint8Array` to `deploy(...)`.
+You must provide `wasm: Uint8Array` to `builder.deploy(...)`.
 
 Use app-local/static assets that are versioned with your app build.
 
@@ -97,7 +97,7 @@ React example (`public/`):
 
 ```ts
 async function loadWasmFromPublic(): Promise<Uint8Array> {
-  const res = await fetch("/ownable_bg.wasm");
+  const res = await fetch('/ownable_bg.wasm');
   if (!res.ok) throw new Error(`Failed to load wasm: ${res.status}`);
   return new Uint8Array(await res.arrayBuffer());
 }
@@ -106,7 +106,7 @@ async function loadWasmFromPublic(): Promise<Uint8Array> {
 React example (`src/assets`):
 
 ```ts
-import ownableWasmUrl from "./assets/ownable_bg.wasm?url";
+import ownableWasmUrl from './assets/ownable_bg.wasm?url';
 
 async function loadWasmFromAssetUrl(): Promise<Uint8Array> {
   const res = await fetch(ownableWasmUrl);
@@ -118,7 +118,7 @@ async function loadWasmFromAssetUrl(): Promise<Uint8Array> {
 React example (Vite package asset import):
 
 ```ts
-import ownableWasmUrl from "@ownables/builder/ownable_bg.wasm?url";
+import ownableWasmUrl from '@ownables/builder/ownable_bg.wasm?url';
 
 async function loadWasmFromBuilderPackage(): Promise<Uint8Array> {
   const res = await fetch(ownableWasmUrl);

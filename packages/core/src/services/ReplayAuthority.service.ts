@@ -1,6 +1,6 @@
-import type EventChainService from "./EventChain.service.js";
-import type OwnableService from "./Ownable.service.js";
-import type { EventChain } from "eqty-core";
+import type EventChainService from './EventChain.service.js';
+import type OwnableService from './Ownable.service.js';
+import type { EventChain } from 'eqty-core';
 import type {
   IndexedPublicEvent,
   IndexedPublicReplaySelectionOptions,
@@ -9,7 +9,7 @@ import type {
   ReplayDedupedEvents,
   ReplayIgnoredPublicEvent,
   ReplayFreshnessResult,
-} from "../types/Replay.js";
+} from '../types/Replay.js';
 
 function replaySort(a: IndexedPublicEvent, b: IndexedPublicEvent): number {
   if (a.blockNumber !== b.blockNumber) return a.blockNumber - b.blockNumber;
@@ -17,11 +17,13 @@ function replaySort(a: IndexedPublicEvent, b: IndexedPublicEvent): number {
   return a.logIndex - b.logIndex;
 }
 
-export function publicEventReplayKey(event: Pick<IndexedPublicEvent, "transactionHash" | "logIndex">): string {
+function publicEventReplayKey(
+  event: Pick<IndexedPublicEvent, 'transactionHash' | 'logIndex'>
+): string {
   return `${event.transactionHash}:${event.logIndex}`;
 }
 
-export function dedupeIndexedPublicEvents(events: IndexedPublicEvent[]): ReplayDedupedEvents {
+function dedupeIndexedPublicEvents(events: IndexedPublicEvent[]): ReplayDedupedEvents {
   const sorted = [...events].sort(replaySort);
   const seen = new Set<string>();
   const deduped: IndexedPublicEvent[] = [];
@@ -42,7 +44,7 @@ export function dedupeIndexedPublicEvents(events: IndexedPublicEvent[]): ReplayD
   return { events: deduped, duplicateReplayKeys, duplicateEvents };
 }
 
-export function evaluateReplayFreshness(
+function evaluateReplayFreshness(
   indexedEvents: IndexedPublicEvent[],
   appliedReplayKeys: Iterable<string>
 ): ReplayFreshnessResult {
@@ -63,15 +65,19 @@ export function evaluateReplayFreshness(
 function resolvePrefixBoundaryTimestamps(
   options: IndexedPublicReplaySelectionOptions
 ): { lowerBound?: number; upperBound?: number; usedTimestampFallback: boolean } | null {
-  const { privateEvents, privatePrefixLength, anchorValidation, mode = "production" } = options;
+  const { privateEvents, privatePrefixLength, anchorValidation, mode = 'production' } = options;
   const prefixIndex = privatePrefixLength - 1;
   const nextIndex = privatePrefixLength;
 
   const lowerPrivateEvent = prefixIndex >= 0 ? privateEvents[prefixIndex] : undefined;
   const nextPrivateEvent = nextIndex < privateEvents.length ? privateEvents[nextIndex] : undefined;
   const anchorDetails = anchorValidation?.details ?? {};
-  const lowerAnchoredAt = lowerPrivateEvent ? anchorDetails[lowerPrivateEvent.hash]?.timestamp : undefined;
-  const nextAnchoredAt = nextPrivateEvent ? anchorDetails[nextPrivateEvent.hash]?.timestamp : undefined;
+  const lowerAnchoredAt = lowerPrivateEvent
+    ? anchorDetails[lowerPrivateEvent.hash]?.timestamp
+    : undefined;
+  const nextAnchoredAt = nextPrivateEvent
+    ? anchorDetails[nextPrivateEvent.hash]?.timestamp
+    : undefined;
 
   if (privatePrefixLength === 0) {
     return nextAnchoredAt === undefined
@@ -86,7 +92,7 @@ function resolvePrefixBoundaryTimestamps(
   }
 
   const hasAnyAnchors = Object.values(anchorDetails).some((detail) => detail.transactionHash);
-  if (hasAnyAnchors || mode !== "development") {
+  if (hasAnyAnchors || mode !== 'development') {
     return null;
   }
 
@@ -101,7 +107,7 @@ function resolvePrefixBoundaryTimestamps(
     : { lowerBound: lowerTimestamp, upperBound: upperTimestamp, usedTimestampFallback: true };
 }
 
-export function selectReplayableIndexedPublicEvents(
+function selectReplayableIndexedPublicEvents(
   indexedEvents: IndexedPublicEvent[],
   options: IndexedPublicReplaySelectionOptions
 ): { events: IndexedPublicEvent[]; ignoredPublicEvents: ReplayIgnoredPublicEvent[] } {
@@ -113,10 +119,10 @@ export function selectReplayableIndexedPublicEvents(
       ignoredPublicEvents: events.map((event) => ({
         replayKey: publicEventReplayKey(event),
         event,
-        reason: "missing_private_prefix",
+        reason: 'missing_private_prefix',
         cause: {
           privatePrefixLength: options.privatePrefixLength,
-          mode: options.mode ?? "production",
+          mode: options.mode ?? 'production',
         },
       })),
     };
@@ -131,7 +137,7 @@ export function selectReplayableIndexedPublicEvents(
       ignoredPublicEvents.push({
         replayKey,
         event,
-        reason: "missing_public_timestamp",
+        reason: 'missing_public_timestamp',
         cause: {
           privatePrefixLength: options.privatePrefixLength,
           usedTimestampFallback: boundaries.usedTimestampFallback,
@@ -144,7 +150,7 @@ export function selectReplayableIndexedPublicEvents(
       ignoredPublicEvents.push({
         replayKey,
         event,
-        reason: "missing_private_prefix",
+        reason: 'missing_private_prefix',
         cause: {
           privatePrefixLength: options.privatePrefixLength,
           usedTimestampFallback: boundaries.usedTimestampFallback,
@@ -157,7 +163,7 @@ export function selectReplayableIndexedPublicEvents(
       ignoredPublicEvents.push({
         replayKey,
         event,
-        reason: "missing_private_prefix",
+        reason: 'missing_private_prefix',
         cause: {
           privatePrefixLength: options.privatePrefixLength,
           usedTimestampFallback: boundaries.usedTimestampFallback,
@@ -178,12 +184,39 @@ export function selectReplayableIndexedPublicEvents(
 export interface ReplayAuthorityServiceDeps {
   eventChains: EventChainService;
   ownables: OwnableService;
+  replay: PublicEventReplayService;
 }
 
-function privateEventsFromChain(chain: EventChain): IndexedPublicReplaySelectionOptions["privateEvents"] {
+export class PublicEventReplayService {
+  key(event: Pick<IndexedPublicEvent, 'transactionHash' | 'logIndex'>): string {
+    return publicEventReplayKey(event);
+  }
+
+  dedupe(events: IndexedPublicEvent[]): ReplayDedupedEvents {
+    return dedupeIndexedPublicEvents(events);
+  }
+
+  evaluateFreshness(
+    indexedEvents: IndexedPublicEvent[],
+    appliedReplayKeys: Iterable<string>
+  ): ReplayFreshnessResult {
+    return evaluateReplayFreshness(indexedEvents, appliedReplayKeys);
+  }
+
+  selectReplayable(
+    indexedEvents: IndexedPublicEvent[],
+    options: IndexedPublicReplaySelectionOptions
+  ) {
+    return selectReplayableIndexedPublicEvents(indexedEvents, options);
+  }
+}
+
+function privateEventsFromChain(
+  chain: EventChain
+): IndexedPublicReplaySelectionOptions['privateEvents'] {
   return chain.events.map((event: any) => ({
     hash: event.hash?.hex ?? event.hash,
-    ...(typeof event.timestamp === "number" ? { timestamp: event.timestamp } : {}),
+    ...(typeof event.timestamp === 'number' ? { timestamp: event.timestamp } : {}),
   }));
 }
 
@@ -191,7 +224,10 @@ export class ReplayAuthorityService {
   constructor(private readonly deps: ReplayAuthorityServiceDeps) {}
 
   async evaluate(input: ReplayAuthorityEvaluateInput): Promise<ReplayAuthorityEvaluateResult> {
-    const anchorVerification = await this.deps.eventChains.verify(input.chain, input.anchorEvidence);
+    const anchorVerification = await this.deps.eventChains.verify(
+      input.chain,
+      input.anchorEvidence
+    );
     const replayOptions = input.replayContext
       ? {
           privateEvents: privateEventsFromChain(input.chain),
@@ -206,8 +242,13 @@ export class ReplayAuthorityService {
       input.indexedPublicEvents,
       replayOptions
     );
-    const freshness = evaluateReplayFreshness(input.indexedPublicEvents, replay.appliedReplayKeys);
-    const ownableInfo = await this.deps.ownables.rpc(input.chain.id).query({ get_info: {} }, replay.stateDump);
+    const freshness = this.deps.replay.evaluateFreshness(
+      input.indexedPublicEvents,
+      replay.appliedReplayKeys
+    );
+    const ownableInfo = await this.deps.ownables
+      .rpc(input.chain.id)
+      .query({ get_info: {} }, replay.stateDump);
 
     return {
       anchorVerification,

@@ -1,6 +1,6 @@
-import type { TypedPackage } from "@ownables/core";
+import type { TypedPackage } from '@ownables/core';
 
-export const FIXED_OWNABLE_TYPE = "dossier";
+export const FIXED_OWNABLE_TYPE = 'dossier';
 
 export interface OwnableMetadataInput {
   name: string;
@@ -10,19 +10,22 @@ export interface OwnableMetadataInput {
 
 export interface PrepareOwnableInput extends OwnableMetadataInput {
   files: File[];
-  packageService: {
-    processPackage(files: File[]): Promise<TypedPackage | null | undefined>;
-  };
 }
 
 export interface PrepareDossierInput extends OwnableMetadataInput {
   thumbnail?: File;
-  packageService: {
-    extractAssets(zipFile: File, chain?: boolean): Promise<File[]>;
-    processPackage(files: File[]): Promise<TypedPackage | null | undefined>;
-  };
-  bundleUrl?: string;
+}
+
+export interface BuilderPackageService {
+  extractAssets(zipFile: File, chain?: boolean): Promise<File[]>;
+  processPackage(files: File[]): Promise<TypedPackage | null | undefined>;
+}
+
+export interface BuilderServiceOptions {
+  packageService: BuilderPackageService;
+  deployAdapter?: BuilderDeployAdapter;
   fetchFn?: (input: string, init?: RequestInit) => Promise<Response>;
+  bundleUrl?: string;
 }
 
 export interface PreparedOwnable {

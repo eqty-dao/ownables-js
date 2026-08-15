@@ -52,9 +52,9 @@ describe('MockEQTYService (ethers adapter)', () => {
 
     await service.sign(subject as any);
     await expect((service.signer as any).getAddress()).resolves.toBe('0xabc');
-    await expect((service.signer as any).signTypedData({} as any, {} as any, {} as any)).resolves.toMatch(
-      /^0x[1]{130}$/
-    );
+    await expect(
+      (service.signer as any).signTypedData({} as any, {} as any, {} as any)
+    ).resolves.toMatch(/^0x[1]{130}$/);
     expect(subject.signWith).toHaveBeenCalledWith(service.signer);
   });
 });

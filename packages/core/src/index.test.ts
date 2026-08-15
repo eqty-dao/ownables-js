@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import {
-  calculateOwnablePackageCid,
-  dedupeIndexedPublicEvents,
-  evaluateReplayFreshness,
-  publicEventReplayKey,
-} from './index.js';
+import * as Core from './index.js';
+import { PublicEventReplayService } from './index.js';
 
 describe('core package', () => {
+  it('exports class services without legacy function aliases', () => {
+    expect(Core.AnchorValidationService).toBeTypeOf('function');
+    const removedCidService = ['OwnablePackage', 'CidService'].join('');
+    expect((Core as Record<string, unknown>)[removedCidService]).toBeUndefined();
+    expect(Core.PublicEventReplayService).toBeTypeOf('function');
+    expect((Core as Record<string, unknown>).calculateOwnablePackageCid).toBeUndefined();
+    expect((Core as Record<string, unknown>).publicEventReplayKey).toBeUndefined();
+    expect((Core as Record<string, unknown>).validateAnchorsWithSource).toBeUndefined();
+  });
   it('has test harness', () => {
     expect(true).toBe(true);
   });
@@ -41,9 +46,10 @@ describe('core package', () => {
         logIndex: 4,
       },
     ];
-    const deduped = dedupeIndexedPublicEvents(events);
+    const replay = new PublicEventReplayService();
+    const deduped = replay.dedupe(events);
 
-    expect(publicEventReplayKey(events[0]!)).toBe('0xbbb:4');
+    expect(replay.key(events[0]!)).toBe('0xbbb:4');
     expect(deduped.events.map((event) => `${event.transactionHash}:${event.logIndex}`)).toEqual([
       '0xaaa:8',
       '0xbbb:4',
@@ -73,27 +79,12 @@ describe('core package', () => {
       },
     ];
 
-    expect(evaluateReplayFreshness(events, ['0xaaa:1'])).toEqual({
+    const replay = new PublicEventReplayService();
+    expect(replay.evaluateFreshness(events, ['0xaaa:1'])).toEqual({
       stale: true,
       missingReplayKeys: ['0xbbb:2'],
       latestReplayKey: '0xbbb:2',
     });
-    expect(evaluateReplayFreshness(events, ['0xaaa:1', '0xbbb:2']).stale).toBe(false);
-  });
-
-  it('calculates cid while ignoring chain metadata files', async () => {
-    const cidA = await calculateOwnablePackageCid([
-      { path: 'a.txt', content: Uint8Array.from([1]) },
-      { path: 'b.txt', content: Uint8Array.from([2]) },
-    ]);
-
-    const cidB = await calculateOwnablePackageCid([
-      { path: 'a.txt', content: Uint8Array.from([1]) },
-      { path: 'b.txt', content: Uint8Array.from([2]) },
-      { path: 'chain.json', content: Uint8Array.from([3]) },
-      { path: 'timestamp.txt', content: Uint8Array.from([4]) },
-    ]);
-
-    expect(cidA).toBe(cidB);
+    expect(replay.evaluateFreshness(events, ['0xaaa:1', '0xbbb:2']).stale).toBe(false);
   });
 });

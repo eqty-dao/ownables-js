@@ -7,11 +7,7 @@ import type { AnchorValidationResult, AnchorValidationSource } from '../types/An
 export type LogProgress = (step: string, meta?: Record<string, unknown>) => void;
 
 export interface ProgressReporter {
-  step<T>(
-    step: string,
-    fn: () => Promise<T> | T,
-    meta?: () => Record<string, unknown>
-  ): Promise<T>;
+  step<T>(step: string, fn: () => Promise<T> | T, meta?: () => Record<string, unknown>): Promise<T>;
 }
 
 export interface KVStore {
@@ -51,7 +47,7 @@ export interface AnchorProvider {
   ): Promise<EmittedPublicEventReceipt>;
   getAnchorEqtyAllowance?(): Promise<bigint>;
   setAnchorEqtyAllowance?(amount: bigint): Promise<string>;
-  validateAnchors?: AnchorValidationSource["validateAnchors"];
+  validateAnchors?: AnchorValidationSource['validateAnchors'];
   verifyAnchors(...anchors: any[]): Promise<AnchorValidationResult>;
 }
 

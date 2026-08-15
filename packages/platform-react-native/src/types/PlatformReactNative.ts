@@ -11,7 +11,11 @@ export type RNAbiCallType =
 export interface RNRuntimeBridge {
   createInstance(id: string): Promise<string> | string;
   loadWasm(instanceId: string, wasm: Uint8Array): Promise<void> | void;
-  call(instanceId: string, type: RNAbiCallType, payload: Uint8Array): Promise<Uint8Array> | Uint8Array;
+  call(
+    instanceId: string,
+    type: RNAbiCallType,
+    payload: Uint8Array
+  ): Promise<Uint8Array> | Uint8Array;
   disposeInstance(instanceId: string): Promise<void> | void;
 }
 
@@ -136,7 +140,10 @@ export interface RNOwnablePersistenceBackend {
 
   upsertAttachmentBlob(record: RNAttachmentBlobRecord): Promise<void>;
   getAttachmentBlob(cid: string): Promise<RNAttachmentBlobRecord | undefined>;
-  updateAttachmentBlobRefCount(cid: string, delta: number): Promise<RNAttachmentBlobRecord | undefined>;
+  updateAttachmentBlobRefCount(
+    cid: string,
+    delta: number
+  ): Promise<RNAttachmentBlobRecord | undefined>;
   deleteAttachmentBlob(cid: string): Promise<void>;
 
   deleteOwnable(ownableId: string): Promise<void>;

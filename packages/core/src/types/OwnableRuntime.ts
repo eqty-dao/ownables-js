@@ -1,4 +1,4 @@
-import type { Binary } from "eqty-core";
+import type { Binary } from 'eqty-core';
 import type TypedDict from './TypedDict.js';
 
 export type StateDump = Array<[ArrayLike<number>, ArrayLike<number>]>;

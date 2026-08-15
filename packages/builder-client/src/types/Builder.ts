@@ -7,11 +7,7 @@ export interface UploadOptions {
 
 export interface BuilderHttpClient {
   get(url: string, config?: Record<string, unknown>): Promise<{ data: any }>;
-  post(
-    url: string,
-    body: unknown,
-    config?: Record<string, unknown>
-  ): Promise<{ data: any }>;
+  post(url: string, body: unknown, config?: Record<string, unknown>): Promise<{ data: any }>;
 }
 
 export interface BuilderClientOptions {
@@ -26,5 +22,5 @@ export interface BuilderClientOptions {
   uploadNetworkQueryKey?: string;
   httpClient?: BuilderHttpClient;
   formDataFactory?: () => FormData;
-  logger?: Pick<Console, "debug" | "info" | "warn" | "error">;
+  logger?: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
 }

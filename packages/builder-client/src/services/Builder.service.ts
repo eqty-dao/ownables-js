@@ -1,16 +1,11 @@
-import axios from "axios";
-import type {
-  UploadOptions,
-  BuilderHttpClient,
-  BuilderClientOptions,
-} from "../types/Builder";
+import axios from 'axios';
+import type { UploadOptions, BuilderHttpClient, BuilderClientOptions } from '../types/Builder';
 
 export default class BuilderService {
   private static hasWarnedDeprecation = false;
-  private static readonly DEFAULT_SERVER_WALLETS_ENDPOINT =
-    "/api/v1/ServerWalletAddresses";
-  private static readonly DEFAULT_UPLOAD_ENDPOINT = "/api/v1/upload";
-  private static readonly DEFAULT_UPLOAD_NETWORK_QUERY_KEY = "networkId";
+  private static readonly DEFAULT_SERVER_WALLETS_ENDPOINT = '/api/v1/ServerWalletAddresses';
+  private static readonly DEFAULT_UPLOAD_ENDPOINT = '/api/v1/upload';
+  private static readonly DEFAULT_UPLOAD_NETWORK_QUERY_KEY = 'networkId';
 
   // Base mainnet = 8453, Base Sepolia = 84532
   private static readonly BASE_MAINNET_CHAIN_ID = 8453;
@@ -23,29 +18,26 @@ export default class BuilderService {
   private readonly uploadNetworkQueryKey: string;
   private readonly httpClient: BuilderHttpClient;
   private readonly formDataFactory: () => FormData;
-  private readonly logger: Pick<Console, "debug" | "info" | "warn" | "error">;
+  private readonly logger: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
 
   constructor(
     private chainId: number,
     options: BuilderClientOptions = {}
-    ) {
+  ) {
     if (!BuilderService.hasWarnedDeprecation) {
       (options.logger ?? console).warn(
-        "[@ownables/builder-client] Deprecated: migrate to @ownables/builder for browser-first deploy flow."
+        '[@ownables/builder-client] Deprecated: migrate to @ownables/builder for browser-first deploy flow.'
       );
       BuilderService.hasWarnedDeprecation = true;
     }
 
-    this.url = options.url ?? "";
+    this.url = options.url ?? '';
     this.apiKey = options.apiKey ?? options.secret;
     this.serverWalletsEndpoint =
-      options.serverWalletsEndpoint ??
-      BuilderService.DEFAULT_SERVER_WALLETS_ENDPOINT;
-    this.uploadEndpoint =
-      options.uploadEndpoint ?? BuilderService.DEFAULT_UPLOAD_ENDPOINT;
+      options.serverWalletsEndpoint ?? BuilderService.DEFAULT_SERVER_WALLETS_ENDPOINT;
+    this.uploadEndpoint = options.uploadEndpoint ?? BuilderService.DEFAULT_UPLOAD_ENDPOINT;
     this.uploadNetworkQueryKey =
-      options.uploadNetworkQueryKey ??
-      BuilderService.DEFAULT_UPLOAD_NETWORK_QUERY_KEY;
+      options.uploadNetworkQueryKey ?? BuilderService.DEFAULT_UPLOAD_NETWORK_QUERY_KEY;
     this.httpClient = options.httpClient ?? axios;
     this.formDataFactory = options.formDataFactory ?? (() => new FormData());
     this.logger = options.logger ?? console;
@@ -60,17 +52,15 @@ export default class BuilderService {
    * Base mainnet (8453) = 'L' (mainnet)
    * Base Sepolia (84532) = 'T' (testnet)
    */
-  public getNetworkCode(): "L" | "T" {
+  public getNetworkCode(): 'L' | 'T' {
     if (this.chainId === BuilderService.BASE_MAINNET_CHAIN_ID) {
-      return "L";
+      return 'L';
     } else if (this.chainId === BuilderService.BASE_SEPOLIA_CHAIN_ID) {
-      return "T";
+      return 'T';
     } else {
       // Default to testnet for unknown chain IDs
-      this.logger.warn(
-        `Unknown chainId ${this.chainId}, defaulting to testnet (T)`
-      );
-      return "T";
+      this.logger.warn(`Unknown chainId ${this.chainId}, defaulting to testnet (T)`);
+      return 'T';
     }
   }
 
@@ -80,36 +70,28 @@ export default class BuilderService {
     }
 
     try {
-      const response = await this.httpClient.get(
-        `${this.url}${this.serverWalletsEndpoint}`
-      );
+      const response = await this.httpClient.get(`${this.url}${this.serverWalletsEndpoint}`);
 
       if (!response.data) {
-        throw new Error("No data returned from server");
+        throw new Error('No data returned from server');
       }
 
       const networkCode = this.getNetworkCode();
       const address =
-        networkCode === "L"
-          ? response.data.serverWalletAddress_L ??
-            response.data.serverLtoWalletAddress_L
-          : response.data.serverWalletAddress_T ??
-            response.data.serverLtoWalletAddress_T;
+        networkCode === 'L'
+          ? (response.data.serverWalletAddress_L ?? response.data.serverLtoWalletAddress_L)
+          : (response.data.serverWalletAddress_T ?? response.data.serverLtoWalletAddress_T);
 
       if (!address) {
-        throw new Error(
-          `Server wallet address not found for network ${networkCode}`
-        );
+        throw new Error(`Server wallet address not found for network ${networkCode}`);
       }
 
       return address;
     } catch (error: any) {
-      this.logger.error("Failed to fetch builder address:", error);
+      this.logger.error('Failed to fetch builder address:', error);
       const errorMessage =
-        error.response?.data?.error ||
-        error.message ||
-        "Failed to get server wallet address";
-      this.logger.error("Error details:", errorMessage);
+        error.response?.data?.error || error.message || 'Failed to get server wallet address';
+      this.logger.error('Error details:', errorMessage);
       return null;
     }
   }
@@ -119,11 +101,9 @@ export default class BuilderService {
    * @param templateId Template ID (default: 1)
    * @returns Promise with cost information in ETH
    */
-  public async getTemplateCost(
-    templateId: number = 1
-  ): Promise<{ eth: string; usd?: string }> {
+  public async getTemplateCost(templateId: number = 1): Promise<{ eth: string; usd?: string }> {
     if (!this.isAvailable()) {
-      throw new Error("Builder service URL not configured");
+      throw new Error('Builder service URL not configured');
     }
 
     try {
@@ -131,13 +111,13 @@ export default class BuilderService {
       const response = await this.httpClient.get(
         `${this.url}/api/v1/templateCost?templateId=${templateId}`,
         {
-          headers: this.apiKey ? { "X-API-Key": this.apiKey } : {},
+          headers: this.apiKey ? { 'X-API-Key': this.apiKey } : {},
         }
       );
 
       const costData = response.data[networkCode]?.base;
       if (!costData) {
-        throw new Error("Template cost not found");
+        throw new Error('Template cost not found');
       }
 
       return {
@@ -146,9 +126,7 @@ export default class BuilderService {
       };
     } catch (error: any) {
       const errorMessage =
-        error.response?.data?.error ||
-        error.message ||
-        "Failed to get template cost";
+        error.response?.data?.error || error.message || 'Failed to get template cost';
       throw new Error(errorMessage);
     }
   }
@@ -164,7 +142,7 @@ export default class BuilderService {
     options?: UploadOptions
   ): Promise<{ requestId: string; message: string }> {
     if (!this.isAvailable()) {
-      throw new Error("Builder service URL not configured");
+      throw new Error('Builder service URL not configured');
     }
 
     const networkCode = this.getNetworkCode();
@@ -179,23 +157,23 @@ export default class BuilderService {
       const arrayBuffer: ArrayBuffer = new ArrayBuffer(zipFile.length);
       const view = new Uint8Array(arrayBuffer);
       view.set(zipFile);
-      fileBlob = new Blob([arrayBuffer], { type: "application/zip" });
+      fileBlob = new Blob([arrayBuffer], { type: 'application/zip' });
     }
 
-    formData.append("file", fileBlob, "ownable-package.zip");
+    formData.append('file', fileBlob, 'ownable-package.zip');
 
     // Add optional fields
     if (options?.templateId !== undefined) {
-      formData.append("templateId", options.templateId.toString());
+      formData.append('templateId', options.templateId.toString());
     }
     if (options?.name) {
-      formData.append("name", options.name);
+      formData.append('name', options.name);
     }
     if (options?.sender) {
-      formData.append("sender", options.sender);
+      formData.append('sender', options.sender);
     }
     if (options?.signedTransaction) {
-      formData.append("signedTransaction", options.signedTransaction);
+      formData.append('signedTransaction', options.signedTransaction);
     }
 
     try {
@@ -204,24 +182,23 @@ export default class BuilderService {
         formData,
         {
           headers: {
-            ...(this.apiKey ? { "X-API-Key": this.apiKey } : {}),
-            "Content-Type": "multipart/form-data",
+            ...(this.apiKey ? { 'X-API-Key': this.apiKey } : {}),
+            'Content-Type': 'multipart/form-data',
           },
         }
       );
 
       const requestId =
-        typeof response.data.requestId === "string"
+        typeof response.data.requestId === 'string'
           ? response.data.requestId
           : response.data.requestId?.requestId || response.data.requestId;
 
       return {
         requestId: requestId,
-        message: response.data.message || "Request queued",
+        message: response.data.message || 'Request queued',
       };
     } catch (error: any) {
-      const errorMessage =
-        error.response?.data?.error || error.message || "Upload failed";
+      const errorMessage = error.response?.data?.error || error.message || 'Upload failed';
       throw new Error(`Failed to upload ownable: ${errorMessage}`);
     }
   }

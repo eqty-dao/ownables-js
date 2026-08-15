@@ -98,7 +98,9 @@ describe('SIWEClient', () => {
     });
     await expect(
       thrownNonError.authenticate(signer as any, 'https://relay.test', 84532)
-    ).resolves.toEqual(expect.objectContaining({ success: false, error: 'Authentication failed: boom-string' }));
+    ).resolves.toEqual(
+      expect.objectContaining({ success: false, error: 'Authentication failed: boom-string' })
+    );
 
     const nonceThrowNonError = new SIWEClient('relay.test', {
       fetchFn: vi.fn().mockRejectedValue('nonce-down'),

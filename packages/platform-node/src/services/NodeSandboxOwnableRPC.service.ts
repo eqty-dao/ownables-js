@@ -69,7 +69,8 @@ export default class NodeSandboxOwnableRPC implements OwnableRPC {
     const instantiateResult = (await WebAssembly.instantiate(wasm, {})) as
       | WebAssembly.Instance
       | WebAssembly.WebAssemblyInstantiatedSource;
-    const instance = 'instance' in instantiateResult ? instantiateResult.instance : instantiateResult;
+    const instance =
+      'instance' in instantiateResult ? instantiateResult.instance : instantiateResult;
     const exportsRef = instance.exports as AbiExports;
 
     if (
@@ -138,9 +139,7 @@ export default class NodeSandboxOwnableRPC implements OwnableRPC {
 
     const { ptr: outPtr, len: outLen } = this.unpackPtrLen(packed);
     const output =
-      outLen > 0
-        ? new Uint8Array(new Uint8Array(memory.buffer, outPtr, outLen))
-        : new Uint8Array();
+      outLen > 0 ? new Uint8Array(new Uint8Array(memory.buffer, outPtr, outLen)) : new Uint8Array();
 
     if (outLen > 0) exportsRef.ownable_free(outPtr, outLen);
     return output;

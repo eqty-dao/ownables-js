@@ -10,9 +10,9 @@ yarn add @ownables/core
 
 ## Main exports
 
-- Interfaces: `AnchorProvider`, `StateStore`, `PackageAssetIO`, `RuntimeSourceProvider`
-- Services: `EventChainService`, `OwnableService`, `WorkerRPC`, `StateStoreRecordStore`, `PollingService` (legacy)
-- Services: `calculateOwnablePackageCid`, replay helpers (`publicEventReplayKey`, `dedupeIndexedPublicEvents`, `evaluateReplayFreshness`)
+- Interfaces: `AnchorProvider`, `StateStore`, `PackageAssetIO`, `RuntimeSourceProvider`, `RuntimeRPCProvider`
+- Services: `AnchorValidationService`, `EventChainService`, `OwnableService`, `ProgressService`, `PublicEventReplayService`, `ReplayAuthorityService`, `WorkerRPC`, `StateStoreRecordStore`, `PollingService` (legacy)
+- Utility: `calculateOwnablePackageCid` and `OwnablePackageCidEntry`, available exclusively from `@ownables/core/utils`
 - Types: `TypedPackage`, `TypedOwnableInfo`, `OwnableRuntime`, `MessageInfo`, `SIWE`, `Authority`, `Replay`, and related runtime types
 
 ## Quick start
@@ -20,18 +20,34 @@ yarn add @ownables/core
 ```ts
 import {
   EventChainService,
+  AnchorValidationService,
   OwnableService,
+  PublicEventReplayService,
   type AnchorProvider,
   type StateStore,
   type PackageAssetIO,
+  type RuntimeSourceProvider,
+  type RuntimeRPCProvider,
 } from "@ownables/core";
 
 const stateStore: StateStore = /* your implementation */;
 const anchorProvider: AnchorProvider = /* your implementation */;
 const packageAssetIO: PackageAssetIO = /* your implementation */;
+const runtimeSource: RuntimeSourceProvider = /* your platform provider */;
+const runtimeRpc: RuntimeRPCProvider = /* your platform provider */;
 
-const chains = new EventChainService(stateStore, anchorProvider);
-const ownables = new OwnableService(stateStore, chains, anchorProvider, packageAssetIO);
+const anchorValidation = new AnchorValidationService(anchorProvider);
+const replay = new PublicEventReplayService();
+const chains = new EventChainService(stateStore, anchorProvider, anchorValidation);
+const ownables = new OwnableService({
+  stateStore,
+  eventChains: chains,
+  anchorProvider,
+  packages: packageAssetIO,
+  runtimeSource,
+  runtimeRpc,
+  replay,
+});
 ```
 
 ## Notes

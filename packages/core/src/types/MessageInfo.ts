@@ -1,4 +1,4 @@
-import { Binary } from "eqty-core";
+import { Binary } from 'eqty-core';
 
 export interface MessageInfo {
   hash: string;

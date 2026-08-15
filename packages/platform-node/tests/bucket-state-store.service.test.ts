@@ -14,8 +14,7 @@ class InMemoryBucket {
   }
 
   async put(key: string, value: Uint8Array | Buffer | string): Promise<void> {
-    const bytes =
-      typeof value === 'string' ? Buffer.from(value, 'utf8') : Buffer.from(value);
+    const bytes = typeof value === 'string' ? Buffer.from(value, 'utf8') : Buffer.from(value);
     this.map.set(key, Uint8Array.from(bytes));
   }
 
@@ -78,13 +77,16 @@ describe('BucketStateStore', () => {
   it('supports non-string key serialization paths', async () => {
     const store = new BucketStateStore(new InMemoryBucket() as any);
 
-    await store.setAll('bin', new Map<any, any>([
-      [Uint8Array.from([1, 2]), { kind: 'u8' }],
-      [new Uint16Array([3, 4]), { kind: 'u16' }],
-      [new ArrayBuffer(2), { kind: 'ab' }],
-      [[5, 6], { kind: 'arr' }],
-      [{ x: 1 }, { kind: 'obj' }],
-    ]));
+    await store.setAll(
+      'bin',
+      new Map<any, any>([
+        [Uint8Array.from([1, 2]), { kind: 'u8' }],
+        [new Uint16Array([3, 4]), { kind: 'u16' }],
+        [new ArrayBuffer(2), { kind: 'ab' }],
+        [[5, 6], { kind: 'arr' }],
+        [{ x: 1 }, { kind: 'obj' }],
+      ])
+    );
 
     const map = await store.getMap('bin');
     expect(map.size).toBe(5);

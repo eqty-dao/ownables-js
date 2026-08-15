@@ -4,6 +4,9 @@ import { fileURLToPath, URL } from 'node:url';
 export default defineConfig({
   resolve: {
     alias: {
+      '@ownables/core/utils': fileURLToPath(
+        new URL('./packages/core/src/utils.ts', import.meta.url)
+      ),
       '@ownables/core': fileURLToPath(new URL('./packages/core/src/index.ts', import.meta.url)),
       '@ownables/platform-browser': fileURLToPath(
         new URL('./packages/platform-browser/src/index.ts', import.meta.url)

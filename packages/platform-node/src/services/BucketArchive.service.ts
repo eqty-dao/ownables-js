@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 import type { ArchiveService, ImportedArchive } from '@ownables/core';
+import { calculateOwnablePackageCid } from '@ownables/core/utils';
 import type { BucketArchiveServiceOptions } from '../types/PlatformNode';
 
 const DEFAULT_ROOT = 'archives';
@@ -19,12 +20,10 @@ function chainCandidateNames(files: string[]): string[] {
 
 export default class BucketArchiveService implements ArchiveService {
   private readonly bucket;
-  private readonly cidCalculator;
   private readonly rootPrefix;
 
   constructor(options: BucketArchiveServiceOptions) {
     this.bucket = options.bucket;
-    this.cidCalculator = options.cidCalculator;
     this.rootPrefix = options.rootPrefix ?? DEFAULT_ROOT;
   }
 
@@ -56,25 +55,26 @@ export default class BucketArchiveService implements ArchiveService {
       throw new Error("Invalid package: 'eventChain.json' or 'chain.json' is required");
     }
 
-    const chainFileName = candidates.includes('eventChain.json')
-      ? 'eventChain.json'
-      : 'chain.json';
+    const chainFileName = candidates.includes('eventChain.json') ? 'eventChain.json' : 'chain.json';
 
     const chainBytes = files.get(chainFileName);
     if (!chainBytes) {
       throw new Error(`Missing chain payload at ${chainFileName}`);
     }
 
-    const chainJson = JSON.parse(Buffer.from(chainBytes).toString('utf8')) as Record<string, unknown>;
+    const chainJson = JSON.parse(Buffer.from(chainBytes).toString('utf8')) as Record<
+      string,
+      unknown
+    >;
 
     files.delete('eventChain.json');
     files.delete('chain.json');
 
-    const sorted = new Map(
-      Array.from(files.entries()).sort(([a], [b]) => a.localeCompare(b))
-    );
+    const sorted = new Map(Array.from(files.entries()).sort(([a], [b]) => a.localeCompare(b)));
 
-    const cid = await this.cidCalculator.calculate(sorted);
+    const cid = await calculateOwnablePackageCid(
+      Array.from(sorted, ([path, content]) => ({ path, content }))
+    );
 
     for (const [name, contents] of sorted.entries()) {
       await this.bucket.put(`${this.packagePrefix(cid)}/${name}`, contents);

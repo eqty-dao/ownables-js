@@ -17,7 +17,7 @@ yarn add @ownables/authority
 ## Usage
 
 ```ts
-import { AuthorityService } from "@ownables/authority";
+import { AuthorityService } from '@ownables/authority';
 
 const authority = new AuthorityService(/* dependencies */);
 ```

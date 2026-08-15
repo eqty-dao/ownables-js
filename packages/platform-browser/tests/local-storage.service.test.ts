@@ -60,12 +60,17 @@ describe('LocalStorageService', () => {
     service.removeItem('strings', 'b');
     expect(JSON.parse(storage.getItem('group:group:strings') as string)).toEqual(['a', 'c']);
 
-    storage.setItem('group:group:objects', JSON.stringify([
-      { id: 1, name: 'a' },
-      { id: 2, name: 'b' },
-    ]));
+    storage.setItem(
+      'group:group:objects',
+      JSON.stringify([
+        { id: 1, name: 'a' },
+        { id: 2, name: 'b' },
+      ])
+    );
     service.removeByField('objects', 'id', 1);
-    expect(JSON.parse(storage.getItem('group:group:objects') as string)).toEqual([{ id: 2, name: 'b' }]);
+    expect(JSON.parse(storage.getItem('group:group:objects') as string)).toEqual([
+      { id: 2, name: 'b' },
+    ]);
   });
 
   it('throws when list operations target non-array values', () => {

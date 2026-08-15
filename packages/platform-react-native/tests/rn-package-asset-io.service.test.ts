@@ -22,10 +22,7 @@ class InMemoryFileSystem {
 
   constructor(seed: Record<string, string | Uint8Array> = {}) {
     for (const [path, value] of Object.entries(seed)) {
-      const bytes =
-        typeof value === 'string'
-          ? new TextEncoder().encode(value)
-          : value;
+      const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : value;
       this.files.set(path, Uint8Array.from(bytes));
     }
   }

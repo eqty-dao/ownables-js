@@ -8,11 +8,10 @@ import {
   type Signer,
   type TypedDataDomain,
 } from 'ethers';
-import {
-  buildAnchorValidationResult,
-  normalizeAnchorValidationPairs,
-  ZERO_ANCHOR_VALUE,
-  type AnchorValidationResult,
+import type {
+  AnchorValidationPair,
+  AnchorValidationRecord,
+  AnchorValidationResult,
 } from '@ownables/core';
 import type {
   EthersAnchorClientLike,
@@ -27,6 +26,44 @@ import type {
 
 const BASE_CHAIN_ID = 8453;
 const BASE_SEPOLIA_CHAIN_ID = 84532;
+const ZERO_ANCHOR_VALUE = Binary.fromHex(`0x${'0'.repeat(64)}`);
+const normalizeAnchorValidationPairs = (...anchors: any[]): AnchorValidationPair[] =>
+  anchors.map((anchor) =>
+    anchor instanceof Binary || 'hex' in anchor
+      ? {
+          key: anchor instanceof Binary ? anchor : Binary.fromHex(anchor.hex),
+          value: ZERO_ANCHOR_VALUE,
+        }
+      : {
+          key: anchor.key instanceof Binary ? anchor.key : Binary.fromHex(anchor.key.hex),
+          value: anchor.value instanceof Binary ? anchor.value : Binary.fromHex(anchor.value.hex),
+        }
+  );
+const buildAnchorValidationResult = (
+  pairs: AnchorValidationPair[],
+  records: Array<AnchorValidationRecord | undefined>
+): AnchorValidationResult => {
+  const result: AnchorValidationResult = {
+    verified: pairs.length > 0,
+    anchors: {},
+    map: {},
+    details: {},
+  };
+  pairs.forEach((pair, index) => {
+    const record = records[index] ?? {
+      key: pair.key.hex,
+      expectedValue: pair.value.hex,
+      value: pair.value.hex,
+      verified: pair.value.hex === ZERO_ANCHOR_VALUE.hex,
+      source: 'provider',
+    };
+    result.anchors[pair.key.hex] = record.transactionHash;
+    result.map[pair.key.hex] = record.value;
+    result.details[pair.key.hex] = record;
+    if (!record.transactionHash || !record.verified) result.verified = false;
+  });
+  return result;
+};
 /* v8 ignore start */
 // Default ethers adapters are integration wiring; DI-based unit tests inject deps instead.
 class EthersSignerAdapter implements EthersSignerLike {
@@ -249,7 +286,10 @@ export default class EQTYService {
       this.anchorClient = options.deps.anchorClient;
     } else {
       /* v8 ignore start */
-      const contract = new EthersAnchorContract(this.signerClient as Signer, this.anchorContractAddress);
+      const contract = new EthersAnchorContract(
+        this.signerClient as Signer,
+        this.anchorContractAddress
+      );
       this.anchorClient = new AnchorClient(contract) as unknown as EthersAnchorClientLike;
       /* v8 ignore stop */
     }
@@ -291,7 +331,10 @@ export default class EQTYService {
       return;
     }
 
-    for (const entry of anchors as Array<{ key: { hex: string } | Binary; value: { hex: string } | Binary }>) {
+    for (const entry of anchors as Array<{
+      key: { hex: string } | Binary;
+      value: { hex: string } | Binary;
+    }>) {
       this.anchorQueue.push({
         key: toBinary(entry.key),
         value: toBinary(entry.value),
@@ -331,7 +374,8 @@ export default class EQTYService {
     }
 
     const eqtyToken =
-      this.eqtyTokenOverride ?? new EthersEqtyTokenContract(this.signerClient as Signer, eqtyTokenAddress);
+      this.eqtyTokenOverride ??
+      new EthersEqtyTokenContract(this.signerClient as Signer, eqtyTokenAddress);
     return eqtyToken.allowance(this.address, this.anchorContractAddress);
   }
 
@@ -346,7 +390,8 @@ export default class EQTYService {
     }
 
     const eqtyToken =
-      this.eqtyTokenOverride ?? new EthersEqtyTokenContract(this.signerClient as Signer, eqtyTokenAddress);
+      this.eqtyTokenOverride ??
+      new EthersEqtyTokenContract(this.signerClient as Signer, eqtyTokenAddress);
     const approve = eqtyToken.approve;
     if (!approve) {
       throw new Error('EQTY token client does not support approve(spender, amount)');
@@ -378,7 +423,11 @@ export default class EQTYService {
     }
   }
 
-  async validateAnchors(...anchors: Array<Binary | { hex: string } | { key: Binary | { hex: string }; value: Binary | { hex: string } }>): Promise<AnchorValidationResult> {
+  async validateAnchors(
+    ...anchors: Array<
+      Binary | { hex: string } | { key: Binary | { hex: string }; value: Binary | { hex: string } }
+    >
+  ): Promise<AnchorValidationResult> {
     if (anchors.length === 0) {
       return { verified: false, anchors: {}, map: {}, details: {} };
     }
@@ -424,7 +473,7 @@ export default class EQTYService {
           transactionIndex: latest.transactionIndex,
           logIndex: latest.index,
           verified: value.hex === ZERO_ANCHOR_VALUE.hex || valueHex === value.hex.toLowerCase(),
-          source: "provider" as const,
+          source: 'provider' as const,
         });
       } catch (error) {
         this.logger.error(`Failed to verify anchor ${key.hex}:`, error);
@@ -435,7 +484,11 @@ export default class EQTYService {
     return buildAnchorValidationResult(pairs, records);
   }
 
-  async verifyAnchors(...anchors: Array<Binary | { hex: string } | { key: Binary | { hex: string }; value: Binary | { hex: string } }>): Promise<AnchorValidationResult> {
+  async verifyAnchors(
+    ...anchors: Array<
+      Binary | { hex: string } | { key: Binary | { hex: string }; value: Binary | { hex: string } }
+    >
+  ): Promise<AnchorValidationResult> {
     return this.validateAnchors(...anchors);
   }
 
@@ -482,7 +535,9 @@ export default class EQTYService {
   }
 
   async signUnlockChallenge(challenge: string): Promise<string> {
-    const bytes = challenge.startsWith('0x') ? challenge : `0x${Buffer.from(challenge, 'utf8').toString('hex')}`;
+    const bytes = challenge.startsWith('0x')
+      ? challenge
+      : `0x${Buffer.from(challenge, 'utf8').toString('hex')}`;
     return this.signerClient.signMessage(bytes);
   }
 

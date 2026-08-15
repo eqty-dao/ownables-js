@@ -13,8 +13,8 @@ yarn add @ownables/platform-react-native
 ### Runtime
 
 - `RNOwnableRPC`
-- `createRNRuntimeRpcProvider()`
-- `createRNRuntimeSourceProvider()`
+- `RNRuntimeRpcProvider`
+- `RNRuntimeSourceProvider`
 
 Use these to connect `OwnableService` to a native runtime module (typically WAMR).
 
@@ -113,19 +113,22 @@ export class NativeWamrBridge implements RNRuntimeBridge {
 import {
   OwnableService,
   EventChainService,
+  AnchorValidationService,
+  PublicEventReplayService,
   type AnchorProvider,
 } from '@ownables/core';
 import {
   RNStateStore,
   RNPackageAssetIO,
-  createRNRuntimeRpcProvider,
-  createRNRuntimeSourceProvider,
+  RNRuntimeRpcProvider,
+  RNRuntimeSourceProvider,
 } from '@ownables/platform-react-native';
 
 const runtimeBridge = new NativeWamrBridge();
 
-const runtimeRpc = createRNRuntimeRpcProvider({ bridge: runtimeBridge });
-const runtimeSource = createRNRuntimeSourceProvider();
+const runtimeRpc = new RNRuntimeRpcProvider({ bridge: runtimeBridge });
+const runtimeSource = new RNRuntimeSourceProvider();
+const replay = new PublicEventReplayService();
 
 const stateStore = new RNStateStore({ backend: myStateStoreBackend });
 const packages = new RNPackageAssetIO({
@@ -133,17 +136,21 @@ const packages = new RNPackageAssetIO({
   fileSystem: myPackageFs,
 });
 
-const eventChains = new EventChainService(stateStore, myAnchorProvider as AnchorProvider);
+const eventChains = new EventChainService(
+  stateStore,
+  myAnchorProvider as AnchorProvider,
+  new AnchorValidationService(myAnchorProvider as AnchorProvider)
+);
 
-const ownables = new OwnableService(
+const ownables = new OwnableService({
   stateStore,
   eventChains,
-  myAnchorProvider,
+  anchorProvider: myAnchorProvider,
   packages,
   runtimeSource,
-  console,
-  runtimeRpc
-);
+  runtimeRpc,
+  replay,
+});
 ```
 
 ### 3. Use `RNOwnablePersistence` for event/state/snapshot/attachment storage
@@ -152,7 +159,7 @@ const ownables = new OwnableService(
 import RNOwnablePersistence from '@ownables/platform-react-native';
 
 const persistence = new RNOwnablePersistence({
-  backend: myOwnablePersistenceBackend,   // implements RNOwnablePersistenceBackend
+  backend: myOwnablePersistenceBackend, // implements RNOwnablePersistenceBackend
   attachmentStore: myAttachmentBlobStore, // implements RNAttachmentBlobStore
   cidCalculator: myCidCalculator,
 });

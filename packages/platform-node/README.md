@@ -12,9 +12,10 @@ yarn add @ownables/platform-node
 
 - `BucketStateStore`
 - `BucketArchiveService`
-- `OwnablePackageCidCalculator`
 - `NodeSandboxOwnableRPC`
 - `NodePackageAssetIO`
+- `NodeRuntimeSourceProvider`
+- `NodeRuntimeRpcProvider`
 - `PlatformNode` types
 
 ## Notes

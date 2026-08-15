@@ -5,7 +5,11 @@ import type {
   NftRef,
   RecordStore,
 } from '@ownables/core';
-import { AuthorityError, type BridgeOwnableResult, type OwnableCidLookup } from '../types/Authority';
+import {
+  AuthorityError,
+  type BridgeOwnableResult,
+  type OwnableCidLookup,
+} from '../types/Authority';
 
 function normalizeAddress(address: string): string {
   return address.toLowerCase();
@@ -90,14 +94,20 @@ export class AuthorityService {
     this.now = options.now ?? (() => new Date());
   }
 
-  async bridgeOwnableArchive(archive: Uint8Array, signerAddress?: string): Promise<BridgeOwnableResult> {
+  async bridgeOwnableArchive(
+    archive: Uint8Array,
+    signerAddress?: string
+  ): Promise<BridgeOwnableResult> {
     const imported = await this.archiveService.importArchive(archive).catch((error) => {
       throw new AuthorityError('INVALID_ARCHIVE', (error as Error).message);
     });
 
     const nft = extractNft(imported.chainJson);
     if (!nft) {
-      throw new AuthorityError('MISSING_NFT_INFO', 'Unable to find nft info in chain genesis event');
+      throw new AuthorityError(
+        'MISSING_NFT_INFO',
+        'Unable to find nft info in chain genesis event'
+      );
     }
 
     const prevOwner = extractPrevOwner(imported.chainJson, signerAddress);
@@ -137,7 +147,10 @@ export class AuthorityService {
     if (signerAddress) {
       const owner = await this.lockable.getOwner(record.nft.address, record.nft.id);
       if (normalizeAddress(owner) !== normalizeAddress(signerAddress)) {
-        throw new AuthorityError('OWNER_MISMATCH', `Signer ${signerAddress} is not current NFT owner ${owner}`);
+        throw new AuthorityError(
+          'OWNER_MISMATCH',
+          `Signer ${signerAddress} is not current NFT owner ${owner}`
+        );
       }
     }
 

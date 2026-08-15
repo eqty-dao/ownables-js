@@ -1,12 +1,12 @@
-import { withProgress } from "@ownables/core";
-import type { LogProgress } from "@ownables/core";
+import { ProgressService } from '@ownables/core';
+import type { LogProgress } from '@ownables/core';
 import type {
   IndexedPublicEventsSnapshot,
   IndexedPublicEventsStreamHandlers,
   IndexedPublicEventsStreamSubscription,
   IndexedPublicEventsStreamEvent,
-} from "@ownables/core";
-import JSZip from "jszip";
+} from '@ownables/core';
+import JSZip from 'jszip';
 
 export interface HubUploadResult {
   cid: string;
@@ -46,18 +46,21 @@ export interface HubAvailableOwnablesStreamHandlers {
   onError?: (error: unknown) => void;
 }
 
-export const AVAILABLE_OWNABLES_UNAVAILABLE_MESSAGE =
-  "Hub available-ownables discovery is enabled, but the Hub discovery endpoint is unavailable.";
+import { AVAILABLE_OWNABLES_UNAVAILABLE_MESSAGE } from '../constants/hub.js';
 
 export default class HubService {
   constructor(
-    private readonly url: string = "",
-    private readonly fetchFn: (input: string, init?: RequestInit) => Promise<Response> = (input, init) =>
-      fetch(input, init),
+    private readonly url: string = '',
+    private readonly fetchFn: (input: string, init?: RequestInit) => Promise<Response> = (
+      input,
+      init
+    ) => fetch(input, init),
     private readonly eventSourceFactory: (url: string) => HubEventSourceLike = (url) => {
-      const EventSourceCtor = (globalThis as { EventSource?: new (input: string) => HubEventSourceLike }).EventSource;
+      const EventSourceCtor = (
+        globalThis as { EventSource?: new (input: string) => HubEventSourceLike }
+      ).EventSource;
       if (!EventSourceCtor) {
-        throw new Error("EventSource is not available in this environment");
+        throw new Error('EventSource is not available in this environment');
       }
       return new EventSourceCtor(url);
     }
@@ -69,7 +72,7 @@ export default class HubService {
 
   get origin(): string {
     if (!this.isConfigured) {
-      throw new Error("VITE_HUB is not configured");
+      throw new Error('VITE_HUB is not configured');
     }
 
     return new URL(this.url).origin;
@@ -77,10 +80,10 @@ export default class HubService {
 
   private endpoint(path: string): string {
     if (!this.isConfigured) {
-      throw new Error("VITE_HUB is not configured");
+      throw new Error('VITE_HUB is not configured');
     }
 
-    return `${this.url.replace(/\/$/, "")}/${path.replace(/^\//, "")}`;
+    return `${this.url.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
   }
 
   parseHubDownloadUrl(url: string): URL {
@@ -89,11 +92,11 @@ export default class HubService {
     try {
       parsed = new URL(url);
     } catch {
-      throw new Error("Hub download URL is malformed");
+      throw new Error('Hub download URL is malformed');
     }
 
     if (parsed.origin !== this.origin) {
-      throw new Error("Hub download URL must use the configured Hub origin");
+      throw new Error('Hub download URL must use the configured Hub origin');
     }
 
     return parsed;
@@ -107,7 +110,7 @@ export default class HubService {
     if (!this.isConfigured) return false;
 
     try {
-      const response = await this.fetchFn(this.endpoint("/health"), { method: "GET" });
+      const response = await this.fetchFn(this.endpoint('/health'), { method: 'GET' });
       return response.ok;
     } catch {
       return false;
@@ -116,19 +119,19 @@ export default class HubService {
 
   async uploadOwnable(
     content: Uint8Array,
-    filename = "ownable.zip",
+    filename = 'ownable.zip',
     onProgress?: LogProgress
   ): Promise<HubUploadResult> {
-    const step = withProgress(onProgress);
+    const progress = new ProgressService(onProgress);
 
-    return await step("hubUpload", async () => {
+    return await progress.step('hubUpload', async () => {
       const form = new FormData();
       const buffer = new ArrayBuffer(content.byteLength);
       new Uint8Array(buffer).set(content);
-      form.append("file", new File([buffer], filename, { type: "application/zip" }));
+      form.append('file', new File([buffer], filename, { type: 'application/zip' }));
 
-      const response = await this.fetchFn(this.endpoint("/ownables/upload"), {
-        method: "POST",
+      const response = await this.fetchFn(this.endpoint('/ownables/upload'), {
+        method: 'POST',
         body: form,
       });
 
@@ -142,9 +145,9 @@ export default class HubService {
   }
 
   async downloadOwnable(ownableId: string, onProgress?: LogProgress): Promise<File> {
-    const step = withProgress(onProgress);
+    const progress = new ProgressService(onProgress);
 
-    return await step("hubDownload", async () => {
+    return await progress.step('hubDownload', async () => {
       const bundleUrl = this.parseHubDownloadUrl(this.getOwnableBundleUrl(ownableId));
       const response = await this.fetchFn(bundleUrl.toString());
 
@@ -154,12 +157,15 @@ export default class HubService {
       }
 
       return new File([await response.blob()], fileNameFromUrl(bundleUrl), {
-        type: response.headers.get("content-type") || "application/zip",
+        type: response.headers.get('content-type') || 'application/zip',
       });
     });
   }
 
-  async importFromHub(packageCid: string, ownableId: string): Promise<{
+  async importFromHub(
+    packageCid: string,
+    ownableId: string
+  ): Promise<{
     packageFile: File;
     chainJson: unknown;
   }> {
@@ -175,9 +181,13 @@ export default class HubService {
     const chainJson = await readChainJsonFromBundle(bundleBlob);
 
     return {
-      packageFile: new File([bundleBlob], packageCid ? `${packageCid}.zip` : fileNameFromUrl(bundleUrl), {
-        type: bundleResponse.headers.get("content-type") || "application/zip",
-      }),
+      packageFile: new File(
+        [bundleBlob],
+        packageCid ? `${packageCid}.zip` : fileNameFromUrl(bundleUrl),
+        {
+          type: bundleResponse.headers.get('content-type') || 'application/zip',
+        }
+      ),
       chainJson,
     };
   }
@@ -202,10 +212,10 @@ export default class HubService {
   ): IndexedPublicEventsStreamSubscription {
     const query = new URLSearchParams();
     for (const ownableId of ownableIds) {
-      query.append("id", ownableId);
+      query.append('id', ownableId);
     }
     if (options?.fromBlock !== undefined) {
-      query.set("from", String(options.fromBlock));
+      query.set('from', String(options.fromBlock));
     }
 
     const stream = this.eventSourceFactory(
@@ -215,12 +225,12 @@ export default class HubService {
       handlers.onEvent(parseJsonMessage<IndexedPublicEventsStreamEvent>(event.data));
     };
 
-    stream.addEventListener("public-event", listener);
+    stream.addEventListener('public-event', listener);
     stream.onerror = (error) => handlers.onError?.(error);
 
     return {
       close: () => {
-        stream.removeEventListener("public-event", listener);
+        stream.removeEventListener('public-event', listener);
         stream.close();
       },
     };
@@ -237,31 +247,29 @@ export default class HubService {
       this.endpoint(`/ownables/available/stream?${query.toString()}`)
     );
     const listener = (event: { data?: string }) => {
-      handlers.onEvent(parseJsonMessage<{ owner: string; entry: HubAvailableOwnableEntry }>(event.data));
+      handlers.onEvent(
+        parseJsonMessage<{ owner: string; entry: HubAvailableOwnableEntry }>(event.data)
+      );
     };
 
-    stream.addEventListener("available-ownable", listener);
+    stream.addEventListener('available-ownable', listener);
     stream.onerror = (error) => handlers.onError?.(error);
 
     return {
       close: () => {
-        stream.removeEventListener("available-ownable", listener);
+        stream.removeEventListener('available-ownable', listener);
         stream.close();
       },
     };
   }
 
-  async listAvailableOwnables(
-    ownerAccount: string
-  ): Promise<HubAvailableOwnablesResponse> {
+  async listAvailableOwnables(ownerAccount: string): Promise<HubAvailableOwnablesResponse> {
     const query = new URLSearchParams({
       owner: ownerAccount,
     });
 
     try {
-      const response = await this.fetchFn(
-        this.endpoint(`/ownables/available?${query.toString()}`)
-      );
+      const response = await this.fetchFn(this.endpoint(`/ownables/available?${query.toString()}`));
 
       if (response.status === 404 || response.status === 501) {
         throw new Error(AVAILABLE_OWNABLES_UNAVAILABLE_MESSAGE);
@@ -276,15 +284,12 @@ export default class HubService {
     } catch (error) {
       if (
         error instanceof Error &&
-        error.message.startsWith("Hub available-ownables lookup failed:")
+        error.message.startsWith('Hub available-ownables lookup failed:')
       ) {
         throw error;
       }
 
-      if (
-        error instanceof Error &&
-        error.message === AVAILABLE_OWNABLES_UNAVAILABLE_MESSAGE
-      ) {
+      if (error instanceof Error && error.message === AVAILABLE_OWNABLES_UNAVAILABLE_MESSAGE) {
         throw error;
       }
 
@@ -294,14 +299,14 @@ export default class HubService {
 }
 
 function fileNameFromUrl(url: URL): string {
-  const lastSegment = url.pathname.split("/").filter(Boolean).pop();
-  if (!lastSegment) return "ownable.zip";
-  return lastSegment.endsWith(".zip") ? lastSegment : `${lastSegment}.zip`;
+  const lastSegment = url.pathname.split('/').filter(Boolean).pop();
+  if (!lastSegment) return 'ownable.zip';
+  return lastSegment.endsWith('.zip') ? lastSegment : `${lastSegment}.zip`;
 }
 
 async function readError(response: Response): Promise<string> {
-  const contentType = response.headers.get("content-type") ?? "";
-  if (contentType.includes("application/json")) {
+  const contentType = response.headers.get('content-type') ?? '';
+  if (contentType.includes('application/json')) {
     const body = await response.json().catch(() => undefined);
     if (body?.message) return String(body.message);
     if (body?.error) return String(body.error);
@@ -309,23 +314,23 @@ async function readError(response: Response): Promise<string> {
     if (body) return JSON.stringify(body);
   }
 
-  return (await response.text().catch(() => "")) || `${response.status} ${response.statusText}`;
+  return (await response.text().catch(() => '')) || `${response.status} ${response.statusText}`;
 }
 
 async function readChainJsonFromBundle(bundleBlob: Blob): Promise<unknown> {
   const archive = await JSZip.loadAsync(await bundleBlob.arrayBuffer());
-  const chainEntry = archive.file("chain.json") ?? archive.file("eventChain.json");
+  const chainEntry = archive.file('chain.json') ?? archive.file('eventChain.json');
 
   if (!chainEntry) {
-    throw new Error("Hub bundle did not include chain.json");
+    throw new Error('Hub bundle did not include chain.json');
   }
 
-  return JSON.parse(await chainEntry.async("text"));
+  return JSON.parse(await chainEntry.async('text'));
 }
 
 function parseJsonMessage<T>(payload: string | undefined): T {
   if (!payload) {
-    throw new Error("Hub stream message did not include a JSON payload");
+    throw new Error('Hub stream message did not include a JSON payload');
   }
 
   return JSON.parse(payload) as T;

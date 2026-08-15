@@ -1,7 +1,7 @@
-import type { PublicEvent } from "./OwnableRuntime.js";
-import type { TypedOwnableInfo } from "./TypedOwnableInfo.js";
-import type { EventChain } from "eqty-core";
-import type { AnchorValidationResult, IndexedAnchorRecord } from "./AnchorValidation.js";
+import type { PublicEvent } from './OwnableRuntime.js';
+import type { TypedOwnableInfo } from './TypedOwnableInfo.js';
+import type { EventChain } from 'eqty-core';
+import type { AnchorValidationResult, IndexedAnchorRecord } from './AnchorValidation.js';
 
 export interface IndexedPublicEvent extends PublicEvent {
   indexedAt?: string;
@@ -33,9 +33,9 @@ export interface ReplayEventMetadata {
   event: IndexedPublicEvent;
 }
 
-export type IndexedPublicEventTransportOrigin = "local" | "snapshot" | "stream";
+export type IndexedPublicEventTransportOrigin = 'local' | 'snapshot' | 'stream';
 
-export type ReconciledPublicEventStatus = "pending" | "confirmed";
+export type ReconciledPublicEventStatus = 'pending' | 'confirmed';
 
 export interface ReconciledPublicEvent extends ReplayEventMetadata {
   status: ReconciledPublicEventStatus;
@@ -43,7 +43,11 @@ export interface ReconciledPublicEvent extends ReplayEventMetadata {
 }
 
 export interface ReplayIgnoredPublicEvent extends ReplayEventMetadata {
-  reason: "register_failed" | "missing_private_prefix" | "missing_public_timestamp" | "invalid_subject_id";
+  reason:
+    | 'register_failed'
+    | 'missing_private_prefix'
+    | 'missing_public_timestamp'
+    | 'invalid_subject_id';
   cause: unknown;
 }
 
@@ -112,12 +116,12 @@ export interface ReplayAuthorityAnchorEvidence {
 
 export interface ReplayAuthorityReplayContext {
   privatePrefixLength: number;
-  mode?: "production" | "development";
+  mode?: 'production' | 'development';
 }
 
 export interface IndexedPublicReplaySelectionOptions {
   privateEvents: ReplayPrivateEventBoundary[];
   privatePrefixLength: number;
   anchorValidation?: AnchorValidationResult;
-  mode?: "production" | "development";
+  mode?: 'production' | 'development';
 }

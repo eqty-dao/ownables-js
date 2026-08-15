@@ -1,9 +1,9 @@
-import TypedDict from "@ownables/core/types/TypedDict";
+import type TypedDict from '@ownables/core/types/TypedDict';
 
 // Default base DB name; per-address DBs will suffix this with the address
-const DEFAULT_DB_NAME = "ownables";
+const DEFAULT_DB_NAME = 'ownables';
 const PACKAGE_DB_NAME = `${DEFAULT_DB_NAME}:packages`;
-const PACKAGE_DB_STORES = ["package-assets"];
+const PACKAGE_DB_STORES = ['package-assets'];
 
 export default class IDBService {
   private static mainInstance: IDBService;
@@ -32,12 +32,19 @@ export default class IDBService {
   static async packages(indexedDBApi: IDBFactory = window.indexedDB): Promise<IDBService> {
     if (this.packageInstance) return this.packageInstance;
 
-    this.packageInstance = await this.openWithSchema(PACKAGE_DB_NAME, PACKAGE_DB_STORES, indexedDBApi);
+    this.packageInstance = await this.openWithSchema(
+      PACKAGE_DB_NAME,
+      PACKAGE_DB_STORES,
+      indexedDBApi
+    );
     return this.packageInstance;
   }
 
-  static async open(suffix: string, indexedDBApi: IDBFactory = window.indexedDB): Promise<IDBService> {
-    const suffixClean = (suffix || "").trim().toLowerCase();
+  static async open(
+    suffix: string,
+    indexedDBApi: IDBFactory = window.indexedDB
+  ): Promise<IDBService> {
+    const suffixClean = (suffix || '').trim().toLowerCase();
     const dbName = suffixClean ? `${DEFAULT_DB_NAME}:${suffixClean}` : DEFAULT_DB_NAME;
 
     return this.openWithSchema(dbName, [], indexedDBApi);
@@ -65,14 +72,15 @@ export default class IDBService {
       };
       probe.onerror = (e) => reject((e.target as IDBTransaction).error);
       probe.onblocked = () =>
-        reject(new Error(`IndexedDB open blocked for ${dbName}. Close other tabs using the wallet and try again.`));
+        reject(
+          new Error(
+            `IndexedDB open blocked for ${dbName}. Close other tabs using the wallet and try again.`
+          )
+        );
     });
 
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDBApi.open(
-        dbName,
-        existingVersion === 0 ? 1 : existingVersion
-      );
+      const request = indexedDBApi.open(dbName, existingVersion === 0 ? 1 : existingVersion);
       request.onupgradeneeded = () => {
         const upgradedDb = request.result;
         for (const store of requiredStores) {
@@ -84,7 +92,11 @@ export default class IDBService {
       request.onsuccess = () => resolve(this.attachLifecycle(request.result));
       request.onerror = (e) => reject((e.target as IDBTransaction).error);
       request.onblocked = () =>
-        reject(new Error(`IndexedDB open blocked for ${dbName}. Close other tabs using the wallet and try again.`));
+        reject(
+          new Error(
+            `IndexedDB open blocked for ${dbName}. Close other tabs using the wallet and try again.`
+          )
+        );
     });
 
     return new IDBService(db, dbName, indexedDBApi);
@@ -96,13 +108,12 @@ export default class IDBService {
   }
 
   private error(event: Event): Error {
-    return (event.target as IDBRequest)?.error || new Error("Unknown error");
+    return (event.target as IDBRequest)?.error || new Error('Unknown error');
   }
-
 
   async get(store: string, key: string): Promise<any> {
     return new Promise(async (resolve, reject) => {
-      const tx = this.db.transaction(store, "readonly");
+      const tx = this.db.transaction(store, 'readonly');
       const request = tx.objectStore(store).get(key);
 
       request.onsuccess = () => resolve(request.result);
@@ -112,7 +123,7 @@ export default class IDBService {
 
   async getAll(store: string): Promise<Array<any>> {
     return new Promise(async (resolve, reject) => {
-      const tx = this.db.transaction(store, "readonly");
+      const tx = this.db.transaction(store, 'readonly');
       const request = tx.objectStore(store).getAll();
 
       request.onsuccess = () => resolve(request.result);
@@ -122,7 +133,7 @@ export default class IDBService {
 
   async getMap(store: string): Promise<Map<any, any>> {
     return new Promise(async (resolve, reject) => {
-      const tx = this.db.transaction(store, "readonly");
+      const tx = this.db.transaction(store, 'readonly');
       const request = tx.objectStore(store).openCursor();
       const map = new Map();
 
@@ -141,10 +152,7 @@ export default class IDBService {
 
   async keys(store: string): Promise<string[]> {
     return new Promise(async (resolve, reject) => {
-      const tx = this.db
-        .transaction(store, "readonly")
-        .objectStore(store)
-        .getAllKeys();
+      const tx = this.db.transaction(store, 'readonly').objectStore(store).getAllKeys();
 
       tx.onsuccess = () => resolve(tx.result as string[]);
       tx.onerror = (event) => reject(this.error(event));
@@ -153,7 +161,7 @@ export default class IDBService {
 
   async keysByPrefix(store: string, prefix: string): Promise<string[]> {
     return new Promise((resolve, reject) => {
-      const tx = this.db.transaction(store, "readonly");
+      const tx = this.db.transaction(store, 'readonly');
       const request = tx.objectStore(store).openKeyCursor();
       const keys: string[] = [];
 
@@ -176,7 +184,7 @@ export default class IDBService {
 
   async getAllByPrefix(store: string, prefix: string): Promise<Array<any>> {
     return new Promise((resolve, reject) => {
-      const tx = this.db.transaction(store, "readonly");
+      const tx = this.db.transaction(store, 'readonly');
       const request = tx.objectStore(store).openCursor();
       const values: Array<any> = [];
 
@@ -199,7 +207,7 @@ export default class IDBService {
 
   async set(store: string, key: string, value: any): Promise<void> {
     return new Promise(async (resolve, reject) => {
-      const tx = this.db.transaction(store, "readwrite");
+      const tx = this.db.transaction(store, 'readwrite');
       const request = tx.objectStore(store).put(value, key);
 
       request.onsuccess = () => resolve();
@@ -207,29 +215,23 @@ export default class IDBService {
     });
   }
 
-  async setAll(
-    store: string,
-    map: TypedDict | Map<any, any>
-  ): Promise<void>;
-  async setAll(
-    data: TypedDict<TypedDict | Map<any, any>>
-  ): Promise<void>;
+  async setAll(store: string, map: TypedDict | Map<any, any>): Promise<void>;
+  async setAll(data: TypedDict<TypedDict | Map<any, any>>): Promise<void>;
   async setAll(a: any, b?: any): Promise<void> {
     const storeNames: string | string[] = b ? [a] : Object.keys(a);
     const data: { [_: string]: TypedDict | Map<any, any> } = b ? { [a]: b } : a;
 
     return new Promise(async (resolve, reject) => {
-      const tx = this.db.transaction(storeNames, "readwrite");
+      const tx = this.db.transaction(storeNames, 'readwrite');
 
       tx.oncomplete = () => resolve();
       tx.onerror = (event) => reject(this.error(event));
-      tx.onabort = () => reject(new Error("Transaction aborted"));
+      tx.onabort = () => reject(new Error('Transaction aborted'));
 
       try {
         for (const [store, map] of Object.entries(data)) {
           const objectStore = tx.objectStore(store);
-          const entries =
-            map instanceof Map ? map.entries() : Object.entries(map);
+          const entries = map instanceof Map ? map.entries() : Object.entries(map);
 
           for (const [key, value] of entries) {
             objectStore.put(value, key);
@@ -244,7 +246,7 @@ export default class IDBService {
 
   async clear(store: string): Promise<void> {
     return new Promise(async (resolve, reject) => {
-      const tx = this.db.transaction(store, "readwrite");
+      const tx = this.db.transaction(store, 'readwrite');
       const request = tx.objectStore(store).clear();
 
       request.onsuccess = () => resolve();
@@ -263,7 +265,11 @@ export default class IDBService {
       request.onsuccess = () => resolve(IDBService.attachLifecycle(request.result));
       request.onerror = (e) => reject(e);
       request.onblocked = () =>
-        reject(new Error(`IndexedDB upgrade blocked for ${this.dbName}. Close other tabs using the wallet and try again.`));
+        reject(
+          new Error(
+            `IndexedDB upgrade blocked for ${this.dbName}. Close other tabs using the wallet and try again.`
+          )
+        );
     });
   }
 
@@ -296,7 +302,9 @@ export default class IDBService {
     const stores =
       store instanceof RegExp
         ? Array.from(this.db.objectStoreNames).filter((name) => name.match(store))
-        : this.db.objectStoreNames.contains(store) ? [store] : [];
+        : this.db.objectStoreNames.contains(store)
+          ? [store]
+          : [];
 
     if (stores.length === 0) return;
 
@@ -343,7 +351,7 @@ export default class IDBService {
 
   async delete(store: string, key: string): Promise<void> {
     return new Promise(async (resolve, reject) => {
-      const tx = this.db.transaction(store, "readwrite");
+      const tx = this.db.transaction(store, 'readwrite');
       const request = tx.objectStore(store).delete(key);
 
       request.onsuccess = () => resolve();

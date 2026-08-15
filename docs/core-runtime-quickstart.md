@@ -16,32 +16,49 @@ From `@ownables/core/interfaces/core`:
 - `AnchorProvider`: wallet/signer + anchoring methods.
 - `StateStore`: persistent key-value store for Ownable chain state.
 - `PackageAssetIO`: package metadata + asset loading (`ownable_bg.wasm`, package manifest/schema assets, etc.).
-- `RuntimeSourceProvider` (optional): runtime-owned worker source provider.
+- `RuntimeSourceProvider`: runtime-owned worker source provider.
+- `RuntimeRPCProvider`: creates the platform-specific Ownable runtime.
 
 ## Minimal wiring example
 
 ```ts
 import {
   EventChainService,
+  AnchorValidationService,
   OwnableService,
+  PublicEventReplayService,
   type AnchorProvider,
   type StateStore,
   type PackageAssetIO,
+  type RuntimeSourceProvider,
+  type RuntimeRPCProvider,
 } from "@ownables/core";
 
 const stateStore: StateStore = /* your implementation */;
 const anchorProvider: AnchorProvider = /* your signer + anchor implementation */;
 const packageAssetIO: PackageAssetIO = /* your package loader */;
+const runtimeSource: RuntimeSourceProvider = /* your platform provider */;
+const runtimeRpc: RuntimeRPCProvider = /* your platform provider */;
 
-const chains = new EventChainService(stateStore, anchorProvider);
-const ownables = new OwnableService(stateStore, chains, anchorProvider, packageAssetIO);
+const anchorValidation = new AnchorValidationService(anchorProvider);
+const replay = new PublicEventReplayService();
+const chains = new EventChainService(stateStore, anchorProvider, anchorValidation);
+const ownables = new OwnableService({
+  stateStore,
+  eventChains: chains,
+  anchorProvider,
+  packages: packageAssetIO,
+  runtimeSource,
+  runtimeRpc,
+  replay,
+});
 ```
 
 ## Typical runtime flow
 
 1. Resolve package info/asset source (`PackageAssetIO`).
 2. Create or load an `EventChain`.
-3. Initialize runtime with `ownables.init(chain, cid, rpc)`.
+3. Initialize runtime with `ownables.init(chain, cid)`; the configured runtime provider creates the RPC.
 4. Execute/query through `ownables.rpc(chain.id)`.
 5. Persist state changes via `EventChainService`.
 

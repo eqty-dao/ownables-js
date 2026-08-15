@@ -1,3 +1,10 @@
+# [0.10.0](https://github.com/eqty-dao/ownables-js/compare/v0.9.1...v0.10.0) (2026-08-15)
+
+
+### Features
+
+* document class-based service migration ([04252b1](https://github.com/eqty-dao/ownables-js/commit/04252b10ec265033ac0394efbcb85595786ee4d8))
+
 ## [0.9.1](https://github.com/eqty-dao/ownables-js/compare/v0.9.0...v0.9.1) (2026-08-15)
 
 

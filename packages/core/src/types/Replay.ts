@@ -37,9 +37,28 @@ export type IndexedPublicEventTransportOrigin = 'local' | 'snapshot' | 'stream';
 
 export type ReconciledPublicEventStatus = 'pending' | 'confirmed';
 
+export type PublicEventLocalApplicationState = 'pending' | 'applied' | 'failed';
+
+/**
+ * Positions a public event that has not yet produced a signed register event.
+ *
+ * The anchor is derived from the chain at receipt time. It deliberately avoids
+ * wall-clock time, so two receipts at the same chain position stay stable
+ * across reloads and later Hub delivery.
+ */
+export interface PublicEventInsertionAnchor {
+  privateEventCount: number;
+  privateEventHash: string;
+  ordinal: number;
+}
+
 export interface ReconciledPublicEvent extends ReplayEventMetadata {
   status: ReconciledPublicEventStatus;
   sources: IndexedPublicEventTransportOrigin[];
+  localApplicationState?: PublicEventLocalApplicationState;
+  localDisplayError?: string;
+  insertionAnchor?: PublicEventInsertionAnchor;
+  registerEventHash?: string;
 }
 
 export interface ReplayIgnoredPublicEvent extends ReplayEventMetadata {

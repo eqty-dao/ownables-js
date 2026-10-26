@@ -1,3 +1,10 @@
+## [0.11.1](https://github.com/eqty-dao/ownables-js/compare/v0.11.0...v0.11.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **adapter-viem:** encode public event bytes for viem ([#9](https://github.com/eqty-dao/ownables-js/issues/9)) ([78042db](https://github.com/eqty-dao/ownables-js/commit/78042dbd20c2a53ef6eaf914d3cd4452931aac13))
+
 # [0.11.0](https://github.com/eqty-dao/ownables-js/compare/v0.10.0...v0.11.0) (2026-10-26)
 
 

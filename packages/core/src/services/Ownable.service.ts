@@ -28,6 +28,7 @@ import type {
   IndexedPublicEvent,
   IndexedPublicEventTransportOrigin,
   IndexedPublicReplaySelectionOptions,
+  PublicEventInsertionAnchor,
   ReconciledPublicEvent,
   ReplayAttemptResult,
 } from '../types/Replay.js';
@@ -268,13 +269,18 @@ export default class OwnableService {
   private replayRecord(
     event: IndexedPublicEvent,
     status: ReconciledPublicEvent['status'],
-    sources: IndexedPublicEventTransportOrigin[]
+    sources: IndexedPublicEventTransportOrigin[],
+    details: Pick<
+      ReconciledPublicEvent,
+      'localApplicationState' | 'localDisplayError' | 'insertionAnchor' | 'registerEventHash'
+    > = {}
   ): ReconciledPublicEvent {
     return {
       replayKey: this.replay.key(event),
       event,
       status,
       sources: [...new Set(sources)],
+      ...details,
     };
   }
 
@@ -300,15 +306,17 @@ export default class OwnableService {
     }
 
     const records = (await this.stateStore.getAll(replayStoreId)) as ReconciledPublicEvent[];
-    return [...records].sort((left, right) => {
-      if (left.event.blockNumber !== right.event.blockNumber) {
-        return left.event.blockNumber - right.event.blockNumber;
-      }
-      if (left.event.transactionIndex !== right.event.transactionIndex) {
-        return left.event.transactionIndex - right.event.transactionIndex;
-      }
-      return left.event.logIndex - right.event.logIndex;
-    });
+    return records
+      .filter((record) => !record.replayKey.startsWith('pending:'))
+      .sort((left, right) => {
+        if (left.event.blockNumber !== right.event.blockNumber) {
+          return left.event.blockNumber - right.event.blockNumber;
+        }
+        if (left.event.transactionIndex !== right.event.transactionIndex) {
+          return left.event.transactionIndex - right.event.transactionIndex;
+        }
+        return left.event.logIndex - right.event.logIndex;
+      });
   }
 
   async listTrackedPublicEvents(chainId: string): Promise<ReconciledPublicEvent[]> {
@@ -362,7 +370,54 @@ export default class OwnableService {
       },
       status: 'pending',
       sources: ['local'],
+      localApplicationState: 'pending',
     };
+  }
+
+  private async publicEventInsertionAnchor(chain: EventChain): Promise<PublicEventInsertionAnchor> {
+    const privateEventCount = chain.events.length;
+    const privateEventHash = chain.events.at(-1)?.hash?.hex ?? chain.latestHash.hex;
+    const records = await this.listReplayRecords(chain.id);
+    const ordinal = records.reduce((nextOrdinal, record) => {
+      const anchor = record.insertionAnchor;
+      return anchor &&
+        anchor.privateEventCount === privateEventCount &&
+        anchor.privateEventHash === privateEventHash
+        ? Math.max(nextOrdinal, anchor.ordinal + 1)
+        : nextOrdinal;
+    }, 0);
+
+    return { privateEventCount, privateEventHash, ordinal };
+  }
+
+  private localDisplayError(cause: unknown): string {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    return message.slice(0, 280) || 'Unable to apply public event locally';
+  }
+
+  private async applyPublicEventToChain(
+    chain: EventChain,
+    event: PublicEvent,
+    stateDump: StateDump,
+    progress: ProgressService
+  ): Promise<{ stateDump: StateDump; registerEventHash?: string }> {
+    const info: CosmWasmMessageInfo = {
+      sender: this.eqty.address,
+      funds: [],
+    };
+    const { state } = await this.rpc(chain.id).register(
+      this.toRegisterRpcPayload(event),
+      info,
+      stateDump
+    );
+    const registerEvent = new Event({
+      '@context': 'register_msg.json',
+      ...event,
+    }).addTo(chain);
+    await progress.step('signPublicEvent', () => this.eqty.sign(registerEvent));
+    await this.store(chain, state);
+
+    return { stateDump: state, registerEventHash: registerEvent.hash?.hex };
   }
 
   private toRegisterRuntimeEvent(
@@ -586,10 +641,6 @@ export default class OwnableService {
     const replayStoreId = await this.ensureReplayStore(chain.id);
     const base = this.emptyReplayAttemptResult(stateDump);
     const deduped = this.replay.dedupe(indexedPublicEvents);
-    const info: CosmWasmMessageInfo = {
-      sender: this.eqty.address,
-      funds: [],
-    };
 
     base.duplicateReplayKeys.push(...deduped.duplicateReplayKeys);
     base.duplicatePublicEvents.push(
@@ -608,7 +659,12 @@ export default class OwnableService {
         const updated = this.replayRecord(
           existing.event,
           'confirmed',
-          this.mergeReplayRecordSources(existing.sources, source)
+          this.mergeReplayRecordSources(existing.sources, source),
+          {
+            localApplicationState: existing.localApplicationState ?? 'applied',
+            insertionAnchor: existing.insertionAnchor,
+            registerEventHash: existing.registerEventHash,
+          }
         );
         await this.stateStore.set(replayStoreId, replayKey, updated);
         base.duplicateReplayKeys.push(replayKey);
@@ -616,32 +672,43 @@ export default class OwnableService {
         continue;
       }
 
+      if (existing?.localApplicationState === 'applied') {
+        const confirmedRecord = this.replayRecord(
+          indexedEvent,
+          'confirmed',
+          this.mergeReplayRecordSources(existing.sources, source),
+          {
+            localApplicationState: 'applied',
+            insertionAnchor: existing.insertionAnchor,
+            registerEventHash: existing.registerEventHash,
+          }
+        );
+        await this.stateStore.set(replayStoreId, replayKey, confirmedRecord);
+        base.confirmedPendingPublicEvents.push(confirmedRecord);
+        continue;
+      }
+
       const runtimeEvent = this.toRegisterRuntimeEvent(indexedEvent);
       try {
-        const { state } = await this.rpc(chain.id).register(
-          this.toRegisterRpcPayload(runtimeEvent),
-          info,
-          nextState
+        const applied = await this.applyPublicEventToChain(
+          chain,
+          runtimeEvent,
+          nextState,
+          progress
         );
-        nextState = state;
-
-        await progress.step('signPublicEvent', () =>
-          this.eqty.sign(
-            new Event({
-              '@context': 'register_msg.json',
-              ...runtimeEvent,
-            }).addTo(chain)
-          )
-        );
-
-        await this.store(chain, nextState);
+        nextState = applied.stateDump;
 
         const confirmedRecord = this.replayRecord(
           indexedEvent,
           'confirmed',
           existing?.status === 'pending'
             ? this.mergeReplayRecordSources(existing.sources, source)
-            : [source]
+            : [source],
+          {
+            localApplicationState: 'applied',
+            insertionAnchor: existing?.insertionAnchor,
+            registerEventHash: applied.registerEventHash,
+          }
         );
         await this.stateStore.set(replayStoreId, replayKey, confirmedRecord);
 
@@ -652,6 +719,21 @@ export default class OwnableService {
           base.confirmedPendingPublicEvents.push(confirmedRecord);
         }
       } catch (cause) {
+        if (existing?.status === 'pending') {
+          const failedRecord = this.replayRecord(
+            existing.event,
+            'pending',
+            this.mergeReplayRecordSources(existing.sources, source),
+            {
+              localApplicationState: 'failed',
+              localDisplayError: this.localDisplayError(cause),
+              insertionAnchor: existing.insertionAnchor,
+              registerEventHash: existing.registerEventHash,
+            }
+          );
+          await this.stateStore.set(replayStoreId, replayKey, failedRecord);
+          base.pendingPublicEvents.push(failedRecord);
+        }
         base.ignoredPublicEvents.push({
           replayKey,
           event: indexedEvent,
@@ -759,13 +841,47 @@ export default class OwnableService {
     }
 
     const runtimeEvent = this.toRegisterRuntimeEvent(publicEvent);
-    const pendingRecord = this.replayRecord(runtimeEvent, 'pending', ['local']);
+    const pendingRecord = this.replayRecord(runtimeEvent, 'pending', ['local'], {
+      localApplicationState: 'pending',
+      insertionAnchor: await this.publicEventInsertionAnchor(chain),
+    });
     await this.stateStore.delete(replayStoreId, provisionalPendingRecord.replayKey);
     await this.stateStore.set(replayStoreId, pendingRecord.replayKey, pendingRecord);
 
-    const result = this.emptyReplayAttemptResult(stateDump);
-    result.pendingPublicEvents.push(pendingRecord);
-    return result;
+    try {
+      const applied = await this.applyPublicEventToChain(chain, runtimeEvent, stateDump, progress);
+      const appliedRecord = this.replayRecord(runtimeEvent, 'pending', ['local'], {
+        localApplicationState: 'applied',
+        insertionAnchor: pendingRecord.insertionAnchor,
+        registerEventHash: applied.registerEventHash,
+      });
+      await this.stateStore.set(replayStoreId, appliedRecord.replayKey, appliedRecord);
+
+      const result = this.emptyReplayAttemptResult(applied.stateDump);
+      result.appliedEvents.push(runtimeEvent);
+      result.appliedReplayKeys.push(appliedRecord.replayKey);
+      result.appliedPublicEvents.push({ replayKey: appliedRecord.replayKey, event: runtimeEvent });
+      result.pendingPublicEvents.push(appliedRecord);
+      return result;
+    } catch (cause) {
+      const failedRecord = this.replayRecord(runtimeEvent, 'pending', ['local'], {
+        localApplicationState: 'failed',
+        localDisplayError: this.localDisplayError(cause),
+        insertionAnchor: pendingRecord.insertionAnchor,
+      });
+      await this.stateStore.set(replayStoreId, failedRecord.replayKey, failedRecord);
+
+      const result = this.emptyReplayAttemptResult(stateDump);
+      result.complete = false;
+      result.pendingPublicEvents.push(failedRecord);
+      result.ignoredPublicEvents.push({
+        replayKey: failedRecord.replayKey,
+        event: runtimeEvent,
+        reason: 'register_failed',
+        cause,
+      });
+      return result;
+    }
   }
 
   async submitAnchors(onProgress?: LogProgress): Promise<string | undefined> {

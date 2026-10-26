@@ -1321,7 +1321,9 @@ describe('OwnableService', () => {
     };
     const service = createService(stateStore as any, eventChains as any, eqty as any, {} as any);
     const encodePublicEvent = vi.fn().mockResolvedValue(Uint8Array.from([1, 2, 3]));
-    (service as any)._rpc.set(chain.id, { encodePublicEvent });
+    const register = vi.fn().mockResolvedValue({ state: [['locally-applied', 1]] });
+    (service as any)._rpc.set(chain.id, { encodePublicEvent, register });
+    vi.spyOn(service, 'store').mockResolvedValue(undefined as any);
     const replay = await service.emitPublicEvent(chain, 'consume', { amount: 1 });
 
     expect(encodePublicEvent).toHaveBeenCalledWith('consume', expect.any(Uint8Array));
@@ -1340,21 +1342,16 @@ describe('OwnableService', () => {
       'consume',
       Uint8Array.from([1, 2, 3])
     );
-    expect(replay.appliedReplayKeys).toEqual([]);
-    expect(replay.pendingPublicEvents).toEqual([
+    expect(register).toHaveBeenCalledTimes(1);
+    expect(replay.stateDump).toEqual([['locally-applied', 1]]);
+    expect(replay.appliedReplayKeys).toEqual([`0x${'44'.repeat(32)}:9`]);
+    expect(replay.pendingPublicEvents).toMatchObject([
       {
         replayKey: `0x${'44'.repeat(32)}:9`,
-        event: {
-          source: '0xsource',
-          eventType: 'consume',
-          data: `0x${'33'.repeat(4)}`,
-          blockNumber: 5,
-          transactionHash: `0x${'44'.repeat(32)}`,
-          transactionIndex: 2,
-          logIndex: 9,
-        },
         status: 'pending',
         sources: ['local'],
+        localApplicationState: 'applied',
+        insertionAnchor: { privateEventCount: 0, ordinal: 0 },
       },
     ]);
     expect(await service.listTrackedPublicEvents(chain.id)).toEqual(replay.pendingPublicEvents);
@@ -1374,7 +1371,11 @@ describe('OwnableService', () => {
 
     const eqty = {
       address: '0xabc',
-      sign: vi.fn(),
+      sign: vi.fn(async (event: any) => {
+        event.timestamp ??= 1;
+        event.signerAddress ??= '0xabc';
+        event.signature = Binary.fromHex(`0x${'11'.repeat(65)}`);
+      }),
       emitPublicEvent: vi.fn().mockReturnValue(receiptPromise),
     };
     const eventChains = {
@@ -1382,23 +1383,15 @@ describe('OwnableService', () => {
     };
     const service = createService(stateStore as any, eventChains as any, eqty as any, {} as any);
     const encodePublicEvent = vi.fn().mockResolvedValue(Uint8Array.from([1, 2, 3]));
-    (service as any)._rpc.set(chain.id, { encodePublicEvent });
+    const register = vi.fn().mockResolvedValue({ state: [['locally-applied', 1]] });
+    (service as any)._rpc.set(chain.id, { encodePublicEvent, register });
+    vi.spyOn(service, 'store').mockResolvedValue(undefined as any);
 
     const replayPromise = service.emitPublicEvent(chain, 'consume', { amount: 1 });
 
     await vi.waitFor(async () => {
       const records = await service.listTrackedPublicEvents(chain.id);
-      expect(records).toHaveLength(1);
-      expect(records[0]).toMatchObject({
-        status: 'pending',
-        sources: ['local'],
-        event: {
-          source: '0xabc',
-          eventType: 'consume',
-          blockNumber: 0,
-        },
-      });
-      expect(records[0]!.replayKey.startsWith(`pending:${expectedSubjectId}:consume:`)).toBe(true);
+      expect(records).toEqual([]);
     });
 
     resolveReceipt({
@@ -1415,20 +1408,11 @@ describe('OwnableService', () => {
 
     const replay = await replayPromise;
 
-    expect(replay.pendingPublicEvents).toEqual([
+    expect(replay.pendingPublicEvents).toMatchObject([
       {
         replayKey: `0x${'44'.repeat(32)}:9`,
-        event: {
-          source: '0xsource',
-          eventType: 'consume',
-          data: `0x${'33'.repeat(4)}`,
-          blockNumber: 5,
-          transactionHash: `0x${'44'.repeat(32)}`,
-          transactionIndex: 2,
-          logIndex: 9,
-        },
         status: 'pending',
-        sources: ['local'],
+        localApplicationState: 'applied',
       },
     ]);
     expect(await service.listTrackedPublicEvents(chain.id)).toEqual(replay.pendingPublicEvents);
@@ -1487,6 +1471,94 @@ describe('OwnableService', () => {
       },
     ]);
     expect(registerSpy).not.toHaveBeenCalled();
+  });
+
+  it('keeps a failed local application pending and repairs it on matching Hub delivery', async () => {
+    const stateStore = createStateStore();
+    const chain = {
+      id: `0x${'1'.repeat(98)}`,
+      state: { hex: '0xstate' },
+      latestHash: { hex: `0x${'1'.repeat(64)}` },
+      toJSON: vi.fn().mockReturnValue({ id: `0x${'1'.repeat(98)}`, events: [] }),
+      add: vi.fn(),
+      events: [],
+    } as any;
+    await stateStore.createStore(`ownable:${chain.id}`);
+    await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
+    const event = {
+      source: '0xsource',
+      eventType: 'consume',
+      data: `0x${'33'.repeat(4)}`,
+      blockNumber: 5,
+      transactionHash: `0x${'44'.repeat(32)}`,
+      transactionIndex: 2,
+      logIndex: 9,
+    };
+    const eqty = {
+      address: '0xabc',
+      sign: vi.fn(),
+      emitPublicEvent: vi.fn().mockResolvedValue({
+        subjectId: Binary.fromHex(chain.id).hash().hex,
+        ...event,
+      }),
+    };
+    const service = createService(
+      stateStore as any,
+      { getStateDump: vi.fn().mockResolvedValue([]) } as any,
+      eqty as any,
+      {} as any
+    );
+    const register = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('runtime unavailable'))
+      .mockResolvedValueOnce({ state: [['repaired', 1]] });
+    (service as any)._rpc.set(chain.id, {
+      encodePublicEvent: vi.fn().mockResolvedValue(Uint8Array.from([1, 2, 3])),
+      register,
+    });
+    vi.spyOn(service, 'store').mockResolvedValue(undefined as any);
+
+    const failed = await service.emitPublicEvent(chain, 'consume', { amount: 1 });
+
+    expect(failed).toMatchObject({
+      complete: false,
+      stateDump: [],
+      pendingPublicEvents: [
+        {
+          replayKey: publicEventReplayKey(event),
+          localApplicationState: 'failed',
+          localDisplayError: 'runtime unavailable',
+          insertionAnchor: { privateEventCount: 0, ordinal: 0 },
+        },
+      ],
+    });
+
+    const repaired = await service.applyIndexedPublicEventSnapshot(chain, [event]);
+
+    expect(register).toHaveBeenCalledTimes(2);
+    expect(repaired).toMatchObject({
+      stateDump: [['repaired', 1]],
+      appliedReplayKeys: [publicEventReplayKey(event)],
+      confirmedPendingPublicEvents: [
+        {
+          replayKey: publicEventReplayKey(event),
+          status: 'confirmed',
+          localApplicationState: 'applied',
+          insertionAnchor: { privateEventCount: 0, ordinal: 0 },
+        },
+      ],
+    });
+    expect(await service.listTrackedPublicEvents(chain.id)).toMatchObject([
+      {
+        replayKey: publicEventReplayKey(event),
+        status: 'confirmed',
+        localApplicationState: 'applied',
+        insertionAnchor: { privateEventCount: 0, ordinal: 0 },
+      },
+    ]);
+    expect((await service.listTrackedPublicEvents(chain.id))[0]).not.toHaveProperty(
+      'localDisplayError'
+    );
   });
 
   it('confirms a pending local public event by replay identity instead of transaction hash alone', async () => {
@@ -1566,12 +1638,9 @@ describe('OwnableService', () => {
     ]);
 
     expect(register).toHaveBeenCalledTimes(2);
-    expect(confirmation.appliedReplayKeys).toEqual([
-      `0x${'44'.repeat(32)}:8`,
-      `0x${'44'.repeat(32)}:9`,
-    ]);
+    expect(confirmation.appliedReplayKeys).toEqual([`0x${'44'.repeat(32)}:8`]);
     expect(confirmation.duplicateReplayKeys).toEqual([`0x${'44'.repeat(32)}:9`]);
-    expect(confirmation.confirmedPendingPublicEvents).toEqual([
+    expect(confirmation.confirmedPendingPublicEvents).toMatchObject([
       {
         replayKey: `0x${'44'.repeat(32)}:9`,
         event: {
@@ -1585,9 +1654,10 @@ describe('OwnableService', () => {
         },
         status: 'confirmed',
         sources: ['local', 'snapshot'],
+        localApplicationState: 'applied',
       },
     ]);
-    expect(await service.listTrackedPublicEvents(chain.id)).toEqual([
+    expect(await service.listTrackedPublicEvents(chain.id)).toMatchObject([
       {
         replayKey: `0x${'44'.repeat(32)}:8`,
         event: {
@@ -1601,6 +1671,7 @@ describe('OwnableService', () => {
         },
         status: 'confirmed',
         sources: ['snapshot'],
+        localApplicationState: 'applied',
       },
       {
         replayKey: `0x${'44'.repeat(32)}:9`,
@@ -1615,6 +1686,7 @@ describe('OwnableService', () => {
         },
         status: 'confirmed',
         sources: ['local', 'snapshot'],
+        localApplicationState: 'applied',
       },
     ]);
   });
@@ -1662,12 +1734,13 @@ describe('OwnableService', () => {
     expect(streamReplay.appliedReplayKeys).toEqual([]);
     expect(streamReplay.duplicateReplayKeys).toEqual([publicEventReplayKey(event)]);
     expect(register).toHaveBeenCalledTimes(1);
-    expect(await service.listTrackedPublicEvents(chain.id)).toEqual([
+    expect(await service.listTrackedPublicEvents(chain.id)).toMatchObject([
       {
         replayKey: publicEventReplayKey(event),
         event,
         status: 'confirmed',
         sources: ['snapshot', 'stream'],
+        localApplicationState: 'applied',
       },
     ]);
   });

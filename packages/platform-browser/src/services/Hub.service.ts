@@ -9,6 +9,7 @@ import type {
 import JSZip from 'jszip';
 
 export interface HubUploadResult {
+  ownableId: string;
   cid: string;
   owner?: string;
   ownerAccount?: string;
@@ -130,7 +131,7 @@ export default class HubService {
       new Uint8Array(buffer).set(content);
       form.append('file', new File([buffer], filename, { type: 'application/zip' }));
 
-      const response = await this.fetchFn(this.endpoint('/ownables/upload'), {
+      const response = await this.fetchFn(this.endpoint('/ownables'), {
         method: 'POST',
         body: form,
       });
@@ -210,17 +211,19 @@ export default class HubService {
     handlers: IndexedPublicEventsStreamHandlers,
     options?: { fromBlock?: string | number | bigint }
   ): IndexedPublicEventsStreamSubscription {
-    const query = new URLSearchParams();
-    for (const ownableId of ownableIds) {
-      query.append('id', ownableId);
-    }
-    if (options?.fromBlock !== undefined) {
-      query.set('from', String(options.fromBlock));
+    if (ownableIds.length === 0) {
+      throw new Error('At least one ownable ID is required to watch public events');
     }
 
-    const stream = this.eventSourceFactory(
-      this.endpoint(`/ownables/public-events/stream?${query.toString()}`)
-    );
+    const query = new URLSearchParams();
+    for (const ownableId of ownableIds) {
+      query.append('ownableId', ownableId);
+    }
+    if (options?.fromBlock !== undefined) {
+      query.set('fromBlock', String(options.fromBlock));
+    }
+
+    const stream = this.eventSourceFactory(this.endpoint(`/public-events?${query.toString()}`));
     const listener = (event: { data?: string }) => {
       handlers.onEvent(parseJsonMessage<IndexedPublicEventsStreamEvent>(event.data));
     };
@@ -240,11 +243,8 @@ export default class HubService {
     ownerAccount: string,
     handlers: HubAvailableOwnablesStreamHandlers
   ): IndexedPublicEventsStreamSubscription {
-    const query = new URLSearchParams({
-      owner: ownerAccount,
-    });
     const stream = this.eventSourceFactory(
-      this.endpoint(`/ownables/available/stream?${query.toString()}`)
+      this.endpoint(`/accounts/${encodeURIComponent(ownerAccount)}/available-ownables/events`)
     );
     const listener = (event: { data?: string }) => {
       handlers.onEvent(
@@ -264,12 +264,10 @@ export default class HubService {
   }
 
   async listAvailableOwnables(ownerAccount: string): Promise<HubAvailableOwnablesResponse> {
-    const query = new URLSearchParams({
-      owner: ownerAccount,
-    });
-
     try {
-      const response = await this.fetchFn(this.endpoint(`/ownables/available?${query.toString()}`));
+      const response = await this.fetchFn(
+        this.endpoint(`/accounts/${encodeURIComponent(ownerAccount)}/available-ownables`)
+      );
 
       if (response.status === 404 || response.status === 501) {
         throw new Error(AVAILABLE_OWNABLES_UNAVAILABLE_MESSAGE);

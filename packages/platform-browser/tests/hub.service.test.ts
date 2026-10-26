@@ -7,7 +7,7 @@ import HubService, {
 } from '../src/services/Hub.service';
 
 describe('HubService', () => {
-  const ACCOUNT = '0xabc';
+  const ACCOUNT = 'eip155:84532:0xabc';
   const createEventSource = (url: string) => {
     const listeners = new Map<string, Array<(event: { data?: string }) => void>>();
     const stream: HubEventSourceLike & {
@@ -39,7 +39,7 @@ describe('HubService', () => {
     return stream;
   };
 
-  it('uses the ownables-scoped discovery route', async () => {
+  it('uses the account-scoped discovery route without an owner query parameter', async () => {
     const fetchFn = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ owner: ACCOUNT, entries: [] }), {
         status: 200,
@@ -51,7 +51,7 @@ describe('HubService', () => {
     await hub.listAvailableOwnables(ACCOUNT);
 
     expect(fetchFn).toHaveBeenCalledWith(
-      `https://hub.example/ownables/available?owner=${encodeURIComponent(ACCOUNT)}`
+      `https://hub.example/accounts/${encodeURIComponent(ACCOUNT)}/available-ownables`
     );
   });
 
@@ -112,26 +112,34 @@ describe('HubService', () => {
     expect(fetchFn).toHaveBeenNthCalledWith(2, 'https://hub.example/health', { method: 'GET' });
   });
 
-  it('uploads ownables to the Hub upload endpoint', async () => {
+  it('uploads ownables to the canonical Hub endpoint', async () => {
     const fetchFn = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ cid: 'bafy-uploaded', owner: ACCOUNT }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      })
+      new Response(
+        JSON.stringify({ ownableId: 'ownable-uploaded', cid: 'bafy-uploaded', owner: ACCOUNT }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }
+      )
     );
     const hub = new HubService('https://hub.example', fetchFn);
 
     const result = await hub.uploadOwnable(new Uint8Array([1, 2, 3]), 'dossier.zip');
 
     expect(fetchFn).toHaveBeenCalledTimes(1);
-    expect(fetchFn.mock.calls[0]?.[0]).toBe('https://hub.example/ownables/upload');
+    expect(fetchFn.mock.calls[0]?.[0]).toBe('https://hub.example/ownables');
     expect(fetchFn.mock.calls[0]?.[1]?.method).toBe('POST');
     expect(fetchFn.mock.calls[0]?.[1]?.body).toBeInstanceOf(FormData);
 
     const uploadedFile = (fetchFn.mock.calls[0]?.[1]?.body as FormData).get('file');
     expect(uploadedFile).toBeInstanceOf(File);
     expect((uploadedFile as File).name).toBe('dossier.zip');
-    expect(result).toEqual({ cid: 'bafy-uploaded', owner: ACCOUNT });
+    expect((uploadedFile as File).type).toBe('application/zip');
+    expect(result).toEqual({
+      ownableId: 'ownable-uploaded',
+      cid: 'bafy-uploaded',
+      owner: ACCOUNT,
+    });
   });
 
   it('downloads ownables from the Hub bundle endpoint', async () => {
@@ -193,7 +201,7 @@ describe('HubService', () => {
     expect(result.chainJson).toEqual({ id: 'ownable-1' });
   });
 
-  it('opens a dedicated public-events stream with repeated id params and from=<block>', () => {
+  it('opens a public-events stream with repeated ownableId params and fromBlock', () => {
     const streams: ReturnType<typeof createEventSource>[] = [];
     const hub = new HubService('https://hub.example', vi.fn(), (url) => {
       const stream = createEventSource(url);
@@ -210,7 +218,7 @@ describe('HubService', () => {
     );
 
     expect(streams[0]?.url).toBe(
-      'https://hub.example/ownables/public-events/stream?id=ownable-1&id=ownable-2&from=11'
+      'https://hub.example/public-events?ownableId=ownable-1&ownableId=ownable-2&fromBlock=11'
     );
 
     streams[0]?.emit('public-event', {
@@ -228,7 +236,17 @@ describe('HubService', () => {
     expect(streams[0]?.closed).toBe(true);
   });
 
-  it('keeps discovery streaming separate from indexed public-events transport', () => {
+  it('rejects an unfiltered public-events stream before creating an EventSource', () => {
+    const eventSourceFactory = vi.fn((url: string) => createEventSource(url));
+    const hub = new HubService('https://hub.example', vi.fn(), eventSourceFactory);
+
+    expect(() => hub.watchOwnablePublicEvents([], { onEvent: vi.fn() })).toThrow(
+      'At least one ownable ID is required to watch public events'
+    );
+    expect(eventSourceFactory).not.toHaveBeenCalled();
+  });
+
+  it('keeps account discovery streaming separate from indexed public-events transport', () => {
     const streams: ReturnType<typeof createEventSource>[] = [];
     const hub = new HubService('https://hub.example', vi.fn(), (url) => {
       const stream = createEventSource(url);
@@ -236,11 +254,15 @@ describe('HubService', () => {
       return stream;
     });
     const onDiscovery = vi.fn();
+    const onError = vi.fn();
 
-    hub.watchAvailableOwnables('eip155:84532:0xabc', { onEvent: onDiscovery });
+    const subscription = hub.watchAvailableOwnables(ACCOUNT, {
+      onEvent: onDiscovery,
+      onError,
+    });
 
     expect(streams[0]?.url).toBe(
-      'https://hub.example/ownables/available/stream?owner=eip155%3A84532%3A0xabc'
+      'https://hub.example/accounts/eip155%3A84532%3A0xabc/available-ownables/events'
     );
 
     streams[0]?.emit('available-ownable', {
@@ -252,6 +274,8 @@ describe('HubService', () => {
         package: { cid: 'bafy' },
       },
     });
+    streams[0]!.onerror?.(new Error('offline'));
+    subscription.close();
 
     expect(onDiscovery).toHaveBeenCalledWith({
       owner: 'eip155:84532:0xabc',
@@ -262,6 +286,8 @@ describe('HubService', () => {
         package: { cid: 'bafy' },
       },
     });
+    expect(onError).toHaveBeenCalledWith(expect.any(Error));
+    expect(streams[0]?.closed).toBe(true);
   });
 });
 

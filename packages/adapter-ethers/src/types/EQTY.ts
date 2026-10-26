@@ -64,12 +64,6 @@ export interface EQTYServiceDeps {
   eqtyToken?: EthersEqtyTokenLike;
   signer?: EthersSignerLike;
   logger?: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
-  lockableClient?: {
-    ownerOf(tokenId: bigint): Promise<string>;
-    isLocked(tokenId: bigint): Promise<boolean>;
-    unlockChallenge(tokenId: bigint): Promise<string | bigint>;
-    isUnlockProofValid(tokenId: bigint, proof: string): Promise<boolean>;
-  };
 }
 
 export interface EIP1193Provider {

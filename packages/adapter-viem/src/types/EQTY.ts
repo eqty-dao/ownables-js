@@ -56,10 +56,4 @@ export interface EQTYServiceDeps {
   eqtyToken?: EqtyTokenReader;
   signer?: ViemSigner;
   logger?: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
-  lockableClient?: {
-    ownerOf(tokenId: bigint): Promise<string>;
-    isLocked(tokenId: bigint): Promise<boolean>;
-    unlockChallenge(tokenId: bigint): Promise<string | bigint>;
-    isUnlockProofValid(tokenId: bigint, proof: string): Promise<boolean>;
-  };
 }

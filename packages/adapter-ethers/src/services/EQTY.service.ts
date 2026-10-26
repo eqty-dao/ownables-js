@@ -247,7 +247,6 @@ export default class EQTYService {
   private readonly anchorQueue: Array<{ key: Binary; value: Binary }> = [];
   public readonly signer: EthersSignerLike;
   private readonly logger: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
-  private readonly lockableClientOverride;
   private readonly eqtyTokenOverride;
   private readonly anchorContractAddress: `0x${string}`;
 
@@ -304,7 +303,6 @@ export default class EQTYService {
 
     this.signer = options.deps?.signer ?? new EthersSignerAdapter(this.signerClient as Signer);
     this.logger = options.deps?.logger ?? console;
-    this.lockableClientOverride = options.deps?.lockableClient;
     this.eqtyTokenOverride = options.deps?.eqtyToken;
   }
 
@@ -490,62 +488,5 @@ export default class EQTYService {
     >
   ): Promise<AnchorValidationResult> {
     return this.validateAnchors(...anchors);
-  }
-
-  private lockableContract(address: string) {
-    if (this.lockableClientOverride) return this.lockableClientOverride;
-
-    /* v8 ignore next 15 */
-    return new Contract(
-      getAddress(address),
-      [
-        'function ownerOf(uint256 tokenId) view returns (address)',
-        'function isLocked(uint256 tokenId) view returns (bool)',
-        'function unlockChallenge(uint256 tokenId) view returns (bytes32)',
-        'function isUnlockProofValid(uint256 tokenId, bytes proof) view returns (bool)',
-      ],
-      this.signerClient
-    ) as unknown as {
-      ownerOf(tokenId: bigint): Promise<string>;
-      isLocked(tokenId: bigint): Promise<boolean>;
-      unlockChallenge(tokenId: bigint): Promise<string | bigint>;
-      isUnlockProofValid(tokenId: bigint, proof: string): Promise<boolean>;
-    };
-  }
-
-  private normalizeChallenge(challenge: string | bigint): string {
-    if (typeof challenge === 'bigint') {
-      return `0x${challenge.toString(16).padStart(64, '0')}`;
-    }
-
-    return challenge;
-  }
-
-  async getOwner(contractAddress: string, tokenId: string): Promise<string> {
-    return this.lockableContract(contractAddress).ownerOf(BigInt(tokenId));
-  }
-
-  async isLocked(contractAddress: string, tokenId: string): Promise<boolean> {
-    return this.lockableContract(contractAddress).isLocked(BigInt(tokenId));
-  }
-
-  async getUnlockChallenge(contractAddress: string, tokenId: string): Promise<string> {
-    const challenge = await this.lockableContract(contractAddress).unlockChallenge(BigInt(tokenId));
-    return this.normalizeChallenge(challenge);
-  }
-
-  async signUnlockChallenge(challenge: string): Promise<string> {
-    const bytes = challenge.startsWith('0x')
-      ? challenge
-      : `0x${Buffer.from(challenge, 'utf8').toString('hex')}`;
-    return this.signerClient.signMessage(bytes);
-  }
-
-  async isUnlockProofValid(
-    contractAddress: string,
-    tokenId: string,
-    proof: string
-  ): Promise<boolean> {
-    return this.lockableContract(contractAddress).isUnlockProofValid(BigInt(tokenId), proof);
   }
 }

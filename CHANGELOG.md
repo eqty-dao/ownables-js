@@ -1,3 +1,10 @@
+# [0.12.0](https://github.com/eqty-dao/ownables-js/compare/v0.11.1...v0.12.0) (2026-10-26)
+
+
+### Features
+
+* **platform-browser:** use canonical Hub routes ([ee0d45b](https://github.com/eqty-dao/ownables-js/commit/ee0d45bfa15d157b2a6568d8e924a2fdd125b650))
+
 ## [0.11.1](https://github.com/eqty-dao/ownables-js/compare/v0.11.0...v0.11.1) (2026-10-26)
 
 

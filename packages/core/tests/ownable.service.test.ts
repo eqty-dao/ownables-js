@@ -1735,6 +1735,73 @@ describe('OwnableService', () => {
     ]);
   });
 
+  it('recovers an applied local result after chain storage writes then reports an error', async () => {
+    const stateStore = createStateStore();
+    const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
+    await stateStore.createStore(`ownable:${chain.id}`);
+    await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
+    const event = { source: '0xsource', eventType: 'consume', data: '0x01', blockNumber: 8, transactionHash: `0x${'ab'.repeat(32)}`, transactionIndex: 0, logIndex: 1 };
+    const eqty = { address: '0xabc', sign: vi.fn(async (signedEvent: Event) => {
+      signedEvent.timestamp = 1; signedEvent.signerAddress = '0xabc'; signedEvent.signature = Binary.fromHex(`0x${'11'.repeat(65)}`);
+    }), emitPublicEvent: vi.fn().mockResolvedValue({ subjectId: Binary.fromHex(chain.id).hash().hex, ...event }) };
+    const service = createService(stateStore as any, { getStateDump: vi.fn().mockResolvedValue([]) } as any, eqty as any, {} as any);
+    const register = vi.fn().mockResolvedValue({ state: [['applied', 1]] });
+    (service as any)._rpc.set(chain.id, { encodePublicEvent: vi.fn().mockResolvedValue(Uint8Array.from([1])), register });
+    const actualStore = service.store.bind(service);
+    vi.spyOn(service, 'store').mockImplementationOnce(async (...args: any[]) => {
+      await actualStore(...args);
+      throw new Error('postwrite store error');
+    });
+
+    const local = await service.emitPublicEvent(chain, 'consume', { amount: 1 });
+    const confirmation = await service.applyIndexedPublicEventSnapshot(chain, [event]);
+
+    expect(local).toMatchObject({ stateDump: [['applied', 1]], appliedReplayKeys: [publicEventReplayKey(event)] });
+    expect(chain.events).toHaveLength(1);
+    expect(chain.events[0]?.isSigned()).toBe(true);
+    expect(confirmation.appliedReplayKeys).toEqual([]);
+    expect(register).toHaveBeenCalledTimes(1);
+    expect(eqty.sign).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['prewrite', 'postwrite'] as const)(
+    'handles %s applied replay-record write errors without a duplicate Hub replay',
+    async (mode) => {
+      const stateStore = createStateStore();
+      const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
+      await stateStore.createStore(`ownable:${chain.id}`);
+      await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
+      const event = { source: '0xsource', eventType: 'consume', data: '0x01', blockNumber: 8, transactionHash: `0x${(mode === 'prewrite' ? 'bc' : 'cd').repeat(32)}`, transactionIndex: 0, logIndex: 1 };
+      const eqty = { address: '0xabc', sign: vi.fn(async (signedEvent: Event) => {
+        signedEvent.timestamp = 1; signedEvent.signerAddress = '0xabc'; signedEvent.signature = Binary.fromHex(`0x${'11'.repeat(65)}`);
+      }), emitPublicEvent: vi.fn().mockResolvedValue({ subjectId: Binary.fromHex(chain.id).hash().hex, ...event }) };
+      const service = createService(stateStore as any, { getStateDump: vi.fn().mockResolvedValue([]) } as any, eqty as any, {} as any);
+      const register = vi.fn().mockResolvedValue({ state: [['applied', 1]] });
+      (service as any)._rpc.set(chain.id, { encodePublicEvent: vi.fn().mockResolvedValue(Uint8Array.from([1])), register });
+      const originalSet = stateStore.set.getMockImplementation()!;
+      stateStore.set.mockImplementation(async (store: string, key: string, value: any) => {
+        if (key === publicEventReplayKey(event) && value.localApplicationState === 'applied') {
+          if (mode === 'postwrite') await originalSet(store, key, value);
+          throw new Error(`${mode} replay record error`);
+        }
+        await originalSet(store, key, value);
+      });
+
+      const local = await service.emitPublicEvent(chain, 'consume', { amount: 1 });
+      const confirmation = await service.applyIndexedPublicEventSnapshot(chain, [event]);
+
+      expect(chain.events).toHaveLength(1);
+      expect(local.stateDump).toEqual([['applied', 1]]);
+      expect(confirmation.appliedReplayKeys).toEqual([]);
+      expect(register).toHaveBeenCalledTimes(1);
+      if (mode === 'prewrite') {
+        expect(local.pendingPublicEvents[0]).toMatchObject({ localApplicationState: 'failed' });
+      } else {
+        expect(local.pendingPublicEvents[0]).toMatchObject({ localApplicationState: 'applied' });
+      }
+    }
+  );
+
   it('orders same-transaction tracked events by block, transaction, then log index', async () => {
     const stateStore = createStateStore();
     const chainId = 'ordering-chain';

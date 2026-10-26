@@ -918,21 +918,9 @@ export default class OwnableService {
     await this.stateStore.delete(replayStoreId, provisionalPendingRecord.replayKey);
     await this.stateStore.set(replayStoreId, pendingRecord.replayKey, pendingRecord);
 
+    let applied: { stateDump: StateDump; registerEventHash?: string };
     try {
-      const applied = await this.applyPublicEventToChain(chain, runtimeEvent, stateDump, progress);
-      const appliedRecord = this.replayRecord(runtimeEvent, 'pending', ['local'], {
-        localApplicationState: 'applied',
-        insertionAnchor,
-        ...(applied.registerEventHash ? { registerEventHash: applied.registerEventHash } : {}),
-      });
-      await this.stateStore.set(replayStoreId, appliedRecord.replayKey, appliedRecord);
-
-      const result = this.emptyReplayAttemptResult(applied.stateDump);
-      result.appliedEvents.push(runtimeEvent);
-      result.appliedReplayKeys.push(appliedRecord.replayKey);
-      result.appliedPublicEvents.push({ replayKey: appliedRecord.replayKey, event: runtimeEvent });
-      result.pendingPublicEvents.push(appliedRecord);
-      return result;
+      applied = await this.applyPublicEventToChain(chain, runtimeEvent, stateDump, progress);
     } catch (cause) {
       const failedRecord = this.replayRecord(runtimeEvent, 'pending', ['local'], {
         localApplicationState: 'failed',
@@ -952,6 +940,56 @@ export default class OwnableService {
       });
       return result;
     }
+
+    const appliedRecord = this.replayRecord(runtimeEvent, 'pending', ['local'], {
+      localApplicationState: 'applied',
+      insertionAnchor,
+      ...(applied.registerEventHash ? { registerEventHash: applied.registerEventHash } : {}),
+    });
+    try {
+      await this.stateStore.set(replayStoreId, appliedRecord.replayKey, appliedRecord);
+    } catch (cause) {
+      const persistedRecord = (await this.stateStore
+        .get(replayStoreId, appliedRecord.replayKey)
+        .catch(() => undefined)) as ReconciledPublicEvent | undefined;
+      if (persistedRecord?.localApplicationState === 'applied') {
+        return this.localAppliedReplayResult(applied.stateDump, runtimeEvent, persistedRecord);
+      }
+
+      const failedRecord = this.replayRecord(runtimeEvent, 'pending', ['local'], {
+        localApplicationState: 'failed',
+        localDisplayError: this.localDisplayError(cause),
+        insertionAnchor,
+        ...(applied.registerEventHash ? { registerEventHash: applied.registerEventHash } : {}),
+      });
+      await this.stateStore.set(replayStoreId, failedRecord.replayKey, failedRecord);
+
+      const result = this.emptyReplayAttemptResult(applied.stateDump);
+      result.complete = false;
+      result.pendingPublicEvents.push(failedRecord);
+      result.ignoredPublicEvents.push({
+        replayKey: failedRecord.replayKey,
+        event: runtimeEvent,
+        reason: 'register_failed',
+        cause,
+      });
+      return result;
+    }
+
+    return this.localAppliedReplayResult(applied.stateDump, runtimeEvent, appliedRecord);
+  }
+
+  private localAppliedReplayResult(
+    stateDump: StateDump,
+    event: IndexedPublicEvent,
+    record: ReconciledPublicEvent
+  ): ReplayAttemptResult {
+    const result = this.emptyReplayAttemptResult(stateDump);
+    result.appliedEvents.push(event);
+    result.appliedReplayKeys.push(record.replayKey);
+    result.appliedPublicEvents.push({ replayKey: record.replayKey, event });
+    result.pendingPublicEvents.push(record);
+    return result;
   }
 
   async submitAnchors(onProgress?: LogProgress): Promise<string | undefined> {

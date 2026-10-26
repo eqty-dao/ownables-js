@@ -1,3 +1,10 @@
+## [0.12.1](https://github.com/eqty-dao/ownables-js/compare/v0.12.0...v0.12.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* retain address normalization for anchor validation ([96237c9](https://github.com/eqty-dao/ownables-js/commit/96237c9f4c6a9f956e27e72932b93dfc3f4e6412))
+
 # [0.12.0](https://github.com/eqty-dao/ownables-js/compare/v0.11.1...v0.12.0) (2026-10-26)
 
 

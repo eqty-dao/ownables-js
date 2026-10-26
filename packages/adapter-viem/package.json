@@ -1,6 +1,6 @@
 {
   "name": "@ownables/adapter-viem",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "type": "module",
   "main": "dist/adapter-viem/src/index.js",
   "types": "dist/adapter-viem/src/index.d.ts",

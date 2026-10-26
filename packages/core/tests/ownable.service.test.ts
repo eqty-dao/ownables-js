@@ -1779,8 +1779,14 @@ describe('OwnableService', () => {
       const register = vi.fn().mockResolvedValue({ state: [['applied', 1]] });
       (service as any)._rpc.set(chain.id, { encodePublicEvent: vi.fn().mockResolvedValue(Uint8Array.from([1])), register });
       const originalSet = stateStore.set.getMockImplementation()!;
+      let failedAppliedRecordWrite = false;
       stateStore.set.mockImplementation(async (store: string, key: string, value: any) => {
-        if (key === publicEventReplayKey(event) && value.localApplicationState === 'applied') {
+        if (
+          !failedAppliedRecordWrite &&
+          key === publicEventReplayKey(event) &&
+          value.localApplicationState === 'applied'
+        ) {
+          failedAppliedRecordWrite = true;
           if (mode === 'postwrite') await originalSet(store, key, value);
           throw new Error(`${mode} replay record error`);
         }

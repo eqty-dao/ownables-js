@@ -902,6 +902,7 @@ describe('OwnableService', () => {
       event,
       status: 'confirmed',
       sources: ['stream'],
+      localApplicationState: 'applied',
     });
   });
 
@@ -1563,14 +1564,7 @@ describe('OwnableService', () => {
 
   it('confirms a pending local public event by replay identity instead of transaction hash alone', async () => {
     const stateStore = createStateStore();
-    const chain = {
-      id: `0x${'1'.repeat(98)}`,
-      state: { hex: '0xstate' },
-      latestHash: { hex: `0x${'1'.repeat(64)}` },
-      toJSON: vi.fn().mockReturnValue({ id: `0x${'1'.repeat(98)}`, events: [] }),
-      add: vi.fn(),
-      events: [],
-    } as any;
+    const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
     await stateStore.createStore(`ownable:${chain.id}`);
     await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
     const eqty = {
@@ -1605,7 +1599,8 @@ describe('OwnableService', () => {
     (service as any)._rpc.set(chain.id, { encodePublicEvent, register });
     vi.spyOn(service, 'store').mockResolvedValue(undefined as any);
 
-    await service.emitPublicEvent(chain, 'consume', { amount: 1 });
+    const localReplay = await service.emitPublicEvent(chain, 'consume', { amount: 1 });
+    expect(localReplay.pendingPublicEvents[0]?.registerEventHash).toMatch(/^0x/);
 
     const confirmation = await service.applyIndexedPublicEventSnapshot(chain, [
       {

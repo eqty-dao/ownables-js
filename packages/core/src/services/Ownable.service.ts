@@ -404,6 +404,25 @@ export default class OwnableService {
     return message.slice(0, 280) || 'Unable to apply public event locally';
   }
 
+  private signedRegisterEventHash(chain: EventChain, event: IndexedPublicEvent): string | undefined {
+    const replayKey = this.replay.key(event);
+    const registerEvent = chain.events.find((candidate) => {
+      if (!candidate.isSigned()) return false;
+      const data = candidate.parsedData as Partial<PublicEvent> & { '@context'?: string };
+      return (
+        data['@context'] === 'register_msg.json' &&
+        data.transactionHash !== undefined &&
+        data.logIndex !== undefined &&
+        this.replay.key({
+          ...event,
+          transactionHash: data.transactionHash,
+          logIndex: data.logIndex,
+        }) === replayKey
+      );
+    });
+    return registerEvent?.hash.hex;
+  }
+
   private async applyPublicEventToChain(
     chain: EventChain,
     event: PublicEvent,
@@ -419,13 +438,32 @@ export default class OwnableService {
       info,
       stateDump
     );
+    const candidate = EventChain.from(chain.toJSON());
     const registerEvent = new Event({
       '@context': 'register_msg.json',
       ...event,
     });
-    registerEvent.addTo(chain);
-    await progress.step('signPublicEvent', () => this.eqty.sign(registerEvent));
-    await this.store(chain, state);
+    registerEvent.addTo(candidate);
+    try {
+      await progress.step('signPublicEvent', () => this.eqty.sign(registerEvent));
+      await this.store(candidate, state);
+      chain.events = candidate.events;
+    } catch (cause) {
+      const persistedChain = await this.stateStore
+        .get(`ownable:${chain.id}`, 'chain')
+        .catch(() => undefined);
+      if (persistedChain && registerEvent.isSigned()) {
+        const recoveredChain = EventChain.from(persistedChain);
+        const persistedEvent = recoveredChain.events.find(
+          (stored) => stored.isSigned() && stored.hash.hex === registerEvent.hash.hex
+        );
+        if (persistedEvent) {
+          chain.events = recoveredChain.events;
+          return { stateDump: state, registerEventHash: persistedEvent.hash.hex };
+        }
+      }
+      throw cause;
+    }
 
     return {
       stateDump: state,
@@ -696,6 +734,25 @@ export default class OwnableService {
         );
         await this.stateStore.set(replayStoreId, replayKey, confirmedRecord);
         base.confirmedPendingPublicEvents.push(confirmedRecord);
+        continue;
+      }
+
+      const signedRegisterEventHash = this.signedRegisterEventHash(chain, indexedEvent);
+      if (signedRegisterEventHash) {
+        const confirmedRecord = this.replayRecord(
+          indexedEvent,
+          'confirmed',
+          existing ? this.mergeReplayRecordSources(existing.sources, source) : [source],
+          {
+            localApplicationState: 'applied',
+            ...this.replayRecordPersistenceDetails(existing),
+            registerEventHash: signedRegisterEventHash,
+          }
+        );
+        await this.stateStore.set(replayStoreId, replayKey, confirmedRecord);
+        if (existing?.status === 'pending') {
+          base.confirmedPendingPublicEvents.push(confirmedRecord);
+        }
         continue;
       }
 

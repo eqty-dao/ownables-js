@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Binary, EventChain } from 'eqty-core';
+import { Binary, Event, EventChain } from 'eqty-core';
 
 import OwnableService from '../src/services/Ownable.service';
 import { PublicEventReplayService } from '../src/services/ReplayAuthority.service';
@@ -1474,16 +1474,44 @@ describe('OwnableService', () => {
     expect(registerSpy).not.toHaveBeenCalled();
   });
 
+  it('removes the private provisional record when the wallet rejects', async () => {
+    const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
+    const stateStore = createStateStore();
+    await stateStore.createStore(`ownable:${chain.id}`);
+    await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
+    const walletError = new Error('wallet rejected');
+    const eqty = {
+      address: '0xabc',
+      sign: vi.fn(),
+      emitPublicEvent: vi.fn().mockRejectedValue(walletError),
+    };
+    const service = createService(
+      stateStore as any,
+      { getStateDump: vi.fn().mockResolvedValue([]) } as any,
+      eqty as any,
+      {} as any
+    );
+    const register = vi.fn();
+    (service as any)._rpc.set(chain.id, {
+      encodePublicEvent: vi.fn().mockResolvedValue(Uint8Array.from([1])),
+      register,
+    });
+    const store = vi.spyOn(service, 'store');
+
+    await expect(service.emitPublicEvent(chain, 'consume', { amount: 1 })).rejects.toThrow(
+      walletError
+    );
+
+    expect(await service.listTrackedPublicEvents(chain.id)).toEqual([]);
+    expect(register).not.toHaveBeenCalled();
+    expect(eqty.sign).not.toHaveBeenCalled();
+    expect(store).not.toHaveBeenCalled();
+    expect(chain.events).toHaveLength(0);
+  });
+
   it('keeps a failed local application pending and repairs it on matching Hub delivery', async () => {
     const stateStore = createStateStore();
-    const chain = {
-      id: `0x${'1'.repeat(98)}`,
-      state: { hex: '0xstate' },
-      latestHash: { hex: `0x${'1'.repeat(64)}` },
-      toJSON: vi.fn().mockReturnValue({ id: `0x${'1'.repeat(98)}`, events: [] }),
-      add: vi.fn(),
-      events: [],
-    } as any;
+    const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
     await stateStore.createStore(`ownable:${chain.id}`);
     await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
     const event = {
@@ -1497,7 +1525,11 @@ describe('OwnableService', () => {
     };
     const eqty = {
       address: '0xabc',
-      sign: vi.fn(),
+      sign: vi.fn(async (signedEvent: Event) => {
+        signedEvent.timestamp ??= 1;
+        signedEvent.signerAddress ??= '0xabc';
+        signedEvent.signature = Binary.fromHex(`0x${'11'.repeat(65)}`);
+      }),
       emitPublicEvent: vi.fn().mockResolvedValue({
         subjectId: Binary.fromHex(chain.id).hash().hex,
         ...event,
@@ -1533,10 +1565,16 @@ describe('OwnableService', () => {
         },
       ],
     });
+    expect(chain.events).toHaveLength(0);
+    expect(eqty.sign).not.toHaveBeenCalled();
 
     const repaired = await service.applyIndexedPublicEventSnapshot(chain, [event]);
 
     expect(register).toHaveBeenCalledTimes(2);
+    expect(eqty.sign).toHaveBeenCalledTimes(1);
+    expect((service.store as any)).toHaveBeenCalledTimes(1);
+    expect(chain.events).toHaveLength(1);
+    expect(chain.events[0]?.isSigned()).toBe(true);
     expect(repaired).toMatchObject({
       stateDump: [['repaired', 1]],
       appliedReplayKeys: [publicEventReplayKey(event)],
@@ -1560,6 +1598,182 @@ describe('OwnableService', () => {
     expect((await service.listTrackedPublicEvents(chain.id))[0]).not.toHaveProperty(
       'localDisplayError'
     );
+  });
+
+  it.each(['signing', 'persistence'] as const)(
+    'rolls back a local public event after %s failure and repairs it once',
+    async (failure) => {
+      const stateStore = createStateStore();
+      const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
+      await stateStore.createStore(`ownable:${chain.id}`);
+      await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
+      const event = {
+        source: '0xsource',
+        eventType: 'consume',
+        data: `0x${'33'.repeat(4)}`,
+        blockNumber: 5,
+        transactionHash: `0x${'55'.repeat(32)}`,
+        transactionIndex: 2,
+        logIndex: 9,
+      };
+      const eqty = {
+        address: '0xabc',
+        sign: vi
+          .fn()
+          .mockImplementationOnce(async () => {
+            if (failure === 'signing') throw new Error('sign failed');
+          })
+          .mockImplementation(async (signedEvent: Event) => {
+            signedEvent.timestamp ??= 1;
+            signedEvent.signerAddress ??= '0xabc';
+            signedEvent.signature = Binary.fromHex(`0x${'11'.repeat(65)}`);
+          }),
+        emitPublicEvent: vi.fn().mockResolvedValue({
+          subjectId: Binary.fromHex(chain.id).hash().hex,
+          ...event,
+        }),
+      };
+      const service = createService(
+        stateStore as any,
+        { getStateDump: vi.fn().mockResolvedValue([]) } as any,
+        eqty as any,
+        {} as any
+      );
+      const register = vi.fn().mockResolvedValue({ state: [['repaired', 1]] });
+      (service as any)._rpc.set(chain.id, {
+        encodePublicEvent: vi.fn().mockResolvedValue(Uint8Array.from([1])),
+        register,
+      });
+      const store = vi.spyOn(service, 'store');
+      if (failure === 'persistence') {
+        store.mockRejectedValueOnce(new Error('store failed')).mockResolvedValue(undefined as any);
+      }
+
+      const failed = await service.emitPublicEvent(chain, 'consume', { amount: 1 });
+
+      expect(failed.complete).toBe(false);
+      expect(failed.pendingPublicEvents[0]).toMatchObject({
+        localApplicationState: 'failed',
+      });
+      expect(chain.events).toHaveLength(0);
+      expect(chain.isSigned()).toBe(true);
+
+      const repaired = await service.applyIndexedPublicEventSnapshot(chain, [event]);
+
+      expect(register).toHaveBeenCalledTimes(2);
+      expect(eqty.sign).toHaveBeenCalledTimes(2);
+      expect(store).toHaveBeenCalledTimes(2);
+      expect(chain.events).toHaveLength(1);
+      expect(chain.events[0]?.isSigned()).toBe(true);
+      expect(repaired).toMatchObject({
+        stateDump: [['repaired', 1]],
+        confirmedPendingPublicEvents: [
+          { replayKey: publicEventReplayKey(event), localApplicationState: 'applied' },
+        ],
+      });
+    }
+  );
+
+  it('retains a failed event anchor when a later private event precedes Hub repair', async () => {
+    const stateStore = createStateStore();
+    const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
+    await stateStore.createStore(`ownable:${chain.id}`);
+    await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
+    const event = {
+      source: '0xsource', eventType: 'consume', data: `0x${'33'.repeat(4)}`,
+      blockNumber: 5, transactionHash: `0x${'66'.repeat(32)}`, transactionIndex: 2, logIndex: 9,
+    };
+    const eqty = {
+      address: '0xabc',
+      sign: vi.fn(async (signedEvent: Event) => {
+        signedEvent.timestamp ??= 1;
+        signedEvent.signerAddress ??= '0xabc';
+        signedEvent.signature = Binary.fromHex(`0x${'11'.repeat(65)}`);
+      }),
+      emitPublicEvent: vi.fn().mockResolvedValue({ subjectId: Binary.fromHex(chain.id).hash().hex, ...event }),
+    };
+    const service = createService(stateStore as any, { getStateDump: vi.fn().mockResolvedValue([]) } as any, eqty as any, {} as any);
+    const register = vi.fn().mockRejectedValueOnce(new Error('temporary')).mockResolvedValueOnce({ state: [['repaired', 1]] });
+    (service as any)._rpc.set(chain.id, { encodePublicEvent: vi.fn().mockResolvedValue(Uint8Array.from([1])), register });
+    vi.spyOn(service, 'store').mockResolvedValue(undefined as any);
+
+    await service.emitPublicEvent(chain, 'consume', { amount: 1 });
+    const privateEvent = new Event({ '@context': 'execute_msg.json', update: {} }).addTo(chain);
+    await eqty.sign(privateEvent);
+    const repaired = await service.applyIndexedPublicEventSnapshot(chain, [event]);
+
+    expect(chain.events).toHaveLength(2);
+    expect(chain.events.every((stored) => stored.isSigned())).toBe(true);
+    expect(repaired.confirmedPendingPublicEvents[0]).toMatchObject({
+      insertionAnchor: { privateEventCount: 0, ordinal: 0 },
+    });
+    expect(register).toHaveBeenCalledTimes(2);
+  });
+
+  it('assigns stable distinct ordinals to failed receipts at the same chain anchor', async () => {
+    const stateStore = createStateStore();
+    const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
+    await stateStore.createStore(`ownable:${chain.id}`);
+    await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
+    const first = { source: '0xsource', eventType: 'consume', data: '0x01', blockNumber: 5, transactionHash: `0x${'77'.repeat(32)}`, transactionIndex: 2, logIndex: 1 };
+    const second = { ...first, data: '0x02', transactionHash: `0x${'88'.repeat(32)}`, logIndex: 2 };
+    const service = createService(stateStore as any, { getStateDump: vi.fn().mockResolvedValue([]) } as any, {
+      address: '0xabc', sign: vi.fn(), emitPublicEvent: vi.fn()
+        .mockResolvedValueOnce({ subjectId: Binary.fromHex(chain.id).hash().hex, ...first })
+        .mockResolvedValueOnce({ subjectId: Binary.fromHex(chain.id).hash().hex, ...second }),
+    } as any, {} as any);
+    (service as any)._rpc.set(chain.id, { encodePublicEvent: vi.fn().mockResolvedValue(Uint8Array.from([1])), register: vi.fn().mockRejectedValue(new Error('temporary')) });
+
+    await service.emitPublicEvent(chain, 'consume', { amount: 1 });
+    await service.emitPublicEvent(chain, 'consume', { amount: 2 });
+
+    expect(await service.listTrackedPublicEvents(chain.id)).toMatchObject([
+      { replayKey: publicEventReplayKey(first), insertionAnchor: { privateEventCount: 0, ordinal: 0 }, localApplicationState: 'failed' },
+      { replayKey: publicEventReplayKey(second), insertionAnchor: { privateEventCount: 0, ordinal: 1 }, localApplicationState: 'failed' },
+    ]);
+  });
+
+  it('orders same-transaction tracked events by block, transaction, then log index', async () => {
+    const stateStore = createStateStore();
+    const chainId = 'ordering-chain';
+    const storeId = `ownable:${chainId}.public-event-replays`;
+    await stateStore.createStore(storeId);
+    const earlier = { source: '0xsource', eventType: 'consume', data: '0x01', blockNumber: 7, transactionHash: `0x${'99'.repeat(32)}`, transactionIndex: 3, logIndex: 1 };
+    const later = { ...earlier, data: '0x02', logIndex: 2 };
+    await stateStore.set(storeId, publicEventReplayKey(later), { replayKey: publicEventReplayKey(later), event: later, status: 'confirmed', sources: ['snapshot'], localApplicationState: 'applied' });
+    await stateStore.set(storeId, publicEventReplayKey(earlier), { replayKey: publicEventReplayKey(earlier), event: earlier, status: 'confirmed', sources: ['snapshot'], localApplicationState: 'applied' });
+    const service = createService(stateStore as any, {} as any, {} as any, {} as any);
+
+    expect((await service.listTrackedPublicEvents(chainId)).map((record) => record.replayKey)).toEqual([
+      publicEventReplayKey(earlier), publicEventReplayKey(later),
+    ]);
+  });
+
+  it('replays a legacy pending record without local application state', async () => {
+    const stateStore = createStateStore();
+    const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
+    const storeId = `ownable:${chain.id}.public-event-replays`;
+    await stateStore.createStore(`ownable:${chain.id}`, storeId);
+    await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
+    const event = { source: '0xsource', eventType: 'consume', data: '0x01', blockNumber: 7, transactionHash: `0x${'aa'.repeat(32)}`, transactionIndex: 3, logIndex: 1 };
+    await stateStore.set(storeId, publicEventReplayKey(event), { replayKey: publicEventReplayKey(event), event, status: 'pending', sources: ['local'] });
+    const eqty = { address: '0xabc', sign: vi.fn(async (signedEvent: Event) => {
+      signedEvent.timestamp = 1; signedEvent.signerAddress = '0xabc'; signedEvent.signature = Binary.fromHex(`0x${'11'.repeat(65)}`);
+    }) };
+    const service = createService(stateStore as any, { getStateDump: vi.fn().mockResolvedValue([]) } as any, eqty as any, {} as any);
+    const register = vi.fn().mockResolvedValue({ state: [['replayed', 1]] });
+    (service as any)._rpc.set(chain.id, { register });
+    vi.spyOn(service, 'store').mockResolvedValue(undefined as any);
+
+    const replayed = await service.applyIndexedPublicEventSnapshot(chain, [event]);
+
+    expect(register).toHaveBeenCalledTimes(1);
+    expect(eqty.sign).toHaveBeenCalledTimes(1);
+    expect(chain.events).toHaveLength(1);
+    expect(replayed).toMatchObject({ appliedReplayKeys: [publicEventReplayKey(event)] });
+    expect(await service.listTrackedPublicEvents(chain.id)).toMatchObject([
+      { replayKey: publicEventReplayKey(event), status: 'confirmed', localApplicationState: 'applied' },
+    ]);
   });
 
   it('confirms a pending local public event by replay identity instead of transaction hash alone', async () => {

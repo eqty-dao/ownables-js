@@ -13,7 +13,6 @@ jobs:
       matrix:
         package:
           - core
-          - authority
           - platform-browser
           - adapter-viem
           - adapter-ethers

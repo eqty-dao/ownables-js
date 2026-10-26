@@ -10,7 +10,7 @@ export * from './types/OwnableRuntime.js';
 export * from './types/SIWE.js';
 export * from './types/EventChainStore.js';
 export * from './types/Polling.js';
-export * from './types/Authority.js';
+export * from './types/Archive.js';
 export * from './types/Replay.js';
 export { default as TypedDict } from './types/TypedDict.js';
 
@@ -22,4 +22,3 @@ export * from './services/Progress.service.js';
 export { default as EventChainService } from './services/EventChain.service.js';
 export { default as OwnableService } from './services/Ownable.service.js';
 export { default as WorkerRPC } from './services/WorkerRPC.service.js';
-export { default as StateStoreRecordStore } from './services/StateStoreRecordStore.service.js';

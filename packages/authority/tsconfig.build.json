@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "exclude": ["tests/**/*.ts"],
-  "compilerOptions": {
-    "noEmit": false,
-    "outDir": "dist",
-    "tsBuildInfoFile": "dist/.tsbuildinfo"
-  }
-}

@@ -11,9 +11,9 @@ yarn add @ownables/core
 ## Main exports
 
 - Interfaces: `AnchorProvider`, `StateStore`, `PackageAssetIO`, `RuntimeSourceProvider`, `RuntimeRPCProvider`
-- Services: `AnchorValidationService`, `EventChainService`, `OwnableService`, `ProgressService`, `PublicEventReplayService`, `ReplayAuthorityService`, `WorkerRPC`, `StateStoreRecordStore`, `PollingService` (legacy)
+- Services: `AnchorValidationService`, `EventChainService`, `OwnableService`, `ProgressService`, `PublicEventReplayService`, `ReplayAuthorityService`, `WorkerRPC`, `PollingService` (legacy)
 - Utility: `calculateOwnablePackageCid` and `OwnablePackageCidEntry`, available exclusively from `@ownables/core/utils`
-- Types: `TypedPackage`, `TypedOwnableInfo`, `OwnableRuntime`, `MessageInfo`, `SIWE`, `Authority`, `Replay`, and related runtime types
+- Types: `TypedPackage`, `TypedOwnableInfo`, `OwnableRuntime`, `MessageInfo`, `SIWE`, `Archive`, `Replay`, and related runtime types
 
 ## Quick start
 

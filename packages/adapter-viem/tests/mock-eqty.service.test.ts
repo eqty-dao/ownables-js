@@ -58,9 +58,4 @@ describe('MockEQTYService', () => {
     expect(subject.signWith).toHaveBeenCalledWith(service.signer);
   });
 
-  it('signs non-hex challenge strings and validates malformed proofs', async () => {
-    const service = new MockEQTYService('0xabc', 84532);
-    await expect(service.signUnlockChallenge('hello')).resolves.toMatch(/^0x[0-9a-f]{130}$/);
-    await expect(service.isUnlockProofValid('0xdef', '1', 'bad')).resolves.toBe(false);
-  });
 });

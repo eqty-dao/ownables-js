@@ -570,61 +570,6 @@ describe('Ethers EQTYService', () => {
     expect(result.details[key.hex]?.timestamp).toBeUndefined();
   });
 
-  it('provides lockable operations through injected lockable client', async () => {
-    const signer = {
-      provider: {
-        getBlockNumber: vi.fn().mockResolvedValue(0),
-        getLogs: vi.fn().mockResolvedValue([]),
-      },
-      getAddress: vi.fn().mockResolvedValue('0xabc'),
-      signTypedData: vi.fn().mockResolvedValue('0xsig'),
-      signMessage: vi.fn().mockResolvedValue('0xproof'),
-    };
-    const lockableClient = {
-      ownerOf: vi.fn().mockResolvedValue('0xowner'),
-      isLocked: vi.fn().mockResolvedValue(true),
-      unlockChallenge: vi.fn().mockResolvedValue(`0x${'1'.repeat(64)}`),
-      isUnlockProofValid: vi.fn().mockResolvedValue(true),
-    };
-
-    const service = createService('0xabc', 84532, {
-      signer: signer as any,
-      deps: { lockableClient, signer: signer as any, anchorClient: { anchor: vi.fn() } },
-    });
-
-    await expect(service.getOwner('0xdef', '1')).resolves.toBe('0xowner');
-    await expect(service.isLocked('0xdef', '1')).resolves.toBe(true);
-    await expect(service.getUnlockChallenge('0xdef', '1')).resolves.toBe(`0x${'1'.repeat(64)}`);
-    await expect(service.signUnlockChallenge(`0x${'2'.repeat(64)}`)).resolves.toBe('0xproof');
-    await expect(service.isUnlockProofValid('0xdef', '1', '0xproof')).resolves.toBe(true);
-  });
-
-  it('normalizes bigint unlock challenge and signs utf8 challenge payload', async () => {
-    const signer = {
-      provider: {
-        getBlockNumber: vi.fn().mockResolvedValue(0),
-        getLogs: vi.fn().mockResolvedValue([]),
-      },
-      getAddress: vi.fn().mockResolvedValue('0xabc'),
-      signTypedData: vi.fn().mockResolvedValue('0xsig'),
-      signMessage: vi.fn().mockResolvedValue('0xproof'),
-    };
-    const lockableClient = {
-      ownerOf: vi.fn().mockResolvedValue('0xowner'),
-      isLocked: vi.fn().mockResolvedValue(true),
-      unlockChallenge: vi.fn().mockResolvedValue(123n),
-      isUnlockProofValid: vi.fn().mockResolvedValue(true),
-    };
-    const service = createService('0xabc', 84532, {
-      signer: signer as any,
-      deps: { lockableClient, signer: signer as any, anchorClient: { anchor: vi.fn() } },
-    });
-
-    await expect(service.getUnlockChallenge('0xdef', '1')).resolves.toMatch(/^0x[0-9a-f]{64}$/);
-    await expect(service.signUnlockChallenge('hello')).resolves.toBe('0xproof');
-    expect(signer.signMessage).toHaveBeenCalled();
-  });
-
   it('marks verification false on mismatched values and log errors', async () => {
     const key = Binary.fromHex(`0x${'c'.repeat(64)}`);
     const expected = Binary.fromHex(`0x${'d'.repeat(64)}`);

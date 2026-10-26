@@ -1,3 +1,15 @@
+# [1.0.0](https://github.com/eqty-dao/ownables-js/compare/v0.12.1...v1.0.0) (2026-10-26)
+
+
+### Bug Fixes
+
+* remove stale authority configuration ([1e76f78](https://github.com/eqty-dao/ownables-js/commit/1e76f78ca0e7764c69874eb622ba809eeb0f7cf0))
+
+
+### BREAKING CHANGES
+
+* The @ownables/authority package and Lockable NFT bridge/unlock APIs are removed.
+
 ## [0.12.1](https://github.com/eqty-dao/ownables-js/compare/v0.12.0...v0.12.1) (2026-10-26)
 
 

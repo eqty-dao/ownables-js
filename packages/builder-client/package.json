@@ -1,6 +1,6 @@
 {
   "name": "@ownables/builder-client",
-  "version": "0.12.1",
+  "version": "1.0.0",
   "description": "DEPRECATED: obuilder API client. Use @ownables/builder for browser-first ownable deployment.",
   "type": "module",
   "main": "dist/index.js",

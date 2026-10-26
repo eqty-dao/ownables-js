@@ -1,6 +1,6 @@
 {
   "name": "@ownables/platform-react-native",
-  "version": "0.12.1",
+  "version": "1.0.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

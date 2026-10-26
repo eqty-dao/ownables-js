@@ -859,20 +859,21 @@ describe('OwnableService', () => {
 
   it('registers public events once and skips duplicates', async () => {
     const stateStore = createStateStore();
-    const chain = {
-      id: 'ownable-register',
-      state: { hex: '0xstate' },
-      latestHash: { hex: `0x${'1'.repeat(64)}` },
-      toJSON: vi.fn().mockReturnValue({ id: 'ownable-register', events: [] }),
-      add: vi.fn(),
-      events: [],
-    } as any;
+    const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
     await stateStore.createStore(`ownable:${chain.id}`);
     await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
     const service = createService(
       stateStore as any,
       { getStateDump: vi.fn().mockResolvedValue([['s', 1]]) } as any,
-      { address: '0xabc', sign: vi.fn(), anchor: vi.fn() } as any,
+      {
+        address: '0xabc',
+        sign: vi.fn(async (signedEvent: Event) => {
+          signedEvent.timestamp ??= 1;
+          signedEvent.signerAddress ??= '0xabc';
+          signedEvent.signature = Binary.fromHex(`0x${'11'.repeat(65)}`);
+        }),
+        anchor: vi.fn(),
+      } as any,
       {} as any
     );
     const register = vi.fn().mockResolvedValue({ state: [['next', 1]] });
@@ -903,6 +904,7 @@ describe('OwnableService', () => {
       status: 'confirmed',
       sources: ['stream'],
       localApplicationState: 'applied',
+      registerEventHash: expect.any(String),
     });
   });
 
@@ -1662,7 +1664,7 @@ describe('OwnableService', () => {
 
       expect(register).toHaveBeenCalledTimes(2);
       expect(eqty.sign).toHaveBeenCalledTimes(2);
-      expect(store).toHaveBeenCalledTimes(2);
+      expect(store).toHaveBeenCalledTimes(failure === 'signing' ? 1 : 2);
       expect(chain.events).toHaveLength(1);
       expect(chain.events[0]?.isSigned()).toBe(true);
       expect(repaired).toMatchObject({
@@ -1902,14 +1904,7 @@ describe('OwnableService', () => {
 
   it('merges snapshot and stream deliveries idempotently across the same replay identity', async () => {
     const stateStore = createStateStore();
-    const chain = {
-      id: 'ownable-stream',
-      state: { hex: '0xstate' },
-      latestHash: { hex: `0x${'1'.repeat(64)}` },
-      toJSON: vi.fn().mockReturnValue({ id: 'ownable-stream', events: [] }),
-      add: vi.fn(),
-      events: [],
-    } as any;
+    const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
     await stateStore.createStore(`ownable:${chain.id}`);
     await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
     const service = createService(
@@ -1920,7 +1915,15 @@ describe('OwnableService', () => {
           .mockResolvedValueOnce([])
           .mockResolvedValueOnce([['confirmed', 1]]),
       } as any,
-      { address: '0xabc', sign: vi.fn(), anchor: vi.fn() } as any,
+      {
+        address: '0xabc',
+        sign: vi.fn(async (signedEvent: Event) => {
+          signedEvent.timestamp ??= 1;
+          signedEvent.signerAddress ??= '0xabc';
+          signedEvent.signature = Binary.fromHex(`0x${'11'.repeat(65)}`);
+        }),
+        anchor: vi.fn(),
+      } as any,
       {} as any
     );
     const register = vi.fn().mockResolvedValue({ state: [['confirmed', 1]] });

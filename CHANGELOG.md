@@ -1,3 +1,10 @@
+# [0.11.0](https://github.com/eqty-dao/ownables-js/compare/v0.10.0...v0.11.0) (2026-10-26)
+
+
+### Features
+
+* **core:** apply submitted public events immediately ([#8](https://github.com/eqty-dao/ownables-js/issues/8)) ([d98c43c](https://github.com/eqty-dao/ownables-js/commit/d98c43c5b28f25dcb48fed6f80bf5cc2cc25f6a0))
+
 # [0.10.0](https://github.com/eqty-dao/ownables-js/compare/v0.9.1...v0.10.0) (2026-08-15)
 
 

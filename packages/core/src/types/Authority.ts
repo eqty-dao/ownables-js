@@ -35,6 +35,7 @@ export interface ArchiveService {
   readPackageZip(cid: string): Promise<Uint8Array>;
 }
 
+/** @deprecated Lockable NFT bridge gateway; existing unlock integrations remain operational pending recovery. */
 export interface LockableGateway {
   getOwner(contractAddress: string, tokenId: string): Promise<string>;
   isLocked(contractAddress: string, tokenId: string): Promise<boolean>;

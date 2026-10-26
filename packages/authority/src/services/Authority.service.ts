@@ -82,6 +82,12 @@ export interface AuthorityServiceOptions {
   now?: () => Date;
 }
 
+/**
+ * @deprecated Lockable NFT bridging is being retired. For new integrations, use
+ * public events and ordinary Ownable upload and verification. These do not
+ * unlock existing NFTs; retain this service for existing locks until recovery
+ * is established.
+ */
 export class AuthorityService {
   private readonly now: () => Date;
 
@@ -94,6 +100,10 @@ export class AuthorityService {
     this.now = options.now ?? (() => new Date());
   }
 
+  /**
+   * @deprecated Do not create new Lockable NFT bridges. Use public events and
+   * ordinary Ownable upload and verification for new integrations.
+   */
   async bridgeOwnableArchive(
     archive: Uint8Array,
     signerAddress?: string
@@ -126,6 +136,10 @@ export class AuthorityService {
     return { ...record, proof };
   }
 
+  /**
+   * @deprecated Existing locks may still need this proof. Keep unlock access
+   * until active locks and a verified recovery route are established.
+   */
   async getUnlockProof(cid: string, signerAddress?: string): Promise<string> {
     const record = await this.recordStore.getByCid(cid);
     if (!record) {
@@ -158,6 +172,10 @@ export class AuthorityService {
     return this.lockable.signUnlockChallenge(challenge);
   }
 
+  /**
+   * @deprecated Lockable NFT proof validation is being retired. Existing
+   * unlock integrations remain operational pending lock recovery.
+   */
   async isUnlockProofValid(
     _network: string,
     address: string,
@@ -167,6 +185,10 @@ export class AuthorityService {
     return this.lockable.isUnlockProofValid(address, id, proof);
   }
 
+  /**
+   * @deprecated This lookup is tied to historical Lockable NFT bridges. Use
+   * ordinary Ownable upload and verification for new integrations.
+   */
   async getOwnableCidFromNFT(nft: NftRef): Promise<OwnableCidLookup> {
     const record = await this.recordStore.getByNft(nft);
     if (!record) {

@@ -19,10 +19,12 @@ export class AuthorityError extends Error {
   }
 }
 
+/** @deprecated Result of the Lockable NFT bridge; do not create new bridges. */
 export interface BridgeOwnableResult extends BridgedOwnableRecord {
   proof: string;
 }
 
+/** @deprecated Lookup result for a historical Lockable NFT bridge. */
 export interface OwnableCidLookup {
   ownableCid: string;
   ownableLastOwner: string;
@@ -32,9 +34,14 @@ export interface OwnableCidLookup {
   nftOwner: string;
 }
 
+/** @deprecated Lockable NFT bridge contract; existing unlock access remains operational pending recovery. */
 export interface AuthorityServiceLike {
+  /** @deprecated Use public events and ordinary Ownable upload for new integrations. */
   bridgeOwnableArchive(archive: Uint8Array, signerAddress?: string): Promise<BridgeOwnableResult>;
+  /** @deprecated Retain for existing locks until a verified recovery route is available. */
   getUnlockProof(cid: string, signerAddress?: string): Promise<string>;
+  /** @deprecated Lockable NFT proof validation remains operational pending recovery. */
   isUnlockProofValid(network: string, address: string, id: string, proof: string): Promise<boolean>;
+  /** @deprecated Historical Lockable NFT bridge lookup; use ordinary Ownable verification. */
   getOwnableCidFromNFT(nft: NftRef): Promise<OwnableCidLookup>;
 }

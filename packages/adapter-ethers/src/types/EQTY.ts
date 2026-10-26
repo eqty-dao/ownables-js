@@ -64,6 +64,7 @@ export interface EQTYServiceDeps {
   eqtyToken?: EthersEqtyTokenLike;
   signer?: EthersSignerLike;
   logger?: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
+  /** @deprecated Lockable NFT bridge client; retain for existing locks pending recovery. */
   lockableClient?: {
     ownerOf(tokenId: bigint): Promise<string>;
     isLocked(tokenId: bigint): Promise<boolean>;

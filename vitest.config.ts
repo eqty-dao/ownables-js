@@ -29,9 +29,6 @@ export default defineConfig({
       '@ownables/platform-react-native': fileURLToPath(
         new URL('./packages/platform-react-native/src/index.ts', import.meta.url)
       ),
-      '@ownables/authority': fileURLToPath(
-        new URL('./packages/authority/src/index.ts', import.meta.url)
-      ),
     },
   },
   test: {

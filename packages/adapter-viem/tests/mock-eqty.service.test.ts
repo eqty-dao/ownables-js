@@ -57,5 +57,4 @@ describe('MockEQTYService', () => {
     ).resolves.toMatch(/^0x[1]{130}$/);
     expect(subject.signWith).toHaveBeenCalledWith(service.signer);
   });
-
 });

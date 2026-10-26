@@ -21,9 +21,7 @@
       "@ownables/platform-node": ["packages/platform-node/src/index.ts"],
       "@ownables/platform-node/*": ["packages/platform-node/src/*"],
       "@ownables/platform-react-native": ["packages/platform-react-native/src/index.ts"],
-      "@ownables/platform-react-native/*": ["packages/platform-react-native/src/*"],
-      "@ownables/authority": ["packages/authority/src/index.ts"],
-      "@ownables/authority/*": ["packages/authority/src/*"]
+      "@ownables/platform-react-native/*": ["packages/platform-react-native/src/*"]
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,

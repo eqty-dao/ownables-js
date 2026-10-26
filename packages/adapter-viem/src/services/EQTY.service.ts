@@ -7,6 +7,7 @@ import {
   decodeEventLog,
   getAddress,
   parseAbiItem,
+  toHex,
   zeroAddress,
 } from 'viem';
 import { base, baseSepolia } from 'viem/chains';
@@ -180,7 +181,7 @@ export default class EQTYService {
             },
           ],
           functionName: 'emitPublicEvent',
-          args: [subjectId, eventType, data],
+          args: [subjectId, eventType, toHex(data)],
           value: txOptions?.value,
         });
         const receipt = await (this.publicClient as any).waitForTransactionReceipt({

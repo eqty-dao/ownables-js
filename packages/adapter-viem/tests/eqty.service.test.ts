@@ -425,7 +425,11 @@ describe('EQTYService', () => {
 
     expect(anchorClient.anchor).toHaveBeenCalledWith(expect.any(Array), { value: 0n });
     expect(walletClient.writeContract).toHaveBeenCalledWith(
-      expect.objectContaining({ address: localAnchor })
+      expect.objectContaining({
+        address: localAnchor,
+        functionName: 'emitPublicEvent',
+        args: [`0x${'33'.repeat(32)}`, 'consume', '0x010203'],
+      })
     );
     expect(publicClient.readContract).toHaveBeenCalledWith(
       expect.objectContaining({ address: localAnchor })

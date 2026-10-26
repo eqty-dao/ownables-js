@@ -427,7 +427,10 @@ export default class OwnableService {
     await progress.step('signPublicEvent', () => this.eqty.sign(registerEvent));
     await this.store(chain, state);
 
-    return { stateDump: state, registerEventHash: registerEvent.hash?.hex };
+    return {
+      stateDump: state,
+      ...(registerEvent.isSigned() ? { registerEventHash: registerEvent.hash.hex } : {}),
+    };
   }
 
   private toRegisterRuntimeEvent(

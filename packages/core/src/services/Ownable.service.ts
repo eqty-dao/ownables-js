@@ -291,6 +291,15 @@ export default class OwnableService {
     return current.includes(next) ? current : [...current, next];
   }
 
+  private replayRecordPersistenceDetails(
+    record?: ReconciledPublicEvent
+  ): Pick<ReconciledPublicEvent, 'insertionAnchor' | 'registerEventHash'> {
+    return {
+      ...(record?.insertionAnchor ? { insertionAnchor: record.insertionAnchor } : {}),
+      ...(record?.registerEventHash ? { registerEventHash: record.registerEventHash } : {}),
+    };
+  }
+
   private async ensureReplayStore(chainId: string): Promise<string> {
     const replayStoreId = this.publicEventReplayStoreId(chainId);
     if (!(await this.stateStore.hasStore(replayStoreId))) {
@@ -413,7 +422,8 @@ export default class OwnableService {
     const registerEvent = new Event({
       '@context': 'register_msg.json',
       ...event,
-    }).addTo(chain);
+    });
+    registerEvent.addTo(chain);
     await progress.step('signPublicEvent', () => this.eqty.sign(registerEvent));
     await this.store(chain, state);
 
@@ -662,8 +672,7 @@ export default class OwnableService {
           this.mergeReplayRecordSources(existing.sources, source),
           {
             localApplicationState: existing.localApplicationState ?? 'applied',
-            insertionAnchor: existing.insertionAnchor,
-            registerEventHash: existing.registerEventHash,
+            ...this.replayRecordPersistenceDetails(existing),
           }
         );
         await this.stateStore.set(replayStoreId, replayKey, updated);
@@ -679,8 +688,7 @@ export default class OwnableService {
           this.mergeReplayRecordSources(existing.sources, source),
           {
             localApplicationState: 'applied',
-            insertionAnchor: existing.insertionAnchor,
-            registerEventHash: existing.registerEventHash,
+            ...this.replayRecordPersistenceDetails(existing),
           }
         );
         await this.stateStore.set(replayStoreId, replayKey, confirmedRecord);
@@ -706,8 +714,10 @@ export default class OwnableService {
             : [source],
           {
             localApplicationState: 'applied',
-            insertionAnchor: existing?.insertionAnchor,
-            registerEventHash: applied.registerEventHash,
+            ...this.replayRecordPersistenceDetails(existing),
+            ...(applied.registerEventHash
+              ? { registerEventHash: applied.registerEventHash }
+              : {}),
           }
         );
         await this.stateStore.set(replayStoreId, replayKey, confirmedRecord);
@@ -727,8 +737,7 @@ export default class OwnableService {
             {
               localApplicationState: 'failed',
               localDisplayError: this.localDisplayError(cause),
-              insertionAnchor: existing.insertionAnchor,
-              registerEventHash: existing.registerEventHash,
+              ...this.replayRecordPersistenceDetails(existing),
             }
           );
           await this.stateStore.set(replayStoreId, replayKey, failedRecord);
@@ -841,9 +850,10 @@ export default class OwnableService {
     }
 
     const runtimeEvent = this.toRegisterRuntimeEvent(publicEvent);
+    const insertionAnchor = await this.publicEventInsertionAnchor(chain);
     const pendingRecord = this.replayRecord(runtimeEvent, 'pending', ['local'], {
       localApplicationState: 'pending',
-      insertionAnchor: await this.publicEventInsertionAnchor(chain),
+      insertionAnchor,
     });
     await this.stateStore.delete(replayStoreId, provisionalPendingRecord.replayKey);
     await this.stateStore.set(replayStoreId, pendingRecord.replayKey, pendingRecord);
@@ -852,8 +862,8 @@ export default class OwnableService {
       const applied = await this.applyPublicEventToChain(chain, runtimeEvent, stateDump, progress);
       const appliedRecord = this.replayRecord(runtimeEvent, 'pending', ['local'], {
         localApplicationState: 'applied',
-        insertionAnchor: pendingRecord.insertionAnchor,
-        registerEventHash: applied.registerEventHash,
+        insertionAnchor,
+        ...(applied.registerEventHash ? { registerEventHash: applied.registerEventHash } : {}),
       });
       await this.stateStore.set(replayStoreId, appliedRecord.replayKey, appliedRecord);
 
@@ -867,7 +877,7 @@ export default class OwnableService {
       const failedRecord = this.replayRecord(runtimeEvent, 'pending', ['local'], {
         localApplicationState: 'failed',
         localDisplayError: this.localDisplayError(cause),
-        insertionAnchor: pendingRecord.insertionAnchor,
+        insertionAnchor,
       });
       await this.stateStore.set(replayStoreId, failedRecord.replayKey, failedRecord);
 

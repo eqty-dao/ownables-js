@@ -3,6 +3,7 @@ import {
   ZeroAddress,
   Contract,
   Interface,
+  getAddress,
   type Provider,
   type Signer,
   type TypedDataDomain,

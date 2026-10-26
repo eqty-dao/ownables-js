@@ -113,5 +113,4 @@ export default class MockEQTYService {
 
     return { verified: true, anchors: hashMap, map };
   }
-
 }

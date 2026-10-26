@@ -529,5 +529,4 @@ export default class EQTYService {
   async verifyAnchors(...anchors: any[]): Promise<AnchorValidationResult> {
     return this.validateAnchors(...anchors);
   }
-
 }

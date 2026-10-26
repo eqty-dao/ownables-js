@@ -126,5 +126,4 @@ export default class MockEQTYService {
 
     return { verified: true, anchors: txMap, map: valueMap };
   }
-
 }

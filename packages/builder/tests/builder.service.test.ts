@@ -353,6 +353,31 @@ describe('@ownables/builder', () => {
     });
   });
 
+  it('buildInstantiateMsg ignores retired identity input from JavaScript callers', () => {
+    const retiredIdentityField = ['n', 'f', 't'].join('');
+    const payload = buildInstantiateMsg({
+      name: 'Name',
+      description: 'Desc',
+      packageCid: 'bafy-test',
+      networkId: 84,
+      [retiredIdentityField]: {
+        network: 'eip155:1',
+        address: '0x123',
+        id: '1',
+      },
+    });
+
+    expect(payload).not.toHaveProperty(retiredIdentityField);
+    expect(payload).toEqual({
+      name: 'Name',
+      description: 'Desc',
+      package: 'bafy-test',
+      network_id: 84,
+      ownable_type: 'dossier',
+      keywords: [],
+    });
+  });
+
   it('deploy verifies code hash when adapter supports it', async () => {
     const adapter = {
       deployContract: vi.fn().mockResolvedValue({

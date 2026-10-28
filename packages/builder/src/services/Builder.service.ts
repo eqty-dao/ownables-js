@@ -120,7 +120,6 @@ export class BuilderService {
       network_id: input.networkId,
       ownable_type: FIXED_OWNABLE_TYPE,
       keywords: input.keywords ?? [],
-      ...(input.nft !== undefined ? { nft: input.nft } : {}),
     };
   }
 

@@ -93,11 +93,6 @@ describe('ReplayAuthorityService', () => {
     const ownableInfo = {
       owner: '0x2222222222222222222222222222222222222222',
       issuer: '0x1111111111111111111111111111111111111111',
-      nft: {
-        network: 'base',
-        address: '0x3333333333333333333333333333333333333333',
-        id: '77',
-      },
     };
     const ownables = {
       attemptReplayIndexedPublicEvents: vi.fn().mockResolvedValue({

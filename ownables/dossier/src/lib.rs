@@ -441,8 +441,8 @@ mod tests {
         EncodePublicEventMsg, ExecuteMsg, IngestEventMsg, OwnableEventSource,
         RegisterPublicEventMsg,
     };
-    use cosmwasm_std::{Addr, Uint128};
-    use ownable_std::{AttachmentInput, GetAttachmentsResponse, NFT};
+    use cosmwasm_std::Addr;
+    use ownable_std::{AttachmentInput, GetAttachmentsResponse};
     use serde_json::json;
     use std::collections::HashMap;
 
@@ -472,12 +472,6 @@ mod tests {
                 ownable_type: Some("dossier".to_string()),
                 network_id: 1,
                 package: "bafy-package".to_string(),
-                nft: Some(NFT {
-                    network: "eip155:1".to_string(),
-                    id: Uint128::new(1),
-                    address: "nft-contract-address".to_string(),
-                    lock_service: None,
-                }),
             },
             info: sample_info(),
         };

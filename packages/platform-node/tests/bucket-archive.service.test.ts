@@ -32,7 +32,7 @@ async function makeArchive(chainFileName: 'eventChain.json' | 'chain.json'): Pro
   zip.file(
     chainFileName,
     JSON.stringify({
-      events: [{ parsedData: { nft: { network: 'eip155:base', address: '0xabc', id: '1' } } }],
+      events: [{ parsedData: { network_id: 8453 } }],
     })
   );
   return zip.generateAsync({ type: 'uint8array' });

@@ -5,13 +5,6 @@ on:
     workflows: ['Unit Tests']
     types: [completed]
     branches: [main]
-  workflow_dispatch:
-    inputs:
-      publish_missing:
-        description: 'Publish missing packages for the current release commit'
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   contents: write
@@ -21,7 +14,7 @@ permissions:
 
 jobs:
   release:
-    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') || (github.event_name == 'workflow_dispatch' && inputs.publish_missing == true) }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -56,35 +49,6 @@ jobs:
         run: yarn install --immutable
 
       - name: Release
-        if: ${{ github.event_name == 'workflow_run' }}
         run: yarn semantic-release --repository-url "https://github.com/${{ github.repository }}.git"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish missing packages
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_missing == true }}
-        run: |
-          yarn build:packages
-          for directory in packages/*; do
-            if [ ! -f "$directory/package.json" ]; then
-              continue
-            fi
-            package_name="$(node -p "const packageJson=require('./$directory/package.json'); packageJson.private ? '' : packageJson.name")"
-            package_version="$(node -p "require('./$directory/package.json').version")"
-            if [ -z "$package_name" ] || [ "$package_version" != "2.0.0" ]; then
-              continue
-            fi
-            case "$package_name" in
-              @ownables/adapter-ethers|@ownables/adapter-viem|@ownables/builder|@ownables/builder-client)
-                echo "Skipping already published ${package_name}@2.0.0"
-                continue
-                ;;
-            esac
-            encoded_name="${package_name//@/%2F}"
-            if curl --fail --silent --show-error --retry 6 --retry-all-errors --retry-delay 5 "https://registry.npmjs.org/${encoded_name}/2.0.0" >/dev/null; then
-              echo "Skipping already published ${package_name}@2.0.0"
-              continue
-            fi
-            echo "Publishing ${package_name}@2.0.0"
-            (cd "$directory" && npm publish --ignore-scripts --access public --provenance)
-          done

@@ -1,3 +1,11 @@
+## [2.0.1](https://github.com/eqty-dao/ownables-js/compare/v2.0.0...v2.0.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **release:** publish prebuilt workspace packages ([cc79152](https://github.com/eqty-dao/ownables-js/commit/cc79152d0a14103c411efa3baf6ce29a2d093880))
+* **release:** remove redundant package prepack hooks ([ec1d971](https://github.com/eqty-dao/ownables-js/commit/ec1d9714882b573f6ddde891c331c8836165ed85))
+
 # [2.0.0](https://github.com/eqty-dao/ownables-js/compare/v1.0.0...v2.0.0) (2026-10-28)
 
 

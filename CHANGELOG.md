@@ -1,3 +1,15 @@
+# [2.0.0](https://github.com/eqty-dao/ownables-js/compare/v1.0.0...v2.0.0) (2026-10-28)
+
+
+* feat!: remove NFT identity from ownables-js ([86f549a](https://github.com/eqty-dao/ownables-js/commit/86f549a22ee19861e18414ca4cf6eb4c0df407e9))
+
+
+### BREAKING CHANGES
+
+* Remove NFT identity fields from builder inputs, core types, and Hub upload responses.
+
+Also consume ownable-std 0.10.0 and remove NFT identity from the dossier contract schemas.
+
 # [1.0.0](https://github.com/eqty-dao/ownables-js/compare/v0.12.1...v1.0.0) (2026-10-26)
 
 

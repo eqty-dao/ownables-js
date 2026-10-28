@@ -23,7 +23,6 @@
   "scripts": {
     "build": "bash ./bin/ensure-dossier-zip.sh && tsc -p tsconfig.build.json && bash ./bin/stage-dossier-zip.sh",
     "clean": "rm -rf dist ownable_bg.wasm dossier.zip",
-    "prepack": "bash ./bin/ensure-wasm.sh && bash ./bin/ensure-dossier-zip.sh && bash ./bin/stage-dossier-zip.sh",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "publishConfig": {

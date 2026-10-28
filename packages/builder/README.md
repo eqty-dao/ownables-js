@@ -84,4 +84,4 @@ yarn workspace @ownables/builder run build
 yarn workspace @ownables/builder run typecheck
 ```
 
-`prepack` ensures `ownable_bg.wasm` exists before packaging.
+The repository release build ensures `ownable_bg.wasm` exists before packaging.

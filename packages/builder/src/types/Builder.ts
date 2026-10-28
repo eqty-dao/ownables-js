@@ -36,7 +36,6 @@ export interface PreparedOwnable {
 export interface BuildInstantiateMsgInput extends OwnableMetadataInput {
   packageCid: string;
   networkId: number;
-  nft?: unknown;
 }
 
 export interface InstantiateMsgPayload {
@@ -46,7 +45,6 @@ export interface InstantiateMsgPayload {
   network_id: number;
   ownable_type: string;
   keywords: string[];
-  nft?: unknown;
 }
 
 export interface DeployParams {

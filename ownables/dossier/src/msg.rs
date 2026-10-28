@@ -1,5 +1,5 @@
 use cosmwasm_std::Addr;
-use ownable_std::{AttachmentInput, NFT};
+use ownable_std::AttachmentInput;
 use ownable_std_macros::{
     ownables_attach, ownables_close, ownables_instantiate_msg, ownables_query_attachments,
     ownables_query_closed, ownables_query_info, ownables_query_metadata, ownables_transfer,

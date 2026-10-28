@@ -1,7 +1,7 @@
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, IngestEventMsg, InstantiateMsg, QueryMsg, RegisterPublicEventMsg};
 use crate::state::{
-    ATTACHMENTS, CLOSED, METADATA, NETWORK_ID, NFT_ITEM, OWNABLE_INFO, PACKAGE_CID,
+    ATTACHMENTS, CLOSED, METADATA, NETWORK_ID, OWNABLE_INFO, PACKAGE_CID,
 };
 use cosmwasm_std::{
     Addr, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, to_json_binary,
@@ -42,9 +42,6 @@ pub fn instantiate(
     };
 
     NETWORK_ID.save(deps.storage, &msg.network_id)?;
-    if let Some(nft) = msg.nft {
-        NFT_ITEM.save(deps.storage, &nft)?;
-    }
     METADATA.save(deps.storage, &metadata)?;
     CLOSED.save(deps.storage, &false)?;
     ATTACHMENTS.save(deps.storage, &Vec::new())?;
@@ -186,12 +183,10 @@ fn query_attachments(deps: Deps) -> StdResult<Binary> {
 }
 
 fn query_ownable_info(deps: Deps) -> StdResult<Binary> {
-    let nft = NFT_ITEM.may_load(deps.storage)?;
     let ownable_info = OWNABLE_INFO.load(deps.storage)?;
     to_json_binary(&InfoResponse {
         owner: ownable_info.owner,
         issuer: ownable_info.issuer,
-        nft,
         ownable_type: ownable_info.ownable_type,
     })
 }
@@ -207,7 +202,6 @@ mod tests {
     use cosmwasm_std::from_json;
     use cosmwasm_std::testing::{mock_dependencies, mock_env};
     use cosmwasm_std::{Addr, MessageInfo};
-    use ownable_std::NFT;
 
     fn mock_info(sender: &str) -> MessageInfo {
         MessageInfo {
@@ -228,12 +222,6 @@ mod tests {
                 ownable_type: Some("static_image".to_string()),
                 network_id: 1,
                 package: "bafy-package".to_string(),
-                nft: Some(NFT {
-                    network: "eip155:1".to_string(),
-                    id: 1u128.into(),
-                    address: "nft-contract-address".to_string(),
-                    lock_service: None,
-                }),
             },
         )
         .expect("instantiate dossier");
@@ -244,9 +232,11 @@ mod tests {
         let mut deps = mock_dependencies();
         instantiate_dossier(deps.as_mut());
 
-        let info: InfoResponse =
-            from_json(query(deps.as_ref(), mock_env(), QueryMsg::GetInfo {}).expect("query info"))
-                .expect("decode info");
+        let serialized_info =
+            query(deps.as_ref(), mock_env(), QueryMsg::GetInfo {}).expect("query info");
+        let info: InfoResponse = from_json(serialized_info.clone()).expect("decode info");
+        let info_json: serde_json::Value =
+            serde_json::from_slice(serialized_info.as_slice()).expect("decode info JSON");
         let attachments: GetAttachmentsResponse = from_json(
             query(deps.as_ref(), mock_env(), QueryMsg::GetAttachments {})
                 .expect("query attachments"),
@@ -257,7 +247,11 @@ mod tests {
         )
         .expect("decode closed");
 
+        assert_eq!(info.owner, Addr::unchecked("owner"));
+        assert_eq!(info.issuer, Addr::unchecked("owner"));
         assert_eq!(info.ownable_type.as_deref(), Some("dossier"));
+        let retired_identity_key = ['n', 'f', 't'].iter().collect::<String>();
+        assert!(info_json.get(&retired_identity_key).is_none());
         assert!(attachments.attachments.is_empty());
         assert!(!is_closed);
     }

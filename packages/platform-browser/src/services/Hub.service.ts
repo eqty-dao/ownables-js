@@ -13,9 +13,6 @@ export interface HubUploadResult {
   cid: string;
   owner?: string;
   ownerAccount?: string;
-  nftNetwork?: string;
-  smartContractAddress?: string;
-  NftId?: string;
 }
 
 export interface HubAvailableOwnableEntry {

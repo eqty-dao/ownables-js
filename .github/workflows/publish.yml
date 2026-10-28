@@ -86,5 +86,5 @@ jobs:
               continue
             fi
             echo "Publishing ${package_name}@2.0.0"
-            (cd "$directory" && yarn npm publish --access public --provenance)
+            (cd "$directory" && YARN_ENABLE_SCRIPTS=false yarn npm publish --access public --provenance)
           done

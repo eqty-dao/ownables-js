@@ -8,7 +8,7 @@
       "@semantic-release/exec",
       {
         "prepareCmd": "yarn workspaces foreach -A --no-private version ${nextRelease.version}",
-        "publishCmd": "yarn build:packages && yarn workspaces foreach -A --no-private exec yarn npm publish --access public --provenance"
+        "publishCmd": "yarn build:packages && YARN_ENABLE_SCRIPTS=false yarn workspaces foreach -A --no-private exec yarn npm publish --access public --provenance"
       }
     ],
     [

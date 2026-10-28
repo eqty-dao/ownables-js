@@ -75,7 +75,7 @@ jobs:
               continue
             fi
             case "$package_name" in
-              @ownables/adapter-ethers|@ownables/adapter-viem)
+              @ownables/adapter-ethers|@ownables/adapter-viem|@ownables/builder)
                 echo "Skipping already published ${package_name}@2.0.0"
                 continue
                 ;;

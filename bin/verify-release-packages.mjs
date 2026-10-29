@@ -36,6 +36,20 @@ function normalizeTarballPath(path) {
   return path.replace(/^\.\//, '');
 }
 
+function hasPackedEntrypoint(packedFiles, entrypoint) {
+  const normalizedEntrypoint = normalizeTarballPath(entrypoint);
+  if (!normalizedEntrypoint.includes('*')) {
+    return packedFiles.has(normalizedEntrypoint);
+  }
+
+  const globPattern = normalizedEntrypoint
+    .split('*')
+    .map((part) => part.replace(/[|\\{}()[\]^$+?.]/g, '\\$&'))
+    .join('[^/]*');
+  const entrypointPattern = new RegExp(`^${globPattern}$`);
+  return [...packedFiles].some((packedFile) => entrypointPattern.test(packedFile));
+}
+
 for (const packageName of packages) {
   const packageDir = resolve('packages', packageName);
   const sourceManifest = JSON.parse(readFileSync(resolve(packageDir, 'package.json'), 'utf8'));
@@ -94,7 +108,7 @@ for (const packageName of packages) {
       ...collectEntrypoints(packedManifest.exports),
     ].filter((entrypoint) => typeof entrypoint === 'string');
     const missingEntrypoint = entrypoints.find(
-      (entrypoint) => !packedFiles.has(normalizeTarballPath(entrypoint))
+      (entrypoint) => !hasPackedEntrypoint(packedFiles, entrypoint)
     );
 
     if (missingEntrypoint) {

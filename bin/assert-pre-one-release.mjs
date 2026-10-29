@@ -10,7 +10,7 @@ const packagePaths = [
   'packages/builder-client/package.json',
   'packages/platform-browser/package.json',
   'packages/platform-node/package.json',
-  'packages/platform-react-native/package.json'
+  'packages/platform-react-native/package.json',
 ];
 
 const packages = packagePaths.map((packagePath) => {
@@ -27,14 +27,16 @@ if (preOnePackages.length === 0) {
 }
 
 if (preOnePackages.length !== packages.length) {
-  throw new Error('Public package major versions must be consistent before publishing a coordinated release.');
+  throw new Error(
+    'Public package major versions must be consistent before publishing a coordinated release.'
+  );
 }
 
 const latestTag = execFileSync('git', ['describe', '--tags', '--match', 'v0.*', '--abbrev=0'], {
-  encoding: 'utf8'
+  encoding: 'utf8',
 }).trim();
 const commits = execFileSync('git', ['log', '--format=%B%x00', `${latestTag}..HEAD`], {
-  encoding: 'utf8'
+  encoding: 'utf8',
 });
 
 const hasBreakingHeader = commits

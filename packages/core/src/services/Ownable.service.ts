@@ -404,7 +404,10 @@ export default class OwnableService {
     return message.slice(0, 280) || 'Unable to apply public event locally';
   }
 
-  private signedRegisterEventHash(chain: EventChain, event: IndexedPublicEvent): string | undefined {
+  private signedRegisterEventHash(
+    chain: EventChain,
+    event: IndexedPublicEvent
+  ): string | undefined {
     const replayKey = this.replay.key(event);
     const registerEvent = chain.events.find((candidate) => {
       if (!candidate.isSigned()) return false;
@@ -775,9 +778,7 @@ export default class OwnableService {
           {
             localApplicationState: 'applied',
             ...this.replayRecordPersistenceDetails(existing),
-            ...(applied.registerEventHash
-              ? { registerEventHash: applied.registerEventHash }
-              : {}),
+            ...(applied.registerEventHash ? { registerEventHash: applied.registerEventHash } : {}),
           }
         );
         await this.stateStore.set(replayStoreId, replayKey, confirmedRecord);

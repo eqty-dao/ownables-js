@@ -1,54 +1,47 @@
 ## [0.13.0](https://github.com/eqty-dao/ownables-js/compare/v0.12.1...v0.13.0) (2026-10-29)
 
-
 ### Changes
 
-* Remove Lockable NFT, authority and unlock APIs ([1e76f78](https://github.com/eqty-dao/ownables-js/commit/1e76f78ca0e7764c69874eb622ba809eeb0f7cf0)).
-* Remove NFT identity fields from builder inputs, core types, Hub upload responses and dossier schemas ([86f549a](https://github.com/eqty-dao/ownables-js/commit/86f549a22ee19861e18414ca4cf6eb4c0df407e9)).
-* Publish prebuilt workspace packages with concrete internal dependencies ([cc79152](https://github.com/eqty-dao/ownables-js/commit/cc79152d0a14103c411efa3baf6ce29a2d093880)).
+- Remove Lockable NFT, authority and unlock APIs ([1e76f78](https://github.com/eqty-dao/ownables-js/commit/1e76f78ca0e7764c69874eb622ba809eeb0f7cf0)).
+- Remove NFT identity fields from builder inputs, core types, Hub upload responses and dossier schemas ([86f549a](https://github.com/eqty-dao/ownables-js/commit/86f549a22ee19861e18414ca4cf6eb4c0df407e9)).
+- Publish prebuilt workspace packages with concrete internal dependencies ([cc79152](https://github.com/eqty-dao/ownables-js/commit/cc79152d0a14103c411efa3baf6ce29a2d093880)).
 
 ## [0.12.1](https://github.com/eqty-dao/ownables-js/compare/v0.12.0...v0.12.1) (2026-10-26)
 
-
 ### Bug Fixes
 
-* retain address normalization for anchor validation ([96237c9](https://github.com/eqty-dao/ownables-js/commit/96237c9f4c6a9f956e27e72932b93dfc3f4e6412))
+- retain address normalization for anchor validation ([96237c9](https://github.com/eqty-dao/ownables-js/commit/96237c9f4c6a9f956e27e72932b93dfc3f4e6412))
 
 # [0.12.0](https://github.com/eqty-dao/ownables-js/compare/v0.11.1...v0.12.0) (2026-10-26)
 
-
 ### Features
 
-* **platform-browser:** use canonical Hub routes ([ee0d45b](https://github.com/eqty-dao/ownables-js/commit/ee0d45bfa15d157b2a6568d8e924a2fdd125b650))
+- **platform-browser:** use canonical Hub routes ([ee0d45b](https://github.com/eqty-dao/ownables-js/commit/ee0d45bfa15d157b2a6568d8e924a2fdd125b650))
 
 ## [0.11.1](https://github.com/eqty-dao/ownables-js/compare/v0.11.0...v0.11.1) (2026-10-26)
 
-
 ### Bug Fixes
 
-* **adapter-viem:** encode public event bytes for viem ([#9](https://github.com/eqty-dao/ownables-js/issues/9)) ([78042db](https://github.com/eqty-dao/ownables-js/commit/78042dbd20c2a53ef6eaf914d3cd4452931aac13))
+- **adapter-viem:** encode public event bytes for viem ([#9](https://github.com/eqty-dao/ownables-js/issues/9)) ([78042db](https://github.com/eqty-dao/ownables-js/commit/78042dbd20c2a53ef6eaf914d3cd4452931aac13))
 
 # [0.11.0](https://github.com/eqty-dao/ownables-js/compare/v0.10.0...v0.11.0) (2026-10-26)
 
-
 ### Features
 
-* **core:** apply submitted public events immediately ([#8](https://github.com/eqty-dao/ownables-js/issues/8)) ([d98c43c](https://github.com/eqty-dao/ownables-js/commit/d98c43c5b28f25dcb48fed6f80bf5cc2cc25f6a0))
+- **core:** apply submitted public events immediately ([#8](https://github.com/eqty-dao/ownables-js/issues/8)) ([d98c43c](https://github.com/eqty-dao/ownables-js/commit/d98c43c5b28f25dcb48fed6f80bf5cc2cc25f6a0))
 
 # [0.10.0](https://github.com/eqty-dao/ownables-js/compare/v0.9.1...v0.10.0) (2026-08-15)
 
-
 ### Features
 
-* document class-based service migration ([04252b1](https://github.com/eqty-dao/ownables-js/commit/04252b10ec265033ac0394efbcb85595786ee4d8))
+- document class-based service migration ([04252b1](https://github.com/eqty-dao/ownables-js/commit/04252b10ec265033ac0394efbcb85595786ee4d8))
 
 ## [0.9.1](https://github.com/eqty-dao/ownables-js/compare/v0.9.0...v0.9.1) (2026-08-15)
 
-
 ### Bug Fixes
 
-* close service boundary QC findings ([d6dc668](https://github.com/eqty-dao/ownables-js/commit/d6dc668defdf58b03d412f85dd6d0afc26982af6))
-* resolve package CID utility tests ([843e957](https://github.com/eqty-dao/ownables-js/commit/843e95745b1a392460d0bb6aad3b26ed1e503a7c))
+- close service boundary QC findings ([d6dc668](https://github.com/eqty-dao/ownables-js/commit/d6dc668defdf58b03d412f85dd6d0afc26982af6))
+- resolve package CID utility tests ([843e957](https://github.com/eqty-dao/ownables-js/commit/843e95745b1a392460d0bb6aad3b26ed1e503a7c))
 
 # [0.9.0](https://github.com/eqty-dao/ownables-js/compare/v0.8.1...v0.9.0) (2026-07-14)
 

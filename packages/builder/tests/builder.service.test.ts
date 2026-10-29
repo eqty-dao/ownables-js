@@ -252,13 +252,17 @@ describe('@ownables/builder', () => {
 
   it('prepareDossier works through the built package bundle path', async () => {
     const localBundlePath = `${PACKAGE_ROOT}/dossier.zip`;
+    const localWasmPath = `${PACKAGE_ROOT}/ownable_bg.wasm`;
     const stagedBundlePath = `${PACKAGE_ROOT}/dist/builder/src/dossier.zip`;
     const seededBundleBytes = Buffer.from('seeded-dossier-bundle');
+    const seededWasmBytes = Buffer.from('seeded-ownable-wasm');
     const originalLocalBundle = await readFile(localBundlePath).catch(() => null);
+    const originalLocalWasm = await readFile(localWasmPath).catch(() => null);
     const originalStagedBundle = await readFile(stagedBundlePath).catch(() => null);
 
     try {
       await writeFile(localBundlePath, seededBundleBytes);
+      await writeFile(localWasmPath, seededWasmBytes);
       await rm(stagedBundlePath, { force: true });
 
       await execFileAsync('yarn', ['workspace', '@ownables/builder', 'build'], {
@@ -324,6 +328,12 @@ describe('@ownables/builder', () => {
         await writeFile(localBundlePath, originalLocalBundle);
       } else {
         await rm(localBundlePath, { force: true });
+      }
+
+      if (originalLocalWasm) {
+        await writeFile(localWasmPath, originalLocalWasm);
+      } else {
+        await rm(localWasmPath, { force: true });
       }
 
       if (originalStagedBundle) {

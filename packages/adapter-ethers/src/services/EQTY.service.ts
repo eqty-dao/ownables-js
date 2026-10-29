@@ -22,7 +22,7 @@ import type {
   EthersServiceOptions,
   EthersSignerLike,
   TypedDataField,
-} from '../types/EQTY';
+} from '../types/EQTY.js';
 
 const BASE_CHAIN_ID = 8453;
 const BASE_SEPOLIA_CHAIN_ID = 84532;

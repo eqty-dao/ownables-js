@@ -10,7 +10,7 @@ import type {
   RNOwnableSnapshotRecord,
   RNOwnableStateEntry,
   RNStoredEventRecord,
-} from '../types/PlatformReactNative';
+} from '../types/PlatformReactNative.js';
 
 function toBytes(input: ArrayLike<number>): Uint8Array {
   if (input instanceof Uint8Array) return input;

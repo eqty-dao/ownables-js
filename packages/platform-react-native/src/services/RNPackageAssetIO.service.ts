@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import type { PackageAssetIO, TypedPackage } from '@ownables/core';
-import type { RNPackageAssetIOOptions } from '../types/PlatformReactNative';
+import type { RNPackageAssetIOOptions } from '../types/PlatformReactNative.js';
 
 class RNFileReaderLike {
   public result: string | ArrayBuffer | null = null;

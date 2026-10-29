@@ -1,5 +1,5 @@
 import { Binary, Event, Message } from 'eqty-core';
-import type { TypedDataDomain, TypedDataField } from '../types/EQTY';
+import type { TypedDataDomain, TypedDataField } from '../types/EQTY.js';
 
 const DUMMY_SIG = `0x${'1'.repeat(130)}`;
 

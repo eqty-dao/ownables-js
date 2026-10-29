@@ -1,5 +1,5 @@
 import type { RuntimeSourceProvider } from '@ownables/core';
-import type { RNRuntimeSourceProviderOptions } from '../types/PlatformReactNative';
+import type { RNRuntimeSourceProviderOptions } from '../types/PlatformReactNative.js';
 
 export class RNRuntimeSourceProvider implements RuntimeSourceProvider {
   constructor(private readonly options: RNRuntimeSourceProviderOptions = {}) {}

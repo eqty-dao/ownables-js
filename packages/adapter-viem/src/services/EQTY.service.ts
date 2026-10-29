@@ -23,7 +23,7 @@ import type {
   EqtyTokenReader,
   EQTYServiceDeps,
   PublicEventClientLike,
-} from '../types/EQTY';
+} from '../types/EQTY.js';
 
 const PUBLIC_EVENT_ABI = parseAbiItem(
   'event PublicEvent(bytes32 indexed subjectId, address indexed source, string eventType, bytes data, uint64 timestamp)'

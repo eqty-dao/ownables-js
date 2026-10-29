@@ -32,6 +32,10 @@ function collectEntrypoints(value) {
   return Object.values(value).flatMap(collectEntrypoints);
 }
 
+function normalizeTarballPath(path) {
+  return path.replace(/^\.\//, '');
+}
+
 for (const packageName of packages) {
   const packageDir = resolve('packages', packageName);
   const sourceManifest = JSON.parse(readFileSync(resolve(packageDir, 'package.json'), 'utf8'));
@@ -53,7 +57,7 @@ for (const packageName of packages) {
   const tarball = resolve(packageDir, packResult[0].filename);
 
   try {
-    const packedFiles = new Set(packResult[0].files.map((file) => file.path));
+    const packedFiles = new Set(packResult[0].files.map((file) => normalizeTarballPath(file.path)));
     const packedManifest = JSON.parse(
       execFileSync('tar', ['-xOf', tarball, 'package/package.json'], { encoding: 'utf8' })
     );
@@ -89,7 +93,9 @@ for (const packageName of packages) {
       packedManifest.types,
       ...collectEntrypoints(packedManifest.exports),
     ].filter((entrypoint) => typeof entrypoint === 'string');
-    const missingEntrypoint = entrypoints.find((entrypoint) => !packedFiles.has(entrypoint));
+    const missingEntrypoint = entrypoints.find(
+      (entrypoint) => !packedFiles.has(normalizeTarballPath(entrypoint))
+    );
 
     if (missingEntrypoint) {
       throw new Error(`${packedManifest.name} is missing packed entrypoint ${missingEntrypoint}.`);

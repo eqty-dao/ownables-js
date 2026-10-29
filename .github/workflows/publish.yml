@@ -114,33 +114,91 @@ jobs:
           git diff --check
 
       - name: Publish Core
-        run: yarn workspace @ownables/core npm publish --access public --provenance
+        run: |
+          publish_if_missing() {
+            local package="$1"
+            local error_file
+            error_file="$(mktemp)"
+
+            if published_version="$(npm view "${package}@0.13.0" version --registry=https://registry.npmjs.org 2>"$error_file")"; then
+              rm -f "$error_file"
+              if [ "$published_version" != '0.13.0' ]; then
+                echo "Unexpected published version for ${package}: ${published_version}" >&2
+                exit 1
+              fi
+              echo "${package}@0.13.0 is already published."
+              return
+            fi
+
+            if ! grep -qE 'E404|404 Not Found' "$error_file"; then
+              cat "$error_file" >&2
+              rm -f "$error_file"
+              exit 1
+            fi
+            rm -f "$error_file"
+            yarn workspace "$package" npm publish --access public --provenance
+          }
+
+          publish_if_missing @ownables/core
 
       - name: Publish remaining public packages
         run: |
-          yarn workspace @ownables/adapter-ethers npm publish --access public --provenance
-          yarn workspace @ownables/adapter-viem npm publish --access public --provenance
-          yarn workspace @ownables/builder npm publish --access public --provenance
-          yarn workspace @ownables/builder-client npm publish --access public --provenance
-          yarn workspace @ownables/platform-browser npm publish --access public --provenance
-          yarn workspace @ownables/platform-node npm publish --access public --provenance
-          yarn workspace @ownables/platform-react-native npm publish --access public --provenance
+          publish_if_missing() {
+            local package="$1"
+            local error_file
+            error_file="$(mktemp)"
+
+            if published_version="$(npm view "${package}@0.13.0" version --registry=https://registry.npmjs.org 2>"$error_file")"; then
+              rm -f "$error_file"
+              if [ "$published_version" != '0.13.0' ]; then
+                echo "Unexpected published version for ${package}: ${published_version}" >&2
+                exit 1
+              fi
+              echo "${package}@0.13.0 is already published."
+              return
+            fi
+
+            if ! grep -qE 'E404|404 Not Found' "$error_file"; then
+              cat "$error_file" >&2
+              rm -f "$error_file"
+              exit 1
+            fi
+            rm -f "$error_file"
+            yarn workspace "$package" npm publish --access public --provenance
+          }
+
+          publish_if_missing @ownables/adapter-ethers
+          publish_if_missing @ownables/adapter-viem
+          publish_if_missing @ownables/builder
+          publish_if_missing @ownables/builder-client
+          publish_if_missing @ownables/platform-browser
+          publish_if_missing @ownables/platform-node
+          publish_if_missing @ownables/platform-react-native
 
       - name: Verify fresh external installation
         run: |
           mkdir -p "$RUNNER_TEMP/ownables-js-0-13-0"
           cd "$RUNNER_TEMP/ownables-js-0-13-0"
           npm init --yes
-          npm install --ignore-scripts \
-            @ownables/core@0.13.0 \
-            @ownables/adapter-ethers@0.13.0 \
-            @ownables/adapter-viem@0.13.0 \
-            @ownables/builder@0.13.0 \
-            @ownables/builder-client@0.13.0 \
-            @ownables/platform-browser@0.13.0 \
-            @ownables/platform-node@0.13.0 \
-            @ownables/platform-react-native@0.13.0
-          node --input-type=module -e "await Promise.all(['@ownables/core', '@ownables/adapter-ethers', '@ownables/adapter-viem', '@ownables/builder', '@ownables/builder-client', '@ownables/platform-browser', '@ownables/platform-node', '@ownables/platform-react-native'].map((name) => import(name)))"
+          for attempt in 1 2 3 4 5 6; do
+            rm -rf node_modules package-lock.json
+            if npm install --ignore-scripts \
+              @ownables/core@0.13.0 \
+              @ownables/adapter-ethers@0.13.0 \
+              @ownables/adapter-viem@0.13.0 \
+              @ownables/builder@0.13.0 \
+              @ownables/builder-client@0.13.0 \
+              @ownables/platform-browser@0.13.0 \
+              @ownables/platform-node@0.13.0 \
+              @ownables/platform-react-native@0.13.0 && \
+              node --input-type=module -e "await Promise.all(['@ownables/core', '@ownables/adapter-ethers', '@ownables/adapter-viem', '@ownables/builder', '@ownables/builder-client', '@ownables/platform-browser', '@ownables/platform-node', '@ownables/platform-react-native'].map((name) => import(name)))"; then
+              exit 0
+            fi
+            if [ "$attempt" = 6 ]; then
+              exit 1
+            fi
+            sleep 20
+          done
 
       - name: Tag the verified recovery release
         env:

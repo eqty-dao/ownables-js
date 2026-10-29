@@ -1,6 +1,6 @@
 {
   "name": "@ownables/builder",
-  "version": "2.0.1",
+  "version": "0.13.0",
   "type": "module",
   "main": "dist/builder/src/index.js",
   "types": "dist/builder/src/index.d.ts",
@@ -18,7 +18,7 @@
     "dossier.zip"
   ],
   "dependencies": {
-    "@ownables/core": "workspace:*"
+    "@ownables/core": "0.13.0"
   },
   "scripts": {
     "build": "bash ./bin/ensure-dossier-zip.sh && tsc -p tsconfig.build.json && bash ./bin/stage-dossier-zip.sh",

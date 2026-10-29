@@ -1,6 +1,6 @@
 {
   "name": "@ownables/platform-node",
-  "version": "2.0.1",
+  "version": "0.13.0",
   "type": "module",
   "main": "dist/platform-node/src/index.js",
   "types": "dist/platform-node/src/index.d.ts",
@@ -16,7 +16,7 @@
   ],
   "dependencies": {
     "@babel/core": "^7.28.4",
-    "@ownables/core": "workspace:*",
+    "@ownables/core": "0.13.0",
     "any-bucket": "^0.1.6",
     "babel-plugin-remove-import-export": "^1.1.1",
     "cbor-x": "^1.6.0",

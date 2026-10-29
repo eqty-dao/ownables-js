@@ -1,34 +1,11 @@
-## [2.0.1](https://github.com/eqty-dao/ownables-js/compare/v2.0.0...v2.0.1) (2026-10-28)
+## [0.13.0](https://github.com/eqty-dao/ownables-js/compare/v0.12.1...v0.13.0) (2026-10-29)
 
 
-### Bug Fixes
+### Changes
 
-* **release:** publish prebuilt workspace packages ([cc79152](https://github.com/eqty-dao/ownables-js/commit/cc79152d0a14103c411efa3baf6ce29a2d093880))
-* **release:** remove redundant package prepack hooks ([ec1d971](https://github.com/eqty-dao/ownables-js/commit/ec1d9714882b573f6ddde891c331c8836165ed85))
-
-# [2.0.0](https://github.com/eqty-dao/ownables-js/compare/v1.0.0...v2.0.0) (2026-10-28)
-
-
-* feat!: remove NFT identity from ownables-js ([86f549a](https://github.com/eqty-dao/ownables-js/commit/86f549a22ee19861e18414ca4cf6eb4c0df407e9))
-
-
-### BREAKING CHANGES
-
-* Remove NFT identity fields from builder inputs, core types, and Hub upload responses.
-
-Also consume ownable-std 0.10.0 and remove NFT identity from the dossier contract schemas.
-
-# [1.0.0](https://github.com/eqty-dao/ownables-js/compare/v0.12.1...v1.0.0) (2026-10-26)
-
-
-### Bug Fixes
-
-* remove stale authority configuration ([1e76f78](https://github.com/eqty-dao/ownables-js/commit/1e76f78ca0e7764c69874eb622ba809eeb0f7cf0))
-
-
-### BREAKING CHANGES
-
-* The @ownables/authority package and Lockable NFT bridge/unlock APIs are removed.
+* Remove Lockable NFT, authority and unlock APIs ([1e76f78](https://github.com/eqty-dao/ownables-js/commit/1e76f78ca0e7764c69874eb622ba809eeb0f7cf0)).
+* Remove NFT identity fields from builder inputs, core types, Hub upload responses and dossier schemas ([86f549a](https://github.com/eqty-dao/ownables-js/commit/86f549a22ee19861e18414ca4cf6eb4c0df407e9)).
+* Publish prebuilt workspace packages with concrete internal dependencies ([cc79152](https://github.com/eqty-dao/ownables-js/commit/cc79152d0a14103c411efa3baf6ce29a2d093880)).
 
 ## [0.12.1](https://github.com/eqty-dao/ownables-js/compare/v0.12.0...v0.12.1) (2026-10-26)
 

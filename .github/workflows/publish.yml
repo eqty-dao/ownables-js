@@ -5,6 +5,12 @@ on:
     workflows: ['Unit Tests']
     types: [completed]
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      recovery_version:
+        description: 'Temporary recovery version. Must be exactly 0.13.0.'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -14,7 +20,7 @@ permissions:
 
 jobs:
   release:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -48,7 +54,90 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable
 
+      - name: Guard the pre-1.0 release line
+        run: yarn release:preflight
+
       - name: Release
         run: yarn semantic-release --repository-url "https://github.com/${{ github.repository }}.git"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  recover-0-13-0:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.recovery_version == '0.13.0' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack prepare yarn@4.13.0 --activate
+
+      - name: Restore Yarn cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            .yarn/cache
+            .yarn/install-state.gz
+          key: ${{ runner.os }}-yarn4-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Verify the recovery version
+        run: test "${{ inputs.recovery_version }}" = "0.13.0"
+
+      - name: Run release gates
+        run: |
+          yarn test
+          yarn typecheck
+          yarn lint
+          yarn format:check
+          cargo test --manifest-path ownables/dossier/Cargo.toml
+          yarn build:ownable dossier
+          yarn test:manifest dossier
+          yarn build:packages
+          node bin/verify-release-packages.mjs 0.13.0
+          git diff --check
+
+      - name: Publish Core
+        run: yarn workspace @ownables/core npm publish --access public --provenance
+
+      - name: Publish remaining public packages
+        run: |
+          yarn workspace @ownables/adapter-ethers npm publish --access public --provenance
+          yarn workspace @ownables/adapter-viem npm publish --access public --provenance
+          yarn workspace @ownables/builder npm publish --access public --provenance
+          yarn workspace @ownables/builder-client npm publish --access public --provenance
+          yarn workspace @ownables/platform-browser npm publish --access public --provenance
+          yarn workspace @ownables/platform-node npm publish --access public --provenance
+          yarn workspace @ownables/platform-react-native npm publish --access public --provenance
+
+      - name: Verify fresh external installation
+        run: |
+          mkdir -p "$RUNNER_TEMP/ownables-js-0-13-0"
+          cd "$RUNNER_TEMP/ownables-js-0-13-0"
+          npm init --yes
+          npm install --ignore-scripts \
+            @ownables/core@0.13.0 \
+            @ownables/adapter-ethers@0.13.0 \
+            @ownables/adapter-viem@0.13.0 \
+            @ownables/builder@0.13.0 \
+            @ownables/builder-client@0.13.0 \
+            @ownables/platform-browser@0.13.0 \
+            @ownables/platform-node@0.13.0 \
+            @ownables/platform-react-native@0.13.0
+          node --input-type=module -e "await Promise.all(['@ownables/core', '@ownables/adapter-ethers', '@ownables/adapter-viem', '@ownables/builder', '@ownables/builder-client', '@ownables/platform-browser', '@ownables/platform-node', '@ownables/platform-react-native'].map((name) => import(name)))"

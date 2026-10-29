@@ -1,3 +1,3 @@
-export { default as EQTYService } from './services/EQTY.service';
-export { default as MockEQTYService } from './services/MockEQTY.service';
-export * from './types/EQTY';
+export { default as EQTYService } from './services/EQTY.service.js';
+export { default as MockEQTYService } from './services/MockEQTY.service.js';
+export * from './types/EQTY.js';

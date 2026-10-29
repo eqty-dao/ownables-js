@@ -5,6 +5,12 @@ on:
     workflows: ['Unit Tests']
     types: [completed]
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      recovery_version:
+        description: 'Temporary recovery version. Must be exactly 0.13.0.'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -14,7 +20,7 @@ permissions:
 
 jobs:
   release:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -48,7 +54,170 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable
 
+      - name: Guard the pre-1.0 release line
+        run: yarn release:preflight
+
       - name: Release
         run: yarn semantic-release --repository-url "https://github.com/${{ github.repository }}.git"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  recover-0-13-0:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.recovery_version == '0.13.0' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack prepare yarn@4.13.0 --activate
+
+      - name: Restore Yarn cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            .yarn/cache
+            .yarn/install-state.gz
+          key: ${{ runner.os }}-yarn4-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Verify the recovery version
+        run: test "${{ inputs.recovery_version }}" = "0.13.0"
+
+      - name: Run release gates
+        run: |
+          yarn test
+          yarn typecheck
+          yarn lint
+          yarn format:check
+          cargo test --manifest-path ownables/dossier/Cargo.toml
+          yarn build:ownable dossier
+          yarn test:manifest dossier
+          yarn build:packages
+          node bin/verify-release-packages.mjs 0.13.0
+          git diff --check
+
+      - name: Publish Core
+        run: |
+          publish_if_missing() {
+            local package="$1"
+            local error_file
+            error_file="$(mktemp)"
+
+            if published_version="$(npm view "${package}@0.13.0" version --registry=https://registry.npmjs.org 2>"$error_file")"; then
+              rm -f "$error_file"
+              if [ "$published_version" != '0.13.0' ]; then
+                echo "Unexpected published version for ${package}: ${published_version}" >&2
+                exit 1
+              fi
+              echo "${package}@0.13.0 is already published."
+              return
+            fi
+
+            if ! grep -qE 'E404|404 Not Found' "$error_file"; then
+              cat "$error_file" >&2
+              rm -f "$error_file"
+              exit 1
+            fi
+            rm -f "$error_file"
+            yarn workspace "$package" npm publish --access public --provenance
+          }
+
+          publish_if_missing @ownables/core
+
+      - name: Publish remaining public packages
+        run: |
+          publish_if_missing() {
+            local package="$1"
+            local error_file
+            error_file="$(mktemp)"
+
+            if published_version="$(npm view "${package}@0.13.0" version --registry=https://registry.npmjs.org 2>"$error_file")"; then
+              rm -f "$error_file"
+              if [ "$published_version" != '0.13.0' ]; then
+                echo "Unexpected published version for ${package}: ${published_version}" >&2
+                exit 1
+              fi
+              echo "${package}@0.13.0 is already published."
+              return
+            fi
+
+            if ! grep -qE 'E404|404 Not Found' "$error_file"; then
+              cat "$error_file" >&2
+              rm -f "$error_file"
+              exit 1
+            fi
+            rm -f "$error_file"
+            yarn workspace "$package" npm publish --access public --provenance
+          }
+
+          publish_if_missing @ownables/adapter-ethers
+          publish_if_missing @ownables/adapter-viem
+          publish_if_missing @ownables/builder
+          publish_if_missing @ownables/builder-client
+          publish_if_missing @ownables/platform-browser
+          publish_if_missing @ownables/platform-node
+          publish_if_missing @ownables/platform-react-native
+
+      - name: Verify fresh external installation
+        run: |
+          mkdir -p "$RUNNER_TEMP/ownables-js-0-13-0"
+          cd "$RUNNER_TEMP/ownables-js-0-13-0"
+          npm init --yes
+          for attempt in 1 2 3 4 5 6; do
+            rm -rf node_modules package-lock.json
+            if npm install --ignore-scripts \
+              @ownables/core@0.13.0 \
+              @ownables/adapter-ethers@0.13.0 \
+              @ownables/adapter-viem@0.13.0 \
+              @ownables/builder@0.13.0 \
+              @ownables/builder-client@0.13.0 \
+              @ownables/platform-browser@0.13.0 \
+              @ownables/platform-node@0.13.0 \
+              @ownables/platform-react-native@0.13.0 && \
+              node --input-type=module -e "await Promise.all(['@ownables/core', '@ownables/adapter-ethers', '@ownables/adapter-viem', '@ownables/builder', '@ownables/builder-client', '@ownables/platform-browser', '@ownables/platform-node', '@ownables/platform-react-native'].map((name) => import(name)))"; then
+              exit 0
+            fi
+            if [ "$attempt" = 6 ]; then
+              exit 1
+            fi
+            sleep 20
+          done
+
+      - name: Tag the verified recovery release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          if git ls-remote --exit-code --tags origin refs/tags/v0.13.0; then
+            git fetch --force origin refs/tags/v0.13.0:refs/tags/v0.13.0
+            existing_tag_target="$(git rev-parse v0.13.0^{commit})"
+            if [ "$existing_tag_target" != "$GITHUB_SHA" ]; then
+              echo "v0.13.0 points to ${existing_tag_target}, expected ${GITHUB_SHA}." >&2
+              exit 1
+            fi
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git tag --annotate v0.13.0 --message 'Release 0.13.0'
+            git push origin refs/tags/v0.13.0
+          fi
+          if ! gh release view v0.13.0 >/dev/null 2>&1; then
+            gh release create v0.13.0 --verify-tag --title 'v0.13.0' --generate-notes
+          fi

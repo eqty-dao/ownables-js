@@ -1,6 +1,6 @@
 import type { OwnableRPC, RuntimeRPCProvider } from '@ownables/core';
-import RNOwnableRPC from './RNOwnableRPC.service';
-import type { RNRuntimeRpcProviderOptions } from '../types/PlatformReactNative';
+import RNOwnableRPC from './RNOwnableRPC.service.js';
+import type { RNRuntimeRpcProviderOptions } from '../types/PlatformReactNative.js';
 
 export class RNRuntimeRpcProvider implements RuntimeRPCProvider {
   constructor(private readonly options: RNRuntimeRpcProviderOptions) {}

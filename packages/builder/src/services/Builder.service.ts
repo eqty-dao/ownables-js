@@ -11,8 +11,8 @@ import type {
   PreparedOwnable,
   PrepareOwnableInput,
   BuilderServiceOptions,
-} from '../types/Builder';
-import { FIXED_OWNABLE_TYPE } from '../types/Builder';
+} from '../types/Builder.js';
+import { FIXED_OWNABLE_TYPE } from '../types/Builder.js';
 
 const normalize = (value: string, field: string): string => {
   const trimmed = value?.trim();

@@ -67,6 +67,11 @@ packages/
 
 Releases are automated with semantic-release via GitHub Actions (`.github/workflows/publish.yml`).
 
+While the public packages are pre-1.0, use ordinary `feat:` commits for all API changes,
+including breaking ones. Do not use `feat!`, `fix!`, or a `BREAKING CHANGE:` footer until an
+intentional, reviewed promotion to 1.0.0. The release preflight rejects those markers while
+all public package versions have major version zero.
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).

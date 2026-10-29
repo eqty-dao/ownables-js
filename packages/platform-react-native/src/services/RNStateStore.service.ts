@@ -1,5 +1,5 @@
 import type { StateStore } from '@ownables/core';
-import type { RNStateStoreOptions, RNStateStoreBackend } from '../types/PlatformReactNative';
+import type { RNStateStoreOptions, RNStateStoreBackend } from '../types/PlatformReactNative.js';
 
 const ROOT_PREFIX = 'rn-state-store';
 const STORE_MARKER = '__store__.json';

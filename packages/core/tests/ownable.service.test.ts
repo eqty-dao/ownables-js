@@ -1574,7 +1574,7 @@ describe('OwnableService', () => {
 
     expect(register).toHaveBeenCalledTimes(2);
     expect(eqty.sign).toHaveBeenCalledTimes(1);
-    expect((service.store as any)).toHaveBeenCalledTimes(1);
+    expect(service.store as any).toHaveBeenCalledTimes(1);
     expect(chain.events).toHaveLength(1);
     expect(chain.events[0]?.isSigned()).toBe(true);
     expect(repaired).toMatchObject({
@@ -1682,8 +1682,13 @@ describe('OwnableService', () => {
     await stateStore.createStore(`ownable:${chain.id}`);
     await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
     const event = {
-      source: '0xsource', eventType: 'consume', data: `0x${'33'.repeat(4)}`,
-      blockNumber: 5, transactionHash: `0x${'66'.repeat(32)}`, transactionIndex: 2, logIndex: 9,
+      source: '0xsource',
+      eventType: 'consume',
+      data: `0x${'33'.repeat(4)}`,
+      blockNumber: 5,
+      transactionHash: `0x${'66'.repeat(32)}`,
+      transactionIndex: 2,
+      logIndex: 9,
     };
     const eqty = {
       address: '0xabc',
@@ -1692,11 +1697,24 @@ describe('OwnableService', () => {
         signedEvent.signerAddress ??= '0xabc';
         signedEvent.signature = Binary.fromHex(`0x${'11'.repeat(65)}`);
       }),
-      emitPublicEvent: vi.fn().mockResolvedValue({ subjectId: Binary.fromHex(chain.id).hash().hex, ...event }),
+      emitPublicEvent: vi
+        .fn()
+        .mockResolvedValue({ subjectId: Binary.fromHex(chain.id).hash().hex, ...event }),
     };
-    const service = createService(stateStore as any, { getStateDump: vi.fn().mockResolvedValue([]) } as any, eqty as any, {} as any);
-    const register = vi.fn().mockRejectedValueOnce(new Error('temporary')).mockResolvedValueOnce({ state: [['repaired', 1]] });
-    (service as any)._rpc.set(chain.id, { encodePublicEvent: vi.fn().mockResolvedValue(Uint8Array.from([1])), register });
+    const service = createService(
+      stateStore as any,
+      { getStateDump: vi.fn().mockResolvedValue([]) } as any,
+      eqty as any,
+      {} as any
+    );
+    const register = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('temporary'))
+      .mockResolvedValueOnce({ state: [['repaired', 1]] });
+    (service as any)._rpc.set(chain.id, {
+      encodePublicEvent: vi.fn().mockResolvedValue(Uint8Array.from([1])),
+      register,
+    });
     vi.spyOn(service, 'store').mockResolvedValue(undefined as any);
 
     await service.emitPublicEvent(chain, 'consume', { amount: 1 });
@@ -1717,21 +1735,48 @@ describe('OwnableService', () => {
     const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
     await stateStore.createStore(`ownable:${chain.id}`);
     await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
-    const first = { source: '0xsource', eventType: 'consume', data: '0x01', blockNumber: 5, transactionHash: `0x${'77'.repeat(32)}`, transactionIndex: 2, logIndex: 1 };
+    const first = {
+      source: '0xsource',
+      eventType: 'consume',
+      data: '0x01',
+      blockNumber: 5,
+      transactionHash: `0x${'77'.repeat(32)}`,
+      transactionIndex: 2,
+      logIndex: 1,
+    };
     const second = { ...first, data: '0x02', transactionHash: `0x${'88'.repeat(32)}`, logIndex: 2 };
-    const service = createService(stateStore as any, { getStateDump: vi.fn().mockResolvedValue([]) } as any, {
-      address: '0xabc', sign: vi.fn(), emitPublicEvent: vi.fn()
-        .mockResolvedValueOnce({ subjectId: Binary.fromHex(chain.id).hash().hex, ...first })
-        .mockResolvedValueOnce({ subjectId: Binary.fromHex(chain.id).hash().hex, ...second }),
-    } as any, {} as any);
-    (service as any)._rpc.set(chain.id, { encodePublicEvent: vi.fn().mockResolvedValue(Uint8Array.from([1])), register: vi.fn().mockRejectedValue(new Error('temporary')) });
+    const service = createService(
+      stateStore as any,
+      { getStateDump: vi.fn().mockResolvedValue([]) } as any,
+      {
+        address: '0xabc',
+        sign: vi.fn(),
+        emitPublicEvent: vi
+          .fn()
+          .mockResolvedValueOnce({ subjectId: Binary.fromHex(chain.id).hash().hex, ...first })
+          .mockResolvedValueOnce({ subjectId: Binary.fromHex(chain.id).hash().hex, ...second }),
+      } as any,
+      {} as any
+    );
+    (service as any)._rpc.set(chain.id, {
+      encodePublicEvent: vi.fn().mockResolvedValue(Uint8Array.from([1])),
+      register: vi.fn().mockRejectedValue(new Error('temporary')),
+    });
 
     await service.emitPublicEvent(chain, 'consume', { amount: 1 });
     await service.emitPublicEvent(chain, 'consume', { amount: 2 });
 
     expect(await service.listTrackedPublicEvents(chain.id)).toMatchObject([
-      { replayKey: publicEventReplayKey(first), insertionAnchor: { privateEventCount: 0, ordinal: 0 }, localApplicationState: 'failed' },
-      { replayKey: publicEventReplayKey(second), insertionAnchor: { privateEventCount: 0, ordinal: 1 }, localApplicationState: 'failed' },
+      {
+        replayKey: publicEventReplayKey(first),
+        insertionAnchor: { privateEventCount: 0, ordinal: 0 },
+        localApplicationState: 'failed',
+      },
+      {
+        replayKey: publicEventReplayKey(second),
+        insertionAnchor: { privateEventCount: 0, ordinal: 1 },
+        localApplicationState: 'failed',
+      },
     ]);
   });
 
@@ -1740,13 +1785,37 @@ describe('OwnableService', () => {
     const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
     await stateStore.createStore(`ownable:${chain.id}`);
     await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
-    const event = { source: '0xsource', eventType: 'consume', data: '0x01', blockNumber: 8, transactionHash: `0x${'ab'.repeat(32)}`, transactionIndex: 0, logIndex: 1 };
-    const eqty = { address: '0xabc', sign: vi.fn(async (signedEvent: Event) => {
-      signedEvent.timestamp = 1; signedEvent.signerAddress = '0xabc'; signedEvent.signature = Binary.fromHex(`0x${'11'.repeat(65)}`);
-    }), emitPublicEvent: vi.fn().mockResolvedValue({ subjectId: Binary.fromHex(chain.id).hash().hex, ...event }) };
-    const service = createService(stateStore as any, { getStateDump: vi.fn().mockResolvedValue([]) } as any, eqty as any, {} as any);
+    const event = {
+      source: '0xsource',
+      eventType: 'consume',
+      data: '0x01',
+      blockNumber: 8,
+      transactionHash: `0x${'ab'.repeat(32)}`,
+      transactionIndex: 0,
+      logIndex: 1,
+    };
+    const eqty = {
+      address: '0xabc',
+      sign: vi.fn(async (signedEvent: Event) => {
+        signedEvent.timestamp = 1;
+        signedEvent.signerAddress = '0xabc';
+        signedEvent.signature = Binary.fromHex(`0x${'11'.repeat(65)}`);
+      }),
+      emitPublicEvent: vi
+        .fn()
+        .mockResolvedValue({ subjectId: Binary.fromHex(chain.id).hash().hex, ...event }),
+    };
+    const service = createService(
+      stateStore as any,
+      { getStateDump: vi.fn().mockResolvedValue([]) } as any,
+      eqty as any,
+      {} as any
+    );
     const register = vi.fn().mockResolvedValue({ state: [['applied', 1]] });
-    (service as any)._rpc.set(chain.id, { encodePublicEvent: vi.fn().mockResolvedValue(Uint8Array.from([1])), register });
+    (service as any)._rpc.set(chain.id, {
+      encodePublicEvent: vi.fn().mockResolvedValue(Uint8Array.from([1])),
+      register,
+    });
     const actualStore = service.store.bind(service);
     vi.spyOn(service, 'store').mockImplementationOnce(async (...args: any[]) => {
       await actualStore(...args);
@@ -1756,7 +1825,10 @@ describe('OwnableService', () => {
     const local = await service.emitPublicEvent(chain, 'consume', { amount: 1 });
     const confirmation = await service.applyIndexedPublicEventSnapshot(chain, [event]);
 
-    expect(local).toMatchObject({ stateDump: [['applied', 1]], appliedReplayKeys: [publicEventReplayKey(event)] });
+    expect(local).toMatchObject({
+      stateDump: [['applied', 1]],
+      appliedReplayKeys: [publicEventReplayKey(event)],
+    });
     expect(chain.events).toHaveLength(1);
     expect(chain.events[0]?.isSigned()).toBe(true);
     expect(confirmation.appliedReplayKeys).toEqual([]);
@@ -1771,13 +1843,37 @@ describe('OwnableService', () => {
       const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
       await stateStore.createStore(`ownable:${chain.id}`);
       await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
-      const event = { source: '0xsource', eventType: 'consume', data: '0x01', blockNumber: 8, transactionHash: `0x${(mode === 'prewrite' ? 'bc' : 'cd').repeat(32)}`, transactionIndex: 0, logIndex: 1 };
-      const eqty = { address: '0xabc', sign: vi.fn(async (signedEvent: Event) => {
-        signedEvent.timestamp = 1; signedEvent.signerAddress = '0xabc'; signedEvent.signature = Binary.fromHex(`0x${'11'.repeat(65)}`);
-      }), emitPublicEvent: vi.fn().mockResolvedValue({ subjectId: Binary.fromHex(chain.id).hash().hex, ...event }) };
-      const service = createService(stateStore as any, { getStateDump: vi.fn().mockResolvedValue([]) } as any, eqty as any, {} as any);
+      const event = {
+        source: '0xsource',
+        eventType: 'consume',
+        data: '0x01',
+        blockNumber: 8,
+        transactionHash: `0x${(mode === 'prewrite' ? 'bc' : 'cd').repeat(32)}`,
+        transactionIndex: 0,
+        logIndex: 1,
+      };
+      const eqty = {
+        address: '0xabc',
+        sign: vi.fn(async (signedEvent: Event) => {
+          signedEvent.timestamp = 1;
+          signedEvent.signerAddress = '0xabc';
+          signedEvent.signature = Binary.fromHex(`0x${'11'.repeat(65)}`);
+        }),
+        emitPublicEvent: vi
+          .fn()
+          .mockResolvedValue({ subjectId: Binary.fromHex(chain.id).hash().hex, ...event }),
+      };
+      const service = createService(
+        stateStore as any,
+        { getStateDump: vi.fn().mockResolvedValue([]) } as any,
+        eqty as any,
+        {} as any
+      );
       const register = vi.fn().mockResolvedValue({ state: [['applied', 1]] });
-      (service as any)._rpc.set(chain.id, { encodePublicEvent: vi.fn().mockResolvedValue(Uint8Array.from([1])), register });
+      (service as any)._rpc.set(chain.id, {
+        encodePublicEvent: vi.fn().mockResolvedValue(Uint8Array.from([1])),
+        register,
+      });
       const originalSet = stateStore.set.getMockImplementation()!;
       let failedAppliedRecordWrite = false;
       stateStore.set.mockImplementation(async (store: string, key: string, value: any) => {
@@ -1813,15 +1909,35 @@ describe('OwnableService', () => {
     const chainId = 'ordering-chain';
     const storeId = `ownable:${chainId}.public-event-replays`;
     await stateStore.createStore(storeId);
-    const earlier = { source: '0xsource', eventType: 'consume', data: '0x01', blockNumber: 7, transactionHash: `0x${'99'.repeat(32)}`, transactionIndex: 3, logIndex: 1 };
+    const earlier = {
+      source: '0xsource',
+      eventType: 'consume',
+      data: '0x01',
+      blockNumber: 7,
+      transactionHash: `0x${'99'.repeat(32)}`,
+      transactionIndex: 3,
+      logIndex: 1,
+    };
     const later = { ...earlier, data: '0x02', logIndex: 2 };
-    await stateStore.set(storeId, publicEventReplayKey(later), { replayKey: publicEventReplayKey(later), event: later, status: 'confirmed', sources: ['snapshot'], localApplicationState: 'applied' });
-    await stateStore.set(storeId, publicEventReplayKey(earlier), { replayKey: publicEventReplayKey(earlier), event: earlier, status: 'confirmed', sources: ['snapshot'], localApplicationState: 'applied' });
+    await stateStore.set(storeId, publicEventReplayKey(later), {
+      replayKey: publicEventReplayKey(later),
+      event: later,
+      status: 'confirmed',
+      sources: ['snapshot'],
+      localApplicationState: 'applied',
+    });
+    await stateStore.set(storeId, publicEventReplayKey(earlier), {
+      replayKey: publicEventReplayKey(earlier),
+      event: earlier,
+      status: 'confirmed',
+      sources: ['snapshot'],
+      localApplicationState: 'applied',
+    });
     const service = createService(stateStore as any, {} as any, {} as any, {} as any);
 
-    expect((await service.listTrackedPublicEvents(chainId)).map((record) => record.replayKey)).toEqual([
-      publicEventReplayKey(earlier), publicEventReplayKey(later),
-    ]);
+    expect(
+      (await service.listTrackedPublicEvents(chainId)).map((record) => record.replayKey)
+    ).toEqual([publicEventReplayKey(earlier), publicEventReplayKey(later)]);
   });
 
   it('replays a legacy pending record without local application state', async () => {
@@ -1830,12 +1946,35 @@ describe('OwnableService', () => {
     const storeId = `ownable:${chain.id}.public-event-replays`;
     await stateStore.createStore(`ownable:${chain.id}`, storeId);
     await stateStore.set(`ownable:${chain.id}`, 'state', chain.state.hex);
-    const event = { source: '0xsource', eventType: 'consume', data: '0x01', blockNumber: 7, transactionHash: `0x${'aa'.repeat(32)}`, transactionIndex: 3, logIndex: 1 };
-    await stateStore.set(storeId, publicEventReplayKey(event), { replayKey: publicEventReplayKey(event), event, status: 'pending', sources: ['local'] });
-    const eqty = { address: '0xabc', sign: vi.fn(async (signedEvent: Event) => {
-      signedEvent.timestamp = 1; signedEvent.signerAddress = '0xabc'; signedEvent.signature = Binary.fromHex(`0x${'11'.repeat(65)}`);
-    }) };
-    const service = createService(stateStore as any, { getStateDump: vi.fn().mockResolvedValue([]) } as any, eqty as any, {} as any);
+    const event = {
+      source: '0xsource',
+      eventType: 'consume',
+      data: '0x01',
+      blockNumber: 7,
+      transactionHash: `0x${'aa'.repeat(32)}`,
+      transactionIndex: 3,
+      logIndex: 1,
+    };
+    await stateStore.set(storeId, publicEventReplayKey(event), {
+      replayKey: publicEventReplayKey(event),
+      event,
+      status: 'pending',
+      sources: ['local'],
+    });
+    const eqty = {
+      address: '0xabc',
+      sign: vi.fn(async (signedEvent: Event) => {
+        signedEvent.timestamp = 1;
+        signedEvent.signerAddress = '0xabc';
+        signedEvent.signature = Binary.fromHex(`0x${'11'.repeat(65)}`);
+      }),
+    };
+    const service = createService(
+      stateStore as any,
+      { getStateDump: vi.fn().mockResolvedValue([]) } as any,
+      eqty as any,
+      {} as any
+    );
     const register = vi.fn().mockResolvedValue({ state: [['replayed', 1]] });
     (service as any)._rpc.set(chain.id, { register });
     vi.spyOn(service, 'store').mockResolvedValue(undefined as any);
@@ -1847,7 +1986,11 @@ describe('OwnableService', () => {
     expect(chain.events).toHaveLength(1);
     expect(replayed).toMatchObject({ appliedReplayKeys: [publicEventReplayKey(event)] });
     expect(await service.listTrackedPublicEvents(chain.id)).toMatchObject([
-      { replayKey: publicEventReplayKey(event), status: 'confirmed', localApplicationState: 'applied' },
+      {
+        replayKey: publicEventReplayKey(event),
+        status: 'confirmed',
+        localApplicationState: 'applied',
+      },
     ]);
   });
 

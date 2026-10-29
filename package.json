@@ -19,6 +19,7 @@
     "test:watch": "vitest",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
+    "release:preflight": "node bin/assert-pre-one-release.mjs",
     "workspaces:list": "yarn workspaces list --verbose",
     "semantic-release": "semantic-release"
   },

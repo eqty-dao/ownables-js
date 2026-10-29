@@ -1,2 +1,2 @@
-export { default as BuilderService } from './services/Builder.service';
-export * from './types/Builder';
+export { default as BuilderService } from './services/Builder.service.js';
+export * from './types/Builder.js';

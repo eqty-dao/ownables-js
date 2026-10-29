@@ -9,7 +9,7 @@ import type {
   StateDump,
 } from '@ownables/core';
 import type TypedDict from '@ownables/core/types/TypedDict';
-import type { RNOwnableRPCOptions, RNAbiCallType } from '../types/PlatformReactNative';
+import type { RNOwnableRPCOptions, RNAbiCallType } from '../types/PlatformReactNative.js';
 
 interface HostAbiEnvelope {
   success: boolean;

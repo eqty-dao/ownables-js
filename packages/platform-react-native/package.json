@@ -1,6 +1,6 @@
 {
   "name": "@ownables/platform-react-native",
-  "version": "2.0.1",
+  "version": "0.13.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -8,7 +8,7 @@
     "dist"
   ],
   "dependencies": {
-    "@ownables/core": "workspace:*",
+    "@ownables/core": "0.13.0",
     "cbor-x": "^1.6.0",
     "jszip": "^3.10.1"
   },

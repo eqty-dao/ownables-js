@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { UploadOptions, BuilderHttpClient, BuilderClientOptions } from '../types/Builder';
+import type { UploadOptions, BuilderHttpClient, BuilderClientOptions } from '../types/Builder.js';
 
 export default class BuilderService {
   private static hasWarnedDeprecation = false;

@@ -8,12 +8,21 @@ import type {
 } from '@ownables/core';
 import JSZip from 'jszip';
 
-export interface HubUploadResult {
+export interface HubAvailableUploadResult {
+  status: 'available';
   ownableId: string;
   cid: string;
   owner?: string;
   ownerAccount?: string;
 }
+
+export interface HubPendingUploadResult {
+  status: 'pending';
+  ownableId: string;
+  expiresAt: string;
+}
+
+export type HubUploadResult = HubAvailableUploadResult | HubPendingUploadResult;
 
 export interface HubAvailableOwnableEntry {
   id: string;

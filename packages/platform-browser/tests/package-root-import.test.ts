@@ -5,6 +5,21 @@ import { promisify } from 'node:util';
 
 import { describe, expect, it } from 'vitest';
 import packageJson from '../package.json';
+import type {
+  HubAvailableUploadResult,
+  HubPendingUploadResult,
+  HubUploadResult,
+} from '@ownables/platform-browser';
+
+type Assert<T extends true> = T;
+type IsAssignable<T, U> = T extends U ? true : false;
+
+type _AvailableHasCid = Assert<IsAssignable<HubAvailableUploadResult['cid'], string>>;
+type _PendingHasExpiry = Assert<IsAssignable<HubPendingUploadResult['expiresAt'], string>>;
+type _UploadIncludesBothVariants = Assert<
+  IsAssignable<HubAvailableUploadResult, HubUploadResult> &
+    IsAssignable<HubPendingUploadResult, HubUploadResult>
+>;
 
 const execFileAsync = promisify(execFile);
 const REPO_ROOT = fileURLToPath(new URL('../../..', import.meta.url));

@@ -5,6 +5,11 @@ import HubService, {
   AVAILABLE_OWNABLES_UNAVAILABLE_MESSAGE,
   type HubEventSourceLike,
 } from '../src/services/Hub.service';
+import type {
+  HubAvailableUploadResult,
+  HubPendingUploadResult,
+  HubUploadResult,
+} from '../src/index';
 
 describe('HubService', () => {
   const ACCOUNT = 'eip155:84532:0xabc';
@@ -112,12 +117,17 @@ describe('HubService', () => {
     expect(fetchFn).toHaveBeenNthCalledWith(2, 'https://hub.example/health', { method: 'GET' });
   });
 
-  it('uploads ownables to the canonical Hub endpoint', async () => {
+  it('returns an available upload from the canonical Hub endpoint', async () => {
     const fetchFn = vi.fn().mockResolvedValue(
       new Response(
-        JSON.stringify({ ownableId: 'ownable-uploaded', cid: 'bafy-uploaded', owner: ACCOUNT }),
+        JSON.stringify({
+          status: 'available',
+          ownableId: 'ownable-uploaded',
+          cid: 'bafy-uploaded',
+          owner: ACCOUNT,
+        }),
         {
-          status: 200,
+          status: 201,
           headers: { 'content-type': 'application/json' },
         }
       )
@@ -136,10 +146,85 @@ describe('HubService', () => {
     expect((uploadedFile as File).name).toBe('dossier.zip');
     expect((uploadedFile as File).type).toBe('application/zip');
     expect(result).toEqual({
+      status: 'available',
       ownableId: 'ownable-uploaded',
       cid: 'bafy-uploaded',
       owner: ACCOUNT,
     });
+
+    if (result.status === 'available') {
+      expectTypeOf(result).toEqualTypeOf<HubAvailableUploadResult>();
+      expectTypeOf(result.cid).toEqualTypeOf<string>();
+    }
+  });
+
+  it('accepts an already available upload retry', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: 'available',
+          ownableId: 'ownable-uploaded',
+          cid: 'bafy-uploaded',
+          ownerAccount: ACCOUNT,
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }
+      )
+    );
+    const hub = new HubService('https://hub.example', fetchFn);
+
+    const result = await hub.uploadOwnable(new Uint8Array([1, 2, 3]));
+
+    expect(result).toEqual({
+      status: 'available',
+      ownableId: 'ownable-uploaded',
+      cid: 'bafy-uploaded',
+      ownerAccount: ACCOUNT,
+    });
+    expect(result.status).toBe('available');
+  });
+
+  it('returns a pending upload without available-only fields', async () => {
+    const expiresAt = '2026-11-03T12:00:00.000Z';
+    const fetchFn = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: 'pending',
+          ownableId: 'ownable-pending',
+          expiresAt,
+        }),
+        {
+          status: 202,
+          headers: { 'content-type': 'application/json' },
+        }
+      )
+    );
+    const hub = new HubService('https://hub.example', fetchFn);
+
+    const result: HubUploadResult = await hub.uploadOwnable(new Uint8Array([1, 2, 3]));
+
+    expect(result).toEqual({ status: 'pending', ownableId: 'ownable-pending', expiresAt });
+    if (result.status === 'pending') {
+      expectTypeOf(result).toEqualTypeOf<HubPendingUploadResult>();
+      expectTypeOf(result.expiresAt).toEqualTypeOf<string>();
+      expect('cid' in result).toBe(false);
+    }
+  });
+
+  it('keeps non-successful uploads on the existing error path', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ message: 'Upload rejected' }), {
+        status: 422,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
+    const hub = new HubService('https://hub.example', fetchFn);
+
+    await expect(hub.uploadOwnable(new Uint8Array([1, 2, 3]))).rejects.toThrow(
+      'Hub upload failed: Upload rejected'
+    );
   });
 
   it('downloads ownables from the Hub bundle endpoint', async () => {

@@ -61,7 +61,15 @@ for (const item of packages) {
   console.log(`Publishing exact version: ${item.name}@${version}`);
   const result = spawnSync(
     'npm',
-    ['publish', '--access', 'public', '--provenance', '--ignore-scripts', `--registry=${registry}`],
+    [
+      'publish',
+      '--access',
+      'public',
+      '--provenance',
+      '--ignore-scripts',
+      '--tag=latest',
+      `--registry=${registry}`,
+    ],
     { cwd: item.directory, stdio: 'inherit' }
   );
   if (result.error) throw result.error;

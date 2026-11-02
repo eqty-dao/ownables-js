@@ -1,3 +1,10 @@
+# [0.14.0](https://github.com/eqty-dao/ownables-js/compare/v0.13.0...v0.14.0) (2026-11-02)
+
+
+### Features
+
+* **platform-browser:** model Hub upload lifecycle ([3078d94](https://github.com/eqty-dao/ownables-js/commit/3078d94fab9441a52c947f3f3f8d3903c4fdca1b))
+
 ## [0.13.0](https://github.com/eqty-dao/ownables-js/compare/v0.12.1...v0.13.0) (2026-10-29)
 
 ### Changes

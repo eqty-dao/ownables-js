@@ -5,6 +5,12 @@ on:
     workflows: ['Unit Tests']
     types: [completed]
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      recovery_version:
+        description: 'Exact incomplete release to resume. Must be 0.14.0.'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -56,3 +62,57 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  recover-0-14-0:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.recovery_version == '0.14.0' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify exact release source
+        env:
+          RECOVERY_VERSION: ${{ inputs.recovery_version }}
+        run: |
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test "$RECOVERY_VERSION" = '0.14.0'
+          test "$(git rev-parse v0.14.0^{commit})" = 'e678e93333ca89ce2dbdff8f8b34a2d31cb37dfe'
+          git merge-base --is-ancestor v0.14.0 HEAD
+          git diff --quiet v0.14.0 -- packages ownables
+          node --input-type=module -e "import {readFileSync} from 'node:fs'; for (const name of ['core','adapter-ethers','adapter-viem','builder','builder-client','platform-browser','platform-node','platform-react-native']) { const manifest=JSON.parse(readFileSync('packages/'+name+'/package.json','utf8')); if (manifest.name !== '@ownables/'+name || manifest.version !== '0.14.0' || manifest.private) throw new Error('Unexpected release manifest: '+name); }"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack prepare yarn@4.13.0 --activate
+
+      - name: Restore Yarn cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            .yarn/cache
+            .yarn/install-state.gz
+          key: ${{ runner.os }}-yarn4-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build and verify exact package archives
+        run: |
+          yarn build:packages
+          node bin/verify-release-packages.mjs 0.14.0
+
+      - name: Publish missing exact versions
+        run: node bin/publish-release.mjs 0.14.0

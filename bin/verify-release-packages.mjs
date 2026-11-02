@@ -3,8 +3,8 @@ import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const version = process.argv[2];
-if (!/^0\.13\.0$/.test(version ?? '')) {
-  throw new Error('Usage: node bin/verify-release-packages.mjs 0.13.0');
+if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version ?? '')) {
+  throw new Error('Usage: node bin/verify-release-packages.mjs <release-version>');
 }
 
 const packages = [

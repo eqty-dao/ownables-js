@@ -1,10 +1,15 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { join, resolve } from 'node:path';
+import { assertReleaseVersion, publicPackageNames } from './release-artifacts.mjs';
 
 const version = process.argv[2];
-if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version ?? '')) {
-  throw new Error('Usage: node bin/publish-release.mjs <release-version>');
+assertReleaseVersion(version);
+const artifactDirectory = resolve(process.argv[3] ?? join('release-artifacts', version));
+const manifestPath = join(artifactDirectory, 'manifest.json');
+if (!existsSync(manifestPath)) {
+  throw new Error(`Missing release artifact manifest: ${manifestPath}`);
 }
 
 const npmVersion = execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim();
@@ -14,78 +19,103 @@ if (major < 11 || (major === 11 && (minor < 5 || (minor === 5 && patch < 1)))) {
 }
 
 const registry = 'https://registry.npmjs.org';
-const packageNames = [
-  'core',
-  'adapter-ethers',
-  'adapter-viem',
-  'builder',
-  'builder-client',
-  'platform-browser',
-  'platform-node',
-  'platform-react-native',
-];
+const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+if (manifest.schemaVersion !== 1 || manifest.version !== version || !Array.isArray(manifest.packages)) {
+  throw new Error(`Invalid release artifact manifest: ${manifestPath}`);
+}
 
-const packages = packageNames.map((name) => {
-  const directory = resolve('packages', name);
-  const manifest = JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8'));
-  if (manifest.name !== `@ownables/${name}` || manifest.version !== version || manifest.private) {
-    throw new Error(
-      `Unexpected package manifest in ${directory}: ${manifest.name}@${manifest.version}`
-    );
+const byName = new Map(manifest.packages.map((item) => [item.name, item]));
+if (byName.size !== publicPackageNames.length) {
+  throw new Error('Release artifact manifest has duplicate packages.');
+}
+const packages = publicPackageNames.map((packageName) => {
+  const name = `@ownables/${packageName}`;
+  const item = byName.get(name);
+  if (!item || item.version !== version || typeof item.tarball !== 'string') {
+    throw new Error(`Release artifact manifest is missing ${name}@${version}.`);
   }
-  return { directory, name: manifest.name };
+  const tarball = resolve(artifactDirectory, item.tarball);
+  if (!tarball.startsWith(`${artifactDirectory}/`) || !existsSync(tarball)) {
+    throw new Error(`Release archive is missing for ${name}.`);
+  }
+  const integrity = `sha512-${createHash('sha512').update(readFileSync(tarball)).digest('base64')}`;
+  if (integrity !== item.integrity) {
+    throw new Error(`Release archive integrity mismatch for ${name}.`);
+  }
+  return { ...item, name, tarball };
 });
 
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-async function publishedVersion(name) {
+async function registryVersion(name) {
   const url = `${registry}/${encodeURIComponent(name)}/${encodeURIComponent(version)}`;
   const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
-  if (response.status === 404) return false;
+  if (response.status === 404) return undefined;
   if (!response.ok) {
-    throw new Error(`Cannot verify ${name}@${version}: registry returned ${response.status}`);
+    throw new Error(`Cannot read ${name}@${version}: registry returned ${response.status}.`);
   }
-  const manifest = await response.json();
-  if (manifest.name !== name || manifest.version !== version) {
-    throw new Error(`Registry returned an unexpected version for ${name}@${version}`);
+  const entry = await response.json();
+  if (entry.name !== name || entry.version !== version || typeof entry.dist?.tarball !== 'string') {
+    throw new Error(`Registry returned an unexpected version for ${name}@${version}.`);
   }
-  return true;
+  return entry;
+}
+
+async function assertRegistryArchive(item) {
+  const entry = await registryVersion(item.name);
+  if (!entry) return false;
+  if (entry.dist.integrity !== item.integrity) {
+    throw new Error(`Registry integrity mismatch for ${item.name}@${version}.`);
+  }
+  const archive = await fetch(entry.dist.tarball, { signal: AbortSignal.timeout(60_000) });
+  if (!archive.ok) throw new Error(`Cannot download ${item.name}@${version} from npm.`);
+  const bytes = Buffer.from(await archive.arrayBuffer());
+  const downloadedIntegrity = `sha512-${createHash('sha512').update(bytes).digest('base64')}`;
+  if (downloadedIntegrity !== item.integrity) {
+    throw new Error(`Downloaded registry archive mismatch for ${item.name}@${version}.`);
+  }
+  return { integrity: entry.dist.integrity, tarball: entry.dist.tarball };
 }
 
 for (const item of packages) {
-  if (await publishedVersion(item.name)) {
-    console.log(`Already published: ${item.name}@${version}`);
+  await assertRegistryArchive(item);
+}
+
+for (const item of packages) {
+  if (await assertRegistryArchive(item)) {
+    console.log(`Already verified: ${item.name}@${version}`);
     continue;
   }
-
-  console.log(`Publishing exact version: ${item.name}@${version}`);
+  console.log(`Publishing inspected archive: ${item.name}@${version}`);
   const result = spawnSync(
     'npm',
-    [
-      'publish',
-      '--access',
-      'public',
-      '--provenance',
-      '--ignore-scripts',
-      '--tag=latest',
-      `--registry=${registry}`,
-    ],
-    { cwd: item.directory, stdio: 'inherit' }
+    ['publish', item.tarball, '--access', 'public', '--provenance', '--tag=latest', `--registry=${registry}`],
+    { stdio: 'inherit' }
   );
   if (result.error) throw result.error;
   if (result.status !== 0) {
-    throw new Error(`npm publish failed for ${item.name}@${version} (${result.status})`);
+    throw new Error(`npm publish failed for ${item.name}@${version}.`);
   }
 
-  let visible = false;
-  for (let attempt = 0; attempt < 6; attempt++) {
-    if (await publishedVersion(item.name)) {
-      visible = true;
+  let verified = false;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    if (await assertRegistryArchive(item)) {
+      verified = true;
       break;
     }
     await wait(5_000);
   }
-  if (!visible) {
-    throw new Error(`${item.name}@${version} is not visible in the npm registry after publishing.`);
+  if (!verified) {
+    throw new Error(`${item.name}@${version} is not visible with matching integrity.`);
   }
 }
+
+const registryArchives = {};
+for (const item of packages) {
+  const archive = await assertRegistryArchive(item);
+  if (!archive) throw new Error(`${item.name}@${version} disappeared from npm.`);
+  registryArchives[item.name] = archive;
+}
+writeFileSync(manifestPath, `${JSON.stringify({ ...manifest, registry: registryArchives }, null, 2)}\n`);
+
+console.log(`Published and verified exact registry archives for all public packages at ${version}.`);

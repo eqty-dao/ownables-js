@@ -10,7 +10,7 @@
     "build": "yarn workspaces foreach -A -t run build",
     "build:packages": "yarn workspaces foreach -A -t --no-private run build",
     "build:ownable": "bash bin/ownables-build.sh",
-    "clean": "yarn workspaces foreach -A run clean && rm -rf packages/notify-client/dist packages/notify-core/dist packages/notify-publisher/dist",
+    "clean": "yarn workspaces foreach -A run clean && rm -rf packages/notify-client/dist packages/notify-core/dist packages/notify-publisher/dist ownables/target ownables/*.zip ownables/*/pkg ownables/*/schema",
     "typecheck": "yarn workspaces foreach -A -t run typecheck",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -20,6 +20,8 @@
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "release:preflight": "node bin/assert-pre-one-release.mjs",
+    "release:artifacts": "node bin/release-artifacts.mjs",
+    "release:artifacts:verify": "node bin/release-artifacts.mjs $(node -p \"require('./packages/core/package.json').version\") --verify-twice",
     "workspaces:list": "yarn workspaces list --verbose",
     "semantic-release": "semantic-release"
   },

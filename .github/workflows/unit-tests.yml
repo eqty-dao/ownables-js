@@ -31,7 +31,7 @@ jobs:
 
       - name: Setup Rust
         if: matrix.package == 'builder'
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.97.1
         with:
           targets: wasm32-unknown-unknown
 
@@ -53,3 +53,48 @@ jobs:
 
       - name: Run tests (${{ matrix.package }})
         run: yarn test packages/${{ matrix.package }}/tests
+
+  release-artifacts:
+    name: Release artifact proof
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install npm with trusted publishing support
+        run: npm install --global npm@11.5.1
+
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack prepare yarn@4.13.0 --activate
+
+      - name: Restore Yarn cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            .yarn/cache
+            .yarn/install-state.gz
+          key: ${{ runner.os }}-yarn4-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
+
+      - name: Install
+        run: yarn install --immutable
+
+      - name: Run release helper tests
+        run: yarn test bin/release-artifacts.test.mjs
+
+      - name: Prove clean release artifacts are reproducible
+        run: yarn release:artifacts:verify

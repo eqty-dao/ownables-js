@@ -1,66 +1,55 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ensure_workspace_member() {
-  local name=$1
-  local ownables_workspace="./ownables/Cargo.toml"
-  local dir="./ownables/$name"
+create_deterministic_zip() {
+  local output=$1
+  shift
+  local output_dir
+  local output_name
+  local staging
 
-  # Only attempt workspace sync for Rust ownables.
-  if [ ! -f "$dir/Cargo.toml" ] && [ ! -f "$dir/Cargo.yaml" ]; then
-    return
-  fi
+  output_dir="$(cd "$(dirname "$output")" && pwd)"
+  output_name="$(basename "$output")"
+  output="${output_dir}/${output_name}"
+  staging="$(mktemp -d)"
 
-  if [ ! -f "$ownables_workspace" ]; then
-    return
-  fi
+  for input in "$@"; do
+    if [ -d "$input" ]; then
+      while IFS= read -r file; do
+        local destination="${staging}/$(basename "$file")"
+        if [ -e "$destination" ]; then
+          echo "Duplicate archive entry: $(basename "$file")" >&2
+          rm -rf "$staging"
+          return 1
+        fi
+        cp "$file" "$destination"
+      done < <(find "$input" -type f -print | LC_ALL=C sort)
+    else
+      local destination="${staging}/$(basename "$input")"
+      if [ -e "$destination" ]; then
+        echo "Duplicate archive entry: $(basename "$input")" >&2
+        rm -rf "$staging"
+        return 1
+      fi
+      cp "$input" "$destination"
+    fi
+  done
 
-  if grep -q "\"$name\"" "$ownables_workspace"; then
-    return
-  fi
-
-  local tmp
-  tmp="$(mktemp)"
-
-  awk -v pkg="$name" '
-    BEGIN {
-      in_workspace = 0
-      in_members = 0
-      inserted = 0
-    }
-    /^\[workspace\]/ {
-      in_workspace = 1
-    }
-    in_workspace && !in_members && /^[[:space:]]*members[[:space:]]*=[[:space:]]*\[/ {
-      in_members = 1
-      print
-      next
-    }
-    in_members && /^[[:space:]]*\]/ {
-      print "  \"" pkg "\","
-      print
-      in_members = 0
-      inserted = 1
-      next
-    }
-    {
-      print
-    }
-    END {
-      if (!inserted) {
-        exit 1
-      }
-    }
-  ' "$ownables_workspace" > "$tmp"
-
-  mv "$tmp" "$ownables_workspace"
+  find "$staging" -type f -exec touch -t 198001010000 {} +
+  (
+    cd "$staging"
+    set --
+    while IFS= read -r entry; do
+      set -- "$@" "$entry"
+    done < <(find . -type f -print | LC_ALL=C sort)
+    zip -X -q "$output" "$@"
+  )
+  rm -rf "$staging"
 }
 
 build_package() {
   local name=$1
   local dir="./ownables/$name"
-
-  ensure_workspace_member "$name"
 
   if [ -f "$dir/Cargo.toml" ]; then
     local package_name
@@ -88,7 +77,7 @@ build_package() {
 
     (
       cd ./ownables
-      cargo build -p "$package_name" --target wasm32-unknown-unknown --release
+      cargo build --locked -p "$package_name" --target wasm32-unknown-unknown --release
     )
 
     cp "$wasm_path" "$dir/pkg/ownable_bg.wasm"
@@ -114,10 +103,10 @@ build_package() {
     if [ -d "$dir/assets" ]; then
       zip_inputs=("$dir/assets/" "${zip_inputs[@]}")
     fi
-    zip -r -j "./ownables/$name.zip" "${zip_inputs[@]}"
+    create_deterministic_zip "./ownables/$name.zip" "${zip_inputs[@]}"
   else
     rm -f "./ownables/$name.zip"
-    zip -r -j "./ownables/$name.zip" "$dir/"*
+    create_deterministic_zip "./ownables/$name.zip" "$dir/"*
   fi
 }
 

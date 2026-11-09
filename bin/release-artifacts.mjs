@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   readdirSync,
   rmSync,
   statSync,
@@ -257,8 +258,19 @@ function buildAndPack(root, version, outputDirectory) {
     assertExactSource(sourceTree, version);
     runVisible('corepack', ['yarn', 'install', '--immutable'], sourceTree);
     assertNoGeneratedArtifacts(sourceTree);
+    const rustFlags = [
+      process.env.RUSTFLAGS,
+      `--remap-path-prefix=${temporaryRoot}=/build`,
+      `--remap-path-prefix=${realpathSync(temporaryRoot)}=/build`,
+    ]
+      .filter(Boolean)
+      .join(' ');
     runVisible('corepack', ['yarn', 'build:packages'], sourceTree, {
-      env: { ...process.env, CARGO_HOME: join(temporaryRoot, 'cargo-home') },
+      env: {
+        ...process.env,
+        CARGO_HOME: join(temporaryRoot, 'cargo-home'),
+        RUSTFLAGS: rustFlags,
+      },
     });
 
     const sourceCommit = run('git', ['rev-parse', 'HEAD'], sourceTree).trim();

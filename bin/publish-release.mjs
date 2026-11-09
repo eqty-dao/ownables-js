@@ -20,7 +20,11 @@ if (major < 11 || (major === 11 && (minor < 5 || (minor === 5 && patch < 1)))) {
 
 const registry = 'https://registry.npmjs.org';
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-if (manifest.schemaVersion !== 1 || manifest.version !== version || !Array.isArray(manifest.packages)) {
+if (
+  manifest.schemaVersion !== 1 ||
+  manifest.version !== version ||
+  !Array.isArray(manifest.packages)
+) {
   throw new Error(`Invalid release artifact manifest: ${manifestPath}`);
 }
 
@@ -89,7 +93,15 @@ for (const item of packages) {
   console.log(`Publishing inspected archive: ${item.name}@${version}`);
   const result = spawnSync(
     'npm',
-    ['publish', item.tarball, '--access', 'public', '--provenance', '--tag=latest', `--registry=${registry}`],
+    [
+      'publish',
+      item.tarball,
+      '--access',
+      'public',
+      '--provenance',
+      '--tag=latest',
+      `--registry=${registry}`,
+    ],
     { stdio: 'inherit' }
   );
   if (result.error) throw result.error;
@@ -116,6 +128,11 @@ for (const item of packages) {
   if (!archive) throw new Error(`${item.name}@${version} disappeared from npm.`);
   registryArchives[item.name] = archive;
 }
-writeFileSync(manifestPath, `${JSON.stringify({ ...manifest, registry: registryArchives }, null, 2)}\n`);
+writeFileSync(
+  manifestPath,
+  `${JSON.stringify({ ...manifest, registry: registryArchives }, null, 2)}\n`
+);
 
-console.log(`Published and verified exact registry archives for all public packages at ${version}.`);
+console.log(
+  `Published and verified exact registry archives for all public packages at ${version}.`
+);

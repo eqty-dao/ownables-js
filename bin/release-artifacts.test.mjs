@@ -26,7 +26,7 @@ describe('release artifacts', () => {
     mkdirSync(join(staleFile, '..'), { recursive: true });
     writeFileSync(staleFile, 'stale');
 
-    expect(() => assertNoGeneratedArtifacts(root)).toThrow('StateStoreRecordStore.js');
+    expect(() => assertNoGeneratedArtifacts(root)).toThrow('packages/core/dist');
   });
 
   it('rejects a packed workspace dependency', () => {

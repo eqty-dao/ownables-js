@@ -75,7 +75,7 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Install npm with trusted publishing support
-        run: npm install --global npm@11.5.1
+        run: npm install --global npm@12.2.2
 
       - name: Enable Corepack
         run: |

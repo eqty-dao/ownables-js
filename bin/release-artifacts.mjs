@@ -109,7 +109,9 @@ export function generatedArtifactPaths(root) {
 export function assertNoGeneratedArtifacts(root) {
   const paths = generatedArtifactPaths(root);
   if (paths.length > 0) {
-    throw new Error(`Release tree contains generated artifacts before the build: ${paths.join(', ')}`);
+    throw new Error(
+      `Release tree contains generated artifacts before the build: ${paths.join(', ')}`
+    );
   }
 }
 

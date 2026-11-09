@@ -63,7 +63,7 @@ build_package() {
     package_version="$(awk -F '\"' '/^version = /{print $2; exit}' "$dir/Cargo.toml")"
     package_description="$(awk -F '\"' '/^description = /{print $2; exit}' "$dir/Cargo.toml" || true)"
     package_keywords="$(
-      cargo metadata --format-version 1 --no-deps --manifest-path "$dir/Cargo.toml" \
+      cargo metadata --locked --format-version 1 --no-deps --manifest-path "$dir/Cargo.toml" \
         | jq --arg name "$package_name" -c '
             (.packages[] | select(.name == $name) | .metadata.ownables.package.keywords) // []
           '
@@ -98,7 +98,7 @@ build_package() {
         wireFormat: $wireFormat
       }' > "$dir/pkg/package.json"
 
-    (cd "$dir" && cargo run --example schema)
+    (cd "$dir" && cargo run --locked --example schema)
     local zip_inputs=("$dir/pkg/ownable_bg.wasm" "$dir/pkg/package.json" "$dir/schema/"*.json)
     if [ -d "$dir/assets" ]; then
       zip_inputs=("$dir/assets/" "${zip_inputs[@]}")

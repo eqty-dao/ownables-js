@@ -44,6 +44,20 @@ export function assertReleaseVersion(version) {
   }
 }
 
+export function exactPackResult(result, packageName, version) {
+  const name = `@ownables/${packageName}`;
+  const entries = Array.isArray(result) ? result : Object.values(result ?? {});
+  if (
+    entries.length !== 1 ||
+    entries[0]?.name !== name ||
+    entries[0]?.version !== version ||
+    typeof entries[0]?.filename !== 'string'
+  ) {
+    throw new Error(`Unexpected npm pack result for ${name}@${version}.`);
+  }
+  return entries[0];
+}
+
 function run(command, args, cwd, options = {}) {
   return execFileSync(command, args, {
     cwd,
@@ -284,14 +298,14 @@ function buildAndPack(root, version, outputDirectory) {
           packageDirectory
         )
       );
-      if (result.length !== 1) throw new Error(`Unexpected npm pack result for ${packageName}.`);
-      const tarball = join(tarballDirectory, result[0].filename);
+      const packed = exactPackResult(result, packageName, version);
+      const tarball = join(tarballDirectory, packed.filename);
       if (!existsSync(tarball)) throw new Error(`npm pack did not create ${tarball}.`);
       const inspection = inspectTarball(tarball, packageName, version, temporaryRoot);
       packages.push({
         name: `@ownables/${packageName}`,
         version,
-        tarball: join('tarballs', result[0].filename),
+        tarball: join('tarballs', packed.filename),
         integrity: sha512(tarball),
         ...inspection,
       });

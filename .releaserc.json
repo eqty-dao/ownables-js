@@ -7,17 +7,27 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "yarn workspaces foreach -A --no-private version ${nextRelease.version}",
-        "publishCmd": "yarn build:packages && node bin/verify-release-packages.mjs ${nextRelease.version} && node bin/publish-release.mjs ${nextRelease.version}"
+        "prepareCmd": "yarn workspaces foreach -A --no-private version ${nextRelease.version} && yarn install --mode=update-lockfile"
       }
     ],
     [
       "@semantic-release/git",
       {
-        "assets": ["CHANGELOG.md", "packages/*/package.json"],
+        "assets": ["CHANGELOG.md", "packages/*/package.json", "yarn.lock"],
         "message": "chore(release): ${nextRelease.version} [skip ci]"
       }
     ],
-    "@semantic-release/github"
+    [
+      "@semantic-release/exec",
+      {
+        "publishCmd": "node bin/release-artifacts.mjs ${nextRelease.version} && node bin/verify-release-packages.mjs ${nextRelease.version} && node bin/publish-release.mjs ${nextRelease.version}"
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "assets": ["release-artifacts/${nextRelease.version}/manifest.json"]
+      }
+    ]
   ]
 }

@@ -1,124 +1,61 @@
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { assertReleaseVersion, inspectTarball, publicPackageNames } from './release-artifacts.mjs';
 
 const version = process.argv[2];
-if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version ?? '')) {
-  throw new Error('Usage: node bin/verify-release-packages.mjs <release-version>');
+assertReleaseVersion(version);
+const artifactDirectory = resolve(process.argv[3] ?? join('release-artifacts', version));
+const manifestPath = join(artifactDirectory, 'manifest.json');
+if (!existsSync(manifestPath)) {
+  throw new Error(`Missing release artifact manifest: ${manifestPath}`);
 }
 
-const packages = [
-  'core',
-  'adapter-ethers',
-  'adapter-viem',
-  'builder',
-  'builder-client',
-  'platform-browser',
-  'platform-node',
-  'platform-react-native',
-];
-const coreConsumers = new Set([
-  'adapter-ethers',
-  'adapter-viem',
-  'builder',
-  'platform-browser',
-  'platform-node',
-  'platform-react-native',
-]);
-
-function collectEntrypoints(value) {
-  if (typeof value === 'string') return [value];
-  if (value === null || typeof value !== 'object') return [];
-  return Object.values(value).flatMap(collectEntrypoints);
+const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+if (
+  manifest.schemaVersion !== 1 ||
+  manifest.version !== version ||
+  !Array.isArray(manifest.packages)
+) {
+  throw new Error(`Invalid release artifact manifest: ${manifestPath}`);
+}
+if (manifest.packages.length !== publicPackageNames.length) {
+  throw new Error(`Expected ${publicPackageNames.length} release archives.`);
 }
 
-function normalizeTarballPath(path) {
-  return path.replace(/^\.\//, '');
-}
-
-function hasPackedEntrypoint(packedFiles, entrypoint) {
-  const normalizedEntrypoint = normalizeTarballPath(entrypoint);
-  if (!normalizedEntrypoint.includes('*')) {
-    return packedFiles.has(normalizedEntrypoint);
-  }
-
-  const globPattern = normalizedEntrypoint
-    .split('*')
-    .map((part) => part.replace(/[|\\{}()[\]^$+?.]/g, '\\$&'))
-    .join('[^/]*');
-  const entrypointPattern = new RegExp(`^${globPattern}$`);
-  return [...packedFiles].some((packedFile) => entrypointPattern.test(packedFile));
-}
-
-for (const packageName of packages) {
-  const packageDir = resolve('packages', packageName);
-  const sourceManifest = JSON.parse(readFileSync(resolve(packageDir, 'package.json'), 'utf8'));
-
-  if (sourceManifest.version !== version) {
-    throw new Error(`${sourceManifest.name} is ${sourceManifest.version}, expected ${version}.`);
-  }
-
-  if (
-    coreConsumers.has(packageName) &&
-    sourceManifest.dependencies?.['@ownables/core'] !== version
-  ) {
-    throw new Error(`${sourceManifest.name} must depend on @ownables/core@${version}.`);
-  }
-
-  const packResult = JSON.parse(
-    execFileSync('npm', ['pack', '--json'], { cwd: packageDir, encoding: 'utf8' })
-  );
-  const tarball = resolve(packageDir, packResult[0].filename);
-
-  try {
-    const packedFiles = new Set(packResult[0].files.map((file) => normalizeTarballPath(file.path)));
-    const packedManifest = JSON.parse(
-      execFileSync('tar', ['-xOf', tarball, 'package/package.json'], { encoding: 'utf8' })
-    );
-    const dependencyGroups = [
-      'dependencies',
-      'devDependencies',
-      'optionalDependencies',
-      'peerDependencies',
-    ];
-    const hasWorkspaceDependency = dependencyGroups.some((group) =>
-      Object.values(packedManifest[group] ?? {}).some(
-        (dependency) => typeof dependency === 'string' && dependency.startsWith('workspace:')
-      )
-    );
-
-    if (packedManifest.version !== version) {
-      throw new Error(
-        `${packedManifest.name} packed as ${packedManifest.version}, expected ${version}.`
-      );
-    }
-    if (hasWorkspaceDependency) {
-      throw new Error(`${packedManifest.name} contains a workspace: dependency in its tarball.`);
-    }
+const expectedNames = new Set(publicPackageNames.map((name) => `@ownables/${name}`));
+const temporaryRoot = mkdtempSync(join(tmpdir(), 'ownables-release-verification-'));
+try {
+  for (const item of manifest.packages) {
     if (
-      coreConsumers.has(packageName) &&
-      packedManifest.dependencies?.['@ownables/core'] !== version
+      !expectedNames.delete(item.name) ||
+      item.version !== version ||
+      typeof item.tarball !== 'string'
     ) {
-      throw new Error(`${packedManifest.name} must pack @ownables/core@${version}.`);
+      throw new Error(`Unexpected package in release manifest: ${item.name}@${item.version}`);
     }
-
-    const entrypoints = [
-      packedManifest.main,
-      packedManifest.types,
-      ...collectEntrypoints(packedManifest.exports),
-    ].filter((entrypoint) => typeof entrypoint === 'string');
-    const missingEntrypoint = entrypoints.find(
-      (entrypoint) => !hasPackedEntrypoint(packedFiles, entrypoint)
-    );
-
-    if (missingEntrypoint) {
-      throw new Error(`${packedManifest.name} is missing packed entrypoint ${missingEntrypoint}.`);
+    const packageName = item.name.slice('@ownables/'.length);
+    const tarball = resolve(artifactDirectory, item.tarball);
+    if (!tarball.startsWith(`${artifactDirectory}/`) || !existsSync(tarball)) {
+      throw new Error(`Missing release archive for ${item.name}.`);
     }
-  } finally {
-    if (existsSync(tarball)) {
-      rmSync(tarball);
+    const integrity = `sha512-${createHash('sha512').update(readFileSync(tarball)).digest('base64')}`;
+    if (integrity !== item.integrity) {
+      throw new Error(`Release archive integrity mismatch for ${item.name}.`);
+    }
+    const inspection = inspectTarball(tarball, packageName, version, temporaryRoot);
+    if (
+      JSON.stringify(inspection) !== JSON.stringify({ files: item.files, builder: item.builder })
+    ) {
+      throw new Error(`Release archive inventory mismatch for ${item.name}.`);
     }
   }
+  if (expectedNames.size > 0) {
+    throw new Error(`Release manifest is missing: ${[...expectedNames].join(', ')}`);
+  }
+} finally {
+  rmSync(temporaryRoot, { recursive: true, force: true });
 }
 
-console.log(`Verified packed manifests for all public packages at ${version}.`);
+console.log(`Verified exact release archives for all public packages at ${version}.`);

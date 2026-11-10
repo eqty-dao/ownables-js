@@ -1,3 +1,13 @@
+## [0.14.1](https://github.com/eqty-dao/ownables-js/compare/v0.14.0...v0.14.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* **release:** accept npm 12 pack metadata ([b67c07d](https://github.com/eqty-dao/ownables-js/commit/b67c07d59c296bc6dea6cb1cda5d407c4b865610))
+* **release:** build and publish exact clean artifacts ([fcb6e82](https://github.com/eqty-dao/ownables-js/commit/fcb6e823f8e28b353cb7c518447ab44e6f528ddf))
+* **release:** lock and validate reproducible builds ([e2554be](https://github.com/eqty-dao/ownables-js/commit/e2554be86ea34b1f98eb5559dfdef8b13d8d17bb))
+* **release:** remap temporary Rust source paths ([5a4ac1a](https://github.com/eqty-dao/ownables-js/commit/5a4ac1a9c81b66106ed3ee0ff2a30f19b4470d11))
+
 # [0.14.0](https://github.com/eqty-dao/ownables-js/compare/v0.13.0...v0.14.0) (2026-11-02)
 
 ### Features

@@ -105,15 +105,8 @@ jobs:
 
       - name: Publish and verify through npm OIDC
         run: |
-          for attempt in $(seq 1 32); do
-            if node bin/publish-release.mjs 0.14.1; then
-              exit 0
-            fi
-            if [ "$attempt" -eq 32 ]; then
-              exit 1
-            fi
-            sleep 30
-          done
+          git show 702bff3367e2545aaf25cf96d784634931040f7f:bin/publish-release.mjs > bin/publish-release.mjs
+          node bin/publish-release.mjs 0.14.1
 
       - name: Create GitHub Release after registry verification
         run: |

@@ -71,14 +71,23 @@ async function assertRegistryArchive(item) {
   if (entry.dist.integrity !== item.integrity) {
     throw new Error(`Registry integrity mismatch for ${item.name}@${version}.`);
   }
-  const archive = await fetch(entry.dist.tarball, { signal: AbortSignal.timeout(60_000) });
-  if (!archive.ok) throw new Error(`Cannot download ${item.name}@${version} from npm.`);
-  const bytes = Buffer.from(await archive.arrayBuffer());
-  const downloadedIntegrity = `sha512-${createHash('sha512').update(bytes).digest('base64')}`;
-  if (downloadedIntegrity !== item.integrity) {
-    throw new Error(`Downloaded registry archive mismatch for ${item.name}@${version}.`);
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const archive = await fetch(entry.dist.tarball, { signal: AbortSignal.timeout(60_000) });
+    if (archive.status === 404 || archive.status === 503) {
+      await wait(5_000);
+      continue;
+    }
+    if (!archive.ok) {
+      throw new Error(`Cannot download ${item.name}@${version} from npm: ${archive.status}.`);
+    }
+    const bytes = Buffer.from(await archive.arrayBuffer());
+    const downloadedIntegrity = `sha512-${createHash('sha512').update(bytes).digest('base64')}`;
+    if (downloadedIntegrity !== item.integrity) {
+      throw new Error(`Downloaded registry archive mismatch for ${item.name}@${version}.`);
+    }
+    return { integrity: entry.dist.integrity, tarball: entry.dist.tarball };
   }
-  return { integrity: entry.dist.integrity, tarball: entry.dist.tarball };
+  throw new Error(`Registry archive for ${item.name}@${version} did not become available.`);
 }
 
 for (const item of packages) {

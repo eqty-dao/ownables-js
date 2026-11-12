@@ -104,7 +104,9 @@ jobs:
           node bin/verify-release-packages.mjs 0.14.1
 
       - name: Publish and verify through npm OIDC
-        run: node bin/publish-release.mjs 0.14.1
+        run: |
+          git show 702bff3367e2545aaf25cf96d784634931040f7f:bin/publish-release.mjs > bin/publish-release.mjs
+          node bin/publish-release.mjs 0.14.1
 
       - name: Create GitHub Release after registry verification
         run: |

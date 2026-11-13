@@ -50,6 +50,8 @@ const packages = publicPackageNames.map((packageName) => {
 });
 
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+const registryVisibilityAttempts = 180;
+const registryPollIntervalMs = 5_000;
 
 async function registryVersion(name) {
   const url = `${registry}/${encodeURIComponent(name)}/${encodeURIComponent(version)}`;
@@ -71,10 +73,10 @@ async function assertRegistryArchive(item) {
   if (entry.dist.integrity !== item.integrity) {
     throw new Error(`Registry integrity mismatch for ${item.name}@${version}.`);
   }
-  for (let attempt = 0; attempt < 60; attempt++) {
+  for (let attempt = 0; attempt < registryVisibilityAttempts; attempt++) {
     const archive = await fetch(entry.dist.tarball, { signal: AbortSignal.timeout(60_000) });
     if (archive.status === 404 || archive.status === 503) {
-      await wait(5_000);
+      await wait(registryPollIntervalMs);
       continue;
     }
     if (!archive.ok) {
@@ -119,12 +121,12 @@ for (const item of packages) {
   }
 
   let verified = false;
-  for (let attempt = 0; attempt < 60; attempt++) {
+  for (let attempt = 0; attempt < registryVisibilityAttempts; attempt++) {
     if (await assertRegistryArchive(item)) {
       verified = true;
       break;
     }
-    await wait(5_000);
+    await wait(registryPollIntervalMs);
   }
   if (!verified) {
     throw new Error(`${item.name}@${version} is not visible with matching integrity.`);

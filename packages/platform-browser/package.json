@@ -1,6 +1,6 @@
 {
   "name": "@ownables/platform-browser",
-  "version": "0.14.1",
+  "version": "0.14.2",
   "type": "module",
   "main": "dist/platform-browser/src/index.js",
   "types": "dist/platform-browser/src/index.d.ts",
@@ -8,7 +8,7 @@
     "dist"
   ],
   "dependencies": {
-    "@ownables/core": "0.14.1",
+    "@ownables/core": "0.14.2",
     "axios": "^1.13.6",
     "blockstore-core": "^6.1.2",
     "buffer": "^6.0.3",

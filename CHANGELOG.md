@@ -1,3 +1,10 @@
+## [0.14.2](https://github.com/eqty-dao/ownables-js/compare/v0.14.1...v0.14.2) (2026-11-13)
+
+
+### Bug Fixes
+
+* **release:** keep CI publication on the current release line ([1072228](https://github.com/eqty-dao/ownables-js/commit/1072228a95f5636b99df4ccaa2c27f005706f783))
+
 ## [0.14.1](https://github.com/eqty-dao/ownables-js/compare/v0.14.0...v0.14.1) (2026-11-10)
 
 

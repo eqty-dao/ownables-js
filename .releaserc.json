@@ -26,7 +26,7 @@
     [
       "@semantic-release/github",
       {
-        "assets": ["release-artifacts/${nextRelease.version}/manifest.json"]
+        "assets": ["release-artifacts/*/manifest.json"]
       }
     ]
   ]

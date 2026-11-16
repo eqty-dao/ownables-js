@@ -181,6 +181,184 @@ function createFakeIndexedDb() {
   return { api, db, stores, deletedDbs };
 }
 
+function createLifecycleIndexedDb({ blockFirstUpgrade = false }: { blockFirstUpgrade?: boolean } = {}) {
+  const stores = new Map<string, Map<string, any>>([['ownable:id', new Map([['state', 'ready']])]]);
+  const storeNames = ['ownable:id'];
+  const deletedDbs: string[] = [];
+  const upgradeVersions: number[] = [];
+  let currentVersion = 1;
+  let closedTransactionAttempts = 0;
+  let pendingSuccess: (() => void) | undefined;
+  let holdNextUpgrade = true;
+  let blockNextUpgrade = blockFirstUpgrade;
+  let resolveUpgradePending: (() => void) | undefined;
+  let resolveUpgradeBlocked: (() => void) | undefined;
+  const upgradePendingPromise = new Promise<void>((resolve) => {
+    resolveUpgradePending = resolve;
+  });
+  const upgradeBlockedPromise = new Promise<void>((resolve) => {
+    resolveUpgradeBlocked = resolve;
+  });
+
+  const createRequest = <T>(fn: () => T): FakeRequest => {
+    const request: FakeRequest = {};
+    queueMicrotask(() => {
+      try {
+        request.result = fn();
+        request.onsuccess?.({ target: request } as unknown as Event);
+      } catch (error) {
+        request.error = error as Error;
+        request.onerror?.({ target: request } as unknown as Event);
+      }
+    });
+    return request;
+  };
+
+  const createDb = (version: number) => {
+    let closed = false;
+    const db = {
+      version,
+      objectStoreNames: new NameList(storeNames),
+      close: () => {
+        closed = true;
+      },
+      createObjectStore(name: string) {
+        if (!stores.has(name)) stores.set(name, new Map());
+        if (!storeNames.includes(name)) storeNames.push(name);
+      },
+      deleteObjectStore(name: string) {
+        stores.delete(name);
+        const index = storeNames.indexOf(name);
+        if (index >= 0) storeNames.splice(index, 1);
+      },
+      transaction(storeNamesArg: string | string[], _mode: string): FakeTx {
+        if (closed) {
+          closedTransactionAttempts += 1;
+          throw new DOMException('IDBDatabase connection is closing', 'InvalidStateError');
+        }
+
+        const names = Array.isArray(storeNamesArg) ? storeNamesArg : [storeNamesArg];
+        const tx: FakeTx = {
+          objectStore(name: string) {
+            if (!names.includes(name)) throw new Error(`Unknown store ${name}`);
+            const target = stores.get(name) ?? new Map<string, any>();
+            stores.set(name, target);
+
+            return {
+              get(key: string) {
+                return createRequest(() => target.get(key));
+              },
+              getAll() {
+                return createRequest(() => Array.from(target.values()));
+              },
+              openCursor() {
+                const request: FakeRequest = {};
+                const entries = Array.from(target.entries());
+                let index = 0;
+                const emit = () => {
+                  const entry = entries[index];
+                  if (!entry) {
+                    request.result = null;
+                  } else {
+                    request.result = {
+                      primaryKey: entry[0],
+                      value: entry[1],
+                      continue: () => {
+                        index += 1;
+                        queueMicrotask(emit);
+                      },
+                    };
+                  }
+                  request.onsuccess?.({ target: request } as unknown as Event);
+                };
+                queueMicrotask(emit);
+                return request;
+              },
+            };
+          },
+          abort: () => tx.onabort?.(),
+        };
+        return tx;
+      },
+    } as unknown as IDBDatabase;
+
+    return db;
+  };
+
+  let currentDb = createDb(currentVersion);
+  const api = {
+    open: (_name: string, version?: number) => {
+      const request: FakeRequest = {};
+      queueMicrotask(() => {
+        if (!version || version <= currentVersion) {
+          request.result = currentDb;
+          request.onsuccess?.({ target: request } as unknown as Event);
+          return;
+        }
+
+        upgradeVersions.push(version);
+        if (blockNextUpgrade) {
+          blockNextUpgrade = false;
+          request.onblocked?.();
+          resolveUpgradeBlocked?.();
+          return;
+        }
+
+        const replacement = createDb(version);
+        request.result = replacement;
+        request.onupgradeneeded?.();
+        const complete = () => {
+          currentVersion = version;
+          currentDb = replacement;
+          request.onsuccess?.({ target: request } as unknown as Event);
+        };
+
+        if (holdNextUpgrade) {
+          holdNextUpgrade = false;
+          pendingSuccess = complete;
+          resolveUpgradePending?.();
+        } else {
+          complete();
+        }
+      });
+      return request as unknown as IDBOpenDBRequest;
+    },
+    deleteDatabase: (name: string) => {
+      const request: FakeRequest = {};
+      queueMicrotask(() => {
+        deletedDbs.push(name);
+        request.onsuccess?.({ target: request } as unknown as Event);
+      });
+      return request as unknown as IDBOpenDBRequest;
+    },
+    databases: async () => [],
+  } as unknown as IDBFactory;
+
+  return {
+    api,
+    db: currentDb,
+    deletedDbs,
+    upgradeVersions,
+    get closedTransactionAttempts() {
+      return closedTransactionAttempts;
+    },
+    get upgradePending() {
+      return pendingSuccess !== undefined;
+    },
+    awaitUpgradePending() {
+      return upgradePendingPromise;
+    },
+    awaitUpgradeBlocked() {
+      return upgradeBlockedPromise;
+    },
+    releaseUpgrade() {
+      const complete = pendingSuccess;
+      pendingSuccess = undefined;
+      complete?.();
+    },
+  };
+}
+
 describe('IDBService', () => {
   it('opens database using injected indexedDB API', async () => {
     const { api } = createFakeIndexedDb();
@@ -267,6 +445,86 @@ describe('IDBService', () => {
 
     await service.deleteStore(/^tmp:/);
     await expect(service.hasStore('tmp:1')).resolves.toBe(false);
+  });
+
+  it('waits for a replacement connection before reading replay state', async () => {
+    const fake = createLifecycleIndexedDb();
+    const service = new IDBService(fake.db, 'ownables:race', fake.api);
+
+    const upgrade = service.createStore('ownable:id.public-event-replays');
+    await fake.awaitUpgradePending();
+    expect(fake.upgradePending).toBe(true);
+
+    const state = service.get('ownable:id', 'state');
+    const stateMap = service.getMap('ownable:id');
+    await Promise.resolve();
+    expect(fake.closedTransactionAttempts).toBe(0);
+
+    fake.releaseUpgrade();
+
+    await expect(upgrade).resolves.toBeUndefined();
+    await expect(state).resolves.toBe('ready');
+    await expect(stateMap).resolves.toEqual(new Map([['state', 'ready']]));
+    expect(fake.closedTransactionAttempts).toBe(0);
+  });
+
+  it('settles a later metadata read after an IndexedDB upgrade is blocked', async () => {
+    const fake = createLifecycleIndexedDb({ blockFirstUpgrade: true });
+    const service = new IDBService(fake.db, 'ownables:blocked-upgrade', fake.api);
+
+    const blockedUpgrade = service.createStore('ownable:id.public-event-replays');
+    await fake.awaitUpgradeBlocked();
+
+    await expect(blockedUpgrade).rejects.toThrow(
+      'IndexedDB upgrade blocked for ownables:blocked-upgrade'
+    );
+    await expect(service.hasStore('ownable:id')).resolves.toBe(true);
+    expect(fake.upgradeVersions).toEqual([2]);
+  });
+
+  it('serializes queued schema changes against the replacement connection', async () => {
+    const fake = createLifecycleIndexedDb();
+    const service = new IDBService(fake.db, 'ownables:queue', fake.api);
+
+    const first = service.createStore('first');
+    const second = service.createStore('second');
+    await fake.awaitUpgradePending();
+    fake.releaseUpgrade();
+
+    await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined]);
+    await expect(service.listStores()).resolves.toEqual(
+      expect.arrayContaining(['ownable:id', 'first', 'second'])
+    );
+    expect(fake.upgradeVersions).toEqual([2, 3]);
+  });
+
+  it('evaluates a queued store deletion after the preceding schema change', async () => {
+    const fake = createLifecycleIndexedDb();
+    const service = new IDBService(fake.db, 'ownables:delete-queue', fake.api);
+
+    const create = service.createStore('transient');
+    const remove = service.deleteStore('transient');
+    await fake.awaitUpgradePending();
+    fake.releaseUpgrade();
+
+    await expect(Promise.all([create, remove])).resolves.toEqual([undefined, undefined]);
+    await expect(service.hasStore('transient')).resolves.toBe(false);
+    expect(fake.upgradeVersions).toEqual([2, 3]);
+  });
+
+  it('waits for an in-flight schema change before deleting the database', async () => {
+    const fake = createLifecycleIndexedDb();
+    const service = new IDBService(fake.db, 'ownables:delete-after-upgrade', fake.api);
+
+    const upgrade = service.createStore('transient');
+    const deletion = service.deleteDatabase();
+    await fake.awaitUpgradePending();
+    expect(fake.deletedDbs).toEqual([]);
+
+    fake.releaseUpgrade();
+
+    await expect(Promise.all([upgrade, deletion])).resolves.toEqual([undefined, undefined]);
+    expect(fake.deletedDbs).toEqual(['ownables:delete-after-upgrade']);
   });
 
   it('deletes active DB and ownables-prefixed DBs', async () => {

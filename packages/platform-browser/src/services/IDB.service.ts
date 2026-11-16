@@ -8,6 +8,7 @@ const PACKAGE_DB_STORES = ['package-assets'];
 export default class IDBService {
   private static mainInstance: IDBService;
   private static packageInstance: IDBService;
+  private schemaGate: Promise<void> = Promise.resolve();
 
   constructor(
     private db: IDBDatabase,
@@ -102,117 +103,144 @@ export default class IDBService {
     return new IDBService(db, dbName, indexedDBApi);
   }
 
-  // Close the DB connection for this instance
-  async close(): Promise<void> {
-    this.db.close();
-  }
-
   private error(event: Event): Error {
     return (event.target as IDBRequest)?.error || new Error('Unknown error');
   }
 
-  async get(store: string, key: string): Promise<any> {
-    return new Promise(async (resolve, reject) => {
-      const tx = this.db.transaction(store, 'readonly');
-      const request = tx.objectStore(store).get(key);
+  private async withDatabase<T>(action: (db: IDBDatabase) => T | Promise<T>): Promise<T> {
+    await this.schemaGate;
+    return action(this.db);
+  }
 
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = (event) => reject(this.error(event));
-    });
+  private queueSchemaChange(action: () => Promise<void>): Promise<void> {
+    const change = this.schemaGate.then(action);
+    this.schemaGate = change.catch(() => undefined);
+    return change;
+  }
+
+  async get(store: string, key: string): Promise<any> {
+    return this.withDatabase(
+      (db) =>
+        new Promise<any>((resolve, reject) => {
+          const tx = db.transaction(store, 'readonly');
+          const request = tx.objectStore(store).get(key);
+
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = (event) => reject(this.error(event));
+        })
+    );
   }
 
   async getAll(store: string): Promise<Array<any>> {
-    return new Promise(async (resolve, reject) => {
-      const tx = this.db.transaction(store, 'readonly');
-      const request = tx.objectStore(store).getAll();
+    return this.withDatabase(
+      (db) =>
+        new Promise<Array<any>>((resolve, reject) => {
+          const tx = db.transaction(store, 'readonly');
+          const request = tx.objectStore(store).getAll();
 
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = (event) => reject(this.error(event));
-    });
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = (event) => reject(this.error(event));
+        })
+    );
   }
 
   async getMap(store: string): Promise<Map<any, any>> {
-    return new Promise(async (resolve, reject) => {
-      const tx = this.db.transaction(store, 'readonly');
-      const request = tx.objectStore(store).openCursor();
-      const map = new Map();
+    return this.withDatabase(
+      (db) =>
+        new Promise<Map<any, any>>((resolve, reject) => {
+          const tx = db.transaction(store, 'readonly');
+          const request = tx.objectStore(store).openCursor();
+          const map = new Map();
 
-      request.onsuccess = () => {
-        const cursor = request.result;
-        if (cursor) {
-          map.set(cursor.primaryKey, cursor.value);
-          cursor.continue();
-        } else {
-          resolve(map);
-        }
-      };
-      request.onerror = (event) => reject(this.error(event));
-    });
+          request.onsuccess = () => {
+            const cursor = request.result;
+            if (cursor) {
+              map.set(cursor.primaryKey, cursor.value);
+              cursor.continue();
+            } else {
+              resolve(map);
+            }
+          };
+          request.onerror = (event) => reject(this.error(event));
+        })
+    );
   }
 
   async keys(store: string): Promise<string[]> {
-    return new Promise(async (resolve, reject) => {
-      const tx = this.db.transaction(store, 'readonly').objectStore(store).getAllKeys();
+    return this.withDatabase(
+      (db) =>
+        new Promise<string[]>((resolve, reject) => {
+          const tx = db.transaction(store, 'readonly').objectStore(store).getAllKeys();
 
-      tx.onsuccess = () => resolve(tx.result as string[]);
-      tx.onerror = (event) => reject(this.error(event));
-    });
+          tx.onsuccess = () => resolve(tx.result as string[]);
+          tx.onerror = (event) => reject(this.error(event));
+        })
+    );
   }
 
   async keysByPrefix(store: string, prefix: string): Promise<string[]> {
-    return new Promise((resolve, reject) => {
-      const tx = this.db.transaction(store, 'readonly');
-      const request = tx.objectStore(store).openKeyCursor();
-      const keys: string[] = [];
+    return this.withDatabase(
+      (db) =>
+        new Promise<string[]>((resolve, reject) => {
+          const tx = db.transaction(store, 'readonly');
+          const request = tx.objectStore(store).openKeyCursor();
+          const keys: string[] = [];
 
-      request.onsuccess = () => {
-        const cursor = request.result;
-        if (!cursor) {
-          resolve(keys);
-          return;
-        }
+          request.onsuccess = () => {
+            const cursor = request.result;
+            if (!cursor) {
+              resolve(keys);
+              return;
+            }
 
-        const key = String(cursor.primaryKey);
-        if (key.startsWith(prefix)) {
-          keys.push(key);
-        }
-        cursor.continue();
-      };
-      request.onerror = (event) => reject(this.error(event));
-    });
+            const key = String(cursor.primaryKey);
+            if (key.startsWith(prefix)) {
+              keys.push(key);
+            }
+            cursor.continue();
+          };
+          request.onerror = (event) => reject(this.error(event));
+        })
+    );
   }
 
   async getAllByPrefix(store: string, prefix: string): Promise<Array<any>> {
-    return new Promise((resolve, reject) => {
-      const tx = this.db.transaction(store, 'readonly');
-      const request = tx.objectStore(store).openCursor();
-      const values: Array<any> = [];
+    return this.withDatabase(
+      (db) =>
+        new Promise<Array<any>>((resolve, reject) => {
+          const tx = db.transaction(store, 'readonly');
+          const request = tx.objectStore(store).openCursor();
+          const values: Array<any> = [];
 
-      request.onsuccess = () => {
-        const cursor = request.result;
-        if (!cursor) {
-          resolve(values);
-          return;
-        }
+          request.onsuccess = () => {
+            const cursor = request.result;
+            if (!cursor) {
+              resolve(values);
+              return;
+            }
 
-        const key = String(cursor.primaryKey);
-        if (key.startsWith(prefix)) {
-          values.push(cursor.value);
-        }
-        cursor.continue();
-      };
-      request.onerror = (event) => reject(this.error(event));
-    });
+            const key = String(cursor.primaryKey);
+            if (key.startsWith(prefix)) {
+              values.push(cursor.value);
+            }
+            cursor.continue();
+          };
+          request.onerror = (event) => reject(this.error(event));
+        })
+    );
   }
 
   async set(store: string, key: string, value: any): Promise<void> {
-    return new Promise(async (resolve, reject) => {
-      const tx = this.db.transaction(store, 'readwrite');
-      const request = tx.objectStore(store).put(value, key);
+    return this.withDatabase(
+      (db) =>
+        new Promise<void>((resolve, reject) => {
+          const tx = db.transaction(store, 'readwrite');
+          const request = tx.objectStore(store).put(value, key);
 
-      request.onsuccess = () => resolve();
-      request.onerror = (event) => reject(this.error(event));
-    });
+          request.onsuccess = () => resolve();
+          request.onerror = (event) => reject(this.error(event));
+        })
+    );
   }
 
   async setAll(store: string, map: TypedDict | Map<any, any>): Promise<void>;
@@ -221,49 +249,56 @@ export default class IDBService {
     const storeNames: string | string[] = b ? [a] : Object.keys(a);
     const data: { [_: string]: TypedDict | Map<any, any> } = b ? { [a]: b } : a;
 
-    return new Promise(async (resolve, reject) => {
-      const tx = this.db.transaction(storeNames, 'readwrite');
+    return this.withDatabase(
+      (db) =>
+        new Promise<void>((resolve, reject) => {
+          const tx = db.transaction(storeNames, 'readwrite');
 
-      tx.oncomplete = () => resolve();
-      tx.onerror = (event) => reject(this.error(event));
-      tx.onabort = () => reject(new Error('Transaction aborted'));
+          tx.oncomplete = () => resolve();
+          tx.onerror = (event) => reject(this.error(event));
+          tx.onabort = () => reject(new Error('Transaction aborted'));
 
-      try {
-        for (const [store, map] of Object.entries(data)) {
-          const objectStore = tx.objectStore(store);
-          const entries = map instanceof Map ? map.entries() : Object.entries(map);
+          try {
+            for (const [store, map] of Object.entries(data)) {
+              const objectStore = tx.objectStore(store);
+              const entries = map instanceof Map ? map.entries() : Object.entries(map);
 
-          for (const [key, value] of entries) {
-            objectStore.put(value, key);
+              for (const [key, value] of entries) {
+                objectStore.put(value, key);
+              }
+            }
+          } catch (error) {
+            tx.abort();
+            reject(error);
           }
-        }
-      } catch (error) {
-        tx.abort();
-        reject(error);
-      }
-    });
+        })
+    );
   }
 
   async clear(store: string): Promise<void> {
-    return new Promise(async (resolve, reject) => {
-      const tx = this.db.transaction(store, 'readwrite');
-      const request = tx.objectStore(store).clear();
+    return this.withDatabase(
+      (db) =>
+        new Promise<void>((resolve, reject) => {
+          const tx = db.transaction(store, 'readwrite');
+          const request = tx.objectStore(store).clear();
 
-      request.onsuccess = () => resolve();
-      request.onerror = (event) => reject(this.error(event));
-    });
+          request.onsuccess = () => resolve();
+          request.onerror = (event) => reject(this.error(event));
+        })
+    );
   }
 
-  private async upgrade(action: (db: IDBDatabase) => void): Promise<void> {
-    const version = this.db.version; // Get version before closing DB
-    this.db.close();
+  private async replaceDatabase(action: (db: IDBDatabase) => void): Promise<void> {
+    const previous = this.db;
+    const version = previous.version;
+    previous.close();
 
-    this.db = await new Promise(async (resolve, reject) => {
+    const replacement = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = this.indexedDBApi.open(this.dbName, version + 1);
 
       request.onupgradeneeded = () => action(request.result);
       request.onsuccess = () => resolve(IDBService.attachLifecycle(request.result));
-      request.onerror = (e) => reject(e);
+      request.onerror = (event) => reject(this.error(event));
       request.onblocked = () =>
         reject(
           new Error(
@@ -271,52 +306,64 @@ export default class IDBService {
           )
         );
     });
+
+    this.db = replacement;
   }
 
   async listStores(): Promise<string[]> {
-    return Array.from(this.db.objectStoreNames);
+    return this.withDatabase((db) => Array.from(db.objectStoreNames));
   }
 
   async hasStore(store: string): Promise<boolean> {
-    return this.db.objectStoreNames.contains(store);
+    return this.withDatabase((db) => db.objectStoreNames.contains(store));
   }
 
   async createStore(...stores: string[]): Promise<void> {
-    await this.upgrade((db) => {
-      for (const store of stores) {
-        if (!db.objectStoreNames.contains(store)) {
+    await this.queueSchemaChange(async () => {
+      const missing = stores.filter((store) => !this.db.objectStoreNames.contains(store));
+      if (missing.length === 0) return;
+
+      await this.replaceDatabase((db) => {
+        for (const store of missing) {
           db.createObjectStore(store);
+        }
+      });
+
+      for (const store of missing) {
+        if (!this.db.objectStoreNames.contains(store)) {
+          throw new Error(`Failed to create store ${store}.`);
         }
       }
     });
-
-    // Verify
-    for (const store of stores) {
-      if (!this.db.objectStoreNames.contains(store)) {
-        throw new Error(`Failed to create store ${store}.`);
-      }
-    }
   }
 
   async deleteStore(store: string | RegExp): Promise<void> {
-    const stores =
-      store instanceof RegExp
-        ? Array.from(this.db.objectStoreNames).filter((name) => name.match(store))
-        : this.db.objectStoreNames.contains(store)
-          ? [store]
-          : [];
+    await this.queueSchemaChange(async () => {
+      const stores =
+        store instanceof RegExp
+          ? Array.from(this.db.objectStoreNames).filter((name) => name.match(store))
+          : this.db.objectStoreNames.contains(store)
+            ? [store]
+            : [];
 
-    if (stores.length === 0) return;
+      if (stores.length === 0) return;
 
-    await this.upgrade((db2) => {
-      for (const s of stores) {
-        db2.deleteObjectStore(s);
-      }
+      await this.replaceDatabase((db) => {
+        for (const name of stores) {
+          db.deleteObjectStore(name);
+        }
+      });
     });
   }
 
+  async close(): Promise<void> {
+    await this.schemaGate;
+    this.db.close();
+  }
+
   async deleteDatabase(): Promise<void> {
-    await this.close();
+    await this.schemaGate;
+    this.db.close();
 
     await new Promise<void>((resolve, reject) => {
       const request = this.indexedDBApi.deleteDatabase(this.dbName);
@@ -326,7 +373,8 @@ export default class IDBService {
   }
 
   async deleteAllDatabases(): Promise<void> {
-    await this.close();
+    await this.schemaGate;
+    this.db.close();
 
     const dbs = await this.indexedDBApi.databases();
 
@@ -342,20 +390,23 @@ export default class IDBService {
             new Promise<void>((resolve, reject) => {
               const req = this.indexedDBApi.deleteDatabase(name);
               req.onsuccess = () => resolve();
-              req.onerror = (ev) => reject(ev);
-              req.onblocked = () => resolve(); // tolerate blocked
+              req.onerror = (event) => reject(this.error(event));
+              req.onblocked = () => resolve();
             })
         )
     );
   }
 
   async delete(store: string, key: string): Promise<void> {
-    return new Promise(async (resolve, reject) => {
-      const tx = this.db.transaction(store, 'readwrite');
-      const request = tx.objectStore(store).delete(key);
+    return this.withDatabase(
+      (db) =>
+        new Promise<void>((resolve, reject) => {
+          const tx = db.transaction(store, 'readwrite');
+          const request = tx.objectStore(store).delete(key);
 
-      request.onsuccess = () => resolve();
-      request.onerror = (event) => reject(this.error(event));
-    });
+          request.onsuccess = () => resolve();
+          request.onerror = (event) => reject(this.error(event));
+        })
+    );
   }
 }

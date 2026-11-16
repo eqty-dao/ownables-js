@@ -181,7 +181,7 @@ function createFakeIndexedDb() {
   return { api, db, stores, deletedDbs };
 }
 
-function createLifecycleIndexedDb() {
+function createLifecycleIndexedDb({ blockFirstUpgrade = false }: { blockFirstUpgrade?: boolean } = {}) {
   const stores = new Map<string, Map<string, any>>([['ownable:id', new Map([['state', 'ready']])]]);
   const storeNames = ['ownable:id'];
   const deletedDbs: string[] = [];
@@ -190,9 +190,14 @@ function createLifecycleIndexedDb() {
   let closedTransactionAttempts = 0;
   let pendingSuccess: (() => void) | undefined;
   let holdNextUpgrade = true;
+  let blockNextUpgrade = blockFirstUpgrade;
   let resolveUpgradePending: (() => void) | undefined;
+  let resolveUpgradeBlocked: (() => void) | undefined;
   const upgradePendingPromise = new Promise<void>((resolve) => {
     resolveUpgradePending = resolve;
+  });
+  const upgradeBlockedPromise = new Promise<void>((resolve) => {
+    resolveUpgradeBlocked = resolve;
   });
 
   const createRequest = <T>(fn: () => T): FakeRequest => {
@@ -291,10 +296,17 @@ function createLifecycleIndexedDb() {
           return;
         }
 
+        upgradeVersions.push(version);
+        if (blockNextUpgrade) {
+          blockNextUpgrade = false;
+          request.onblocked?.();
+          resolveUpgradeBlocked?.();
+          return;
+        }
+
         const replacement = createDb(version);
         request.result = replacement;
         request.onupgradeneeded?.();
-        upgradeVersions.push(version);
         const complete = () => {
           currentVersion = version;
           currentDb = replacement;
@@ -335,6 +347,9 @@ function createLifecycleIndexedDb() {
     },
     awaitUpgradePending() {
       return upgradePendingPromise;
+    },
+    awaitUpgradeBlocked() {
+      return upgradeBlockedPromise;
     },
     releaseUpgrade() {
       const complete = pendingSuccess;
@@ -451,6 +466,20 @@ describe('IDBService', () => {
     await expect(state).resolves.toBe('ready');
     await expect(stateMap).resolves.toEqual(new Map([['state', 'ready']]));
     expect(fake.closedTransactionAttempts).toBe(0);
+  });
+
+  it('settles a later metadata read after an IndexedDB upgrade is blocked', async () => {
+    const fake = createLifecycleIndexedDb({ blockFirstUpgrade: true });
+    const service = new IDBService(fake.db, 'ownables:blocked-upgrade', fake.api);
+
+    const blockedUpgrade = service.createStore('ownable:id.public-event-replays');
+    await fake.awaitUpgradeBlocked();
+
+    await expect(blockedUpgrade).rejects.toThrow(
+      'IndexedDB upgrade blocked for ownables:blocked-upgrade'
+    );
+    await expect(service.hasStore('ownable:id')).resolves.toBe(true);
+    expect(fake.upgradeVersions).toEqual([2]);
   });
 
   it('serializes queued schema changes against the replacement connection', async () => {

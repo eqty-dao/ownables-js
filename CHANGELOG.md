@@ -1,3 +1,10 @@
+## [0.14.3](https://github.com/eqty-dao/ownables-js/compare/v0.14.2...v0.14.3) (2026-11-16)
+
+
+### Bug Fixes
+
+* **browser:** serialize IndexedDB schema upgrades ([3815646](https://github.com/eqty-dao/ownables-js/commit/3815646c916a152350d84dfbab48b5aaf99a87fc))
+
 ## [0.14.2](https://github.com/eqty-dao/ownables-js/compare/v0.14.1...v0.14.2) (2026-11-13)
 
 

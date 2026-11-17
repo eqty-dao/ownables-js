@@ -133,9 +133,11 @@ export default class HubService {
 
     return await progress.step('hubUpload', async () => {
       const form = new FormData();
-      const buffer = new ArrayBuffer(content.byteLength);
-      new Uint8Array(buffer).set(content);
-      form.append('file', new File([buffer], filename, { type: 'application/zip' }));
+      if (!(content.buffer instanceof ArrayBuffer)) {
+        throw new TypeError('Hub uploads require an ArrayBuffer-backed Uint8Array');
+      }
+      const fileContent = new Uint8Array(content.buffer, content.byteOffset, content.byteLength);
+      form.append('file', new File([fileContent], filename, { type: 'application/zip' }));
 
       const response = await this.fetchFn(this.endpoint('/ownables'), {
         method: 'POST',

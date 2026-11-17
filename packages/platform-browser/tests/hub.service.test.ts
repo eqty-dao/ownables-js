@@ -145,6 +145,9 @@ describe('HubService', () => {
     expect(uploadedFile).toBeInstanceOf(File);
     expect((uploadedFile as File).name).toBe('dossier.zip');
     expect((uploadedFile as File).type).toBe('application/zip');
+    expect(new Uint8Array(await (uploadedFile as File).arrayBuffer())).toEqual(
+      new Uint8Array([1, 2, 3])
+    );
     expect(result).toEqual({
       status: 'available',
       ownableId: 'ownable-uploaded',
@@ -156,6 +159,44 @@ describe('HubService', () => {
       expectTypeOf(result).toEqualTypeOf<HubAvailableUploadResult>();
       expectTypeOf(result.cid).toEqualTypeOf<string>();
     }
+  });
+
+  it('uploads only the bytes in an offset view', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: 'available',
+          ownableId: 'ownable-uploaded',
+          cid: 'bafy-uploaded',
+          owner: ACCOUNT,
+        }),
+        {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        }
+      )
+    );
+    const hub = new HubService('https://hub.example', fetchFn);
+    const content = new Uint8Array([99, 1, 2, 3, 88]).subarray(1, 4);
+
+    await hub.uploadOwnable(content);
+
+    const uploadedFile = (fetchFn.mock.calls[0]?.[1]?.body as FormData).get('file') as File;
+    expect(uploadedFile.size).toBe(3);
+    expect(new Uint8Array(await uploadedFile.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it('rejects SharedArrayBuffer-backed upload bytes before network I/O', async () => {
+    if (typeof SharedArrayBuffer === 'undefined') return;
+
+    const fetchFn = vi.fn();
+    const hub = new HubService('https://hub.example', fetchFn);
+    const content = new Uint8Array(new SharedArrayBuffer(3));
+
+    await expect(hub.uploadOwnable(content)).rejects.toThrow(
+      'Hub uploads require an ArrayBuffer-backed Uint8Array'
+    );
+    expect(fetchFn).not.toHaveBeenCalled();
   });
 
   it('accepts an already available upload retry', async () => {

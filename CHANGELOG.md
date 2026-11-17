@@ -1,3 +1,10 @@
+## [0.14.4](https://github.com/eqty-dao/ownables-js/compare/v0.14.3...v0.14.4) (2026-11-17)
+
+
+### Bug Fixes
+
+* **browser:** avoid copying Hub upload bytes ([bf31c13](https://github.com/eqty-dao/ownables-js/commit/bf31c13d6b3a38da9127c24c466084b5422df612))
+
 ## [0.14.3](https://github.com/eqty-dao/ownables-js/compare/v0.14.2...v0.14.3) (2026-11-16)
 
 

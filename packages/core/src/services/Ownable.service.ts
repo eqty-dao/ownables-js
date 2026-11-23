@@ -12,7 +12,10 @@ import type {
 import JSZip from 'jszip';
 import type { TypedPackage } from '../types/TypedPackage.js';
 import type { TypedOwnableInfo } from '../types/TypedOwnableInfo.js';
+import { ConsumptionEvidencePendingError } from '../types/OwnableRuntime.js';
 import type {
+  ConsumptionVerificationOptions,
+  ConsumeIngestEvent,
   CosmWasmMessageInfo,
   CosmWasmEvent,
   EmittedPublicEventReceipt,
@@ -21,6 +24,7 @@ import type {
   PublicEvent,
   OwnableRPC,
   RuntimePublicEvent,
+  SignedConsumeIngestEvent,
   StateDump,
   StateSnapshot,
 } from '../types/OwnableRuntime.js';
@@ -36,6 +40,143 @@ import EventChainService from './EventChain.service.js';
 import type { LoggerLike } from '../logger.js';
 import { PublicEventReplayService } from './ReplayAuthority.service.js';
 import { ProgressService } from './Progress.service.js';
+import type { AnchorValidationResult } from '../types/AnchorValidation.js';
+import { calculateOwnablePackageCid } from '../utils/calculateOwnablePackageCid.js';
+import {
+  OWNABLE_ATTACHMENT_PREFIX,
+  assertAttachmentCid,
+  collectOwnableAttachments,
+  createConsumptionSnapshot,
+  readConsumptionSnapshot,
+  serializeOwnableChain,
+} from '../utils/ownableArchive.js';
+
+const ATTACHMENT_STORE = 'ownable-attachments';
+const MAX_PROOF_DEPTH = 16;
+const MAX_PROOF_BYTES = 256 * 1024 * 1024;
+
+interface ReplayedConsume {
+  id: string;
+  owner: string;
+  issuer: string;
+  event: string;
+  target: string;
+  attributes: TypedDict<string>;
+}
+
+interface ConsumptionReplayContext {
+  options: ConsumptionVerificationOptions;
+  remainingBytes: number;
+  attachments: Map<string, Uint8Array>;
+  completed: Map<string, ReplayedConsume>;
+  active: Set<string>;
+  verified: boolean;
+}
+
+function requireString(value: unknown, description: string): string {
+  if (typeof value !== 'string' || !value) throw new Error(`Invalid ${description}`);
+  return value;
+}
+
+function attributesOf(value: unknown): TypedDict<string> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Invalid consume attributes');
+  }
+  const entries = Object.entries(value);
+  if (entries.some(([, attribute]) => typeof attribute !== 'string')) {
+    throw new Error('Invalid consume attribute value');
+  }
+  return Object.fromEntries(entries);
+}
+
+function readConsumeIngest(message: TypedDict): SignedConsumeIngestEvent {
+  if (message.type !== 'consume') throw new Error('Invalid consume ingest type');
+  const { source, target } = message;
+  return {
+    type: 'consume',
+    source: {
+      id: requireString(source?.id, 'consume source ID'),
+      owner: requireString(source?.owner, 'consume source owner'),
+      issuer: requireString(source?.issuer, 'consume source issuer'),
+      event: requireString(source?.event, 'consume source event'),
+      cid: requireString(source?.cid, 'consume snapshot CID'),
+    },
+    target: { id: requireString(target?.id, 'consume target ID') },
+    attributes: attributesOf(message.attributes),
+  };
+}
+
+function consumeRpcPayload(event: SignedConsumeIngestEvent): ConsumeIngestEvent {
+  const { cid: _cid, ...source } = event.source;
+  return { type: event.type, source, target: event.target, attributes: event.attributes };
+}
+
+function isBoundIngest(message: TypedDict): boolean {
+  return (
+    message['@context'] === 'ingest_msg.json' &&
+    (message.type === 'consume' || message.source?.cid !== undefined)
+  );
+}
+
+function isLegacyConsume(message: TypedDict): boolean {
+  return message['@context'] === 'ingest_msg.json' && message.eventType === 'consume';
+}
+
+function attributesMatch(left: TypedDict<string>, right: TypedDict<string>): boolean {
+  return (
+    Object.keys(left).length === Object.keys(right).length &&
+    Object.entries(left).every(([key, value]) => Object.hasOwn(right, key) && right[key] === value)
+  );
+}
+
+function consumeAttributes(events: CosmWasmEvent[], target: string): TypedDict<string> {
+  const [emitted, ...others] = events.filter((event) => event.type === 'consume');
+  if (!emitted) throw new Error('No consume event emitted');
+  if (others.length) throw new Error('Multiple consume events emitted');
+  const { consumer_id: destination, ...attributes } = attributesOf(emitted.attributes);
+  if (destination !== undefined && destination !== target) {
+    throw new Error('Emitted consume destination differs from the signed command');
+  }
+  return attributes;
+}
+
+function sameAddress(left: string, right: string): boolean {
+  return left.toLowerCase() === right.toLowerCase();
+}
+
+interface LogPosition {
+  blockNumber?: number;
+  transactionIndex?: number;
+  logIndex?: number;
+}
+
+function compareLogPosition(left: LogPosition, right: LogPosition): number {
+  if (
+    left.blockNumber === undefined ||
+    right.blockNumber === undefined ||
+    left.transactionIndex === undefined ||
+    right.transactionIndex === undefined ||
+    left.logIndex === undefined ||
+    right.logIndex === undefined
+  ) {
+    throw new Error('Missing indexed log position for consumption replay');
+  }
+  return (
+    left.blockNumber - right.blockNumber ||
+    left.transactionIndex - right.transactionIndex ||
+    left.logIndex - right.logIndex
+  );
+}
+
+function samePublicEvent(left: PublicEvent, right: PublicEvent): boolean {
+  return (
+    sameAddress(left.source, right.source) &&
+    left.eventType === right.eventType &&
+    left.data.toLowerCase() === right.data.toLowerCase() &&
+    left.transactionHash.toLowerCase() === right.transactionHash.toLowerCase() &&
+    compareLogPosition(left, right) === 0
+  );
+}
 
 export interface OwnableServiceDependencies {
   stateStore: StateStore;
@@ -46,6 +187,7 @@ export interface OwnableServiceDependencies {
   runtimeRpc: RuntimeRPCProvider;
   replay: PublicEventReplayService;
   logger?: LoggerLike;
+  consumption?: ConsumptionVerificationOptions;
 }
 
 export default class OwnableService {
@@ -60,6 +202,10 @@ export default class OwnableService {
   private readonly runtimeRpc: RuntimeRPCProvider;
   private readonly replay: PublicEventReplayService;
   private readonly logger: LoggerLike;
+  private readonly consumption: ConsumptionVerificationOptions | undefined;
+  private readonly ownableWrites = new Map<string, Promise<void>>();
+  private readonly queuedConsumptionAnchors = new Set<string>();
+  private archiveWorkerId = 0;
 
   constructor(deps: OwnableServiceDependencies) {
     this.stateStore = deps.stateStore;
@@ -70,6 +216,7 @@ export default class OwnableService {
     this.runtimeRpc = deps.runtimeRpc;
     this.replay = deps.replay;
     this.logger = deps.logger ?? console;
+    this.consumption = deps.consumption;
   }
 
   private readonly _rpc = new Map<string, OwnableRPC>();
@@ -165,13 +312,46 @@ export default class OwnableService {
     return { chain };
   }
 
-  async init(chain: any, cid: string, uniqueMessageHash?: string): Promise<void> {
-    if (!this._rpc.has(chain.id)) {
+  async init(chain: EventChain, cid: string, uniqueMessageHash?: string): Promise<EventChain> {
+    return this.withOwnableWrites([chain.id], async () => {
+      const storeId = `ownable:${chain.id}`;
+      const stored = (await this.stateStore.hasStore(storeId))
+        ? await this.stateStore.get(storeId, 'chain')
+        : undefined;
+      const current = stored ? EventChain.from(stored) : undefined;
+      if (current) {
+        const sharedLength = Math.min(chain.events.length, current.events.length);
+        for (let index = 0; index < sharedLength; index++) {
+          if (chain.events[index]?.hash.hex !== current.events[index]?.hash.hex) {
+            throw new Error('Imported Ownable conflicts with the installed chain');
+          }
+        }
+        if (current.events.length >= chain.events.length) {
+          const installedPackage = await this.stateStore.get(storeId, 'package');
+          await this.initWorker(current.id, installedPackage);
+          return current;
+        }
+      }
+      const hasProofs = OwnableService.hasBoundConsumptionClaims(chain);
+      if (this.consumption && chain.events.length && !hasProofs) {
+        if (this.consumePackageCid(chain) !== cid) {
+          throw new Error('Imported package does not match the signed Ownable chain');
+        }
+        await this.verifyChainSignatures(chain, this.consumption);
+      }
+      if (hasProofs && this.consumePackageCid(chain) !== cid) {
+        throw new Error('Imported package does not match the signed Ownable chain');
+      }
+      const verifiedState = hasProofs ? await this.verifyConsumptionChain(chain) : undefined;
       await this.initWorker(chain.id, cid);
-    }
-
-    const stateDump = await this.apply(chain, []);
-    await this.initStore(chain, cid, uniqueMessageHash, stateDump);
+      const stateDump = verifiedState ?? (await this.apply(chain, []));
+      if (current) {
+        await this.writeChain(chain, stateDump, false);
+      } else {
+        await this.initStore(chain, cid, uniqueMessageHash, stateDump);
+      }
+      return chain;
+    });
   }
 
   private async createSnapshot(
@@ -436,12 +616,12 @@ export default class OwnableService {
       sender: this.eqty.address,
       funds: [],
     };
+    const candidate = EventChain.from(chain.toJSON());
     const { state } = await this.rpc(chain.id).register(
       this.toRegisterRpcPayload(event),
       info,
       stateDump
     );
-    const candidate = EventChain.from(chain.toJSON());
     const registerEvent = new Event({
       '@context': 'register_msg.json',
       ...event,
@@ -505,6 +685,339 @@ export default class OwnableService {
     };
   }
 
+  static hasConsumptionClaims(chain: EventChain): boolean {
+    return chain.events.some(
+      ({ parsedData }) => isBoundIngest(parsedData) || isLegacyConsume(parsedData)
+    );
+  }
+
+  static hasBoundConsumptionClaims(chain: EventChain): boolean {
+    return chain.events.some((event) => event && isBoundIngest(event.parsedData));
+  }
+
+  async verifyConsumptionChain(
+    chain: EventChain,
+    options = this.consumption,
+    packageVerifiedWasm?: Uint8Array
+  ): Promise<StateDump> {
+    const result = await this.replayConsumptionChain(chain, options, packageVerifiedWasm);
+    if (!result.verified) throw new ConsumptionEvidencePendingError();
+    return result.stateDump;
+  }
+
+  async replayConsumptionChain(
+    chain: EventChain,
+    options = this.consumption,
+    packageVerifiedWasm?: Uint8Array
+  ): Promise<{ stateDump: StateDump; verified: boolean; appliedPublicReplayKeys: string[] }> {
+    if (!options) throw new Error('Consumption verification is not configured');
+    const context: ConsumptionReplayContext = {
+      options,
+      remainingBytes: options.maxSnapshotBytes ?? MAX_PROOF_BYTES,
+      attachments: new Map(),
+      completed: new Map(),
+      active: new Set(),
+      verified: true,
+    };
+    // Callers providing WASM directly must have checked all of the root package assets over the signed package CID.
+    const packageCid = this.consumePackageCid(chain);
+    const wasm = packageVerifiedWasm ?? (await this.packageWasm(packageCid));
+    const { stateDump, appliedPublicReplayKeys } = await this.replayProofChain(
+      chain,
+      wasm,
+      context,
+      0
+    );
+    return { stateDump, verified: context.verified, appliedPublicReplayKeys };
+  }
+
+  private consumePackageCid(chain: EventChain): string {
+    const genesis = chain.events[0]?.parsedData;
+    if (
+      chain.isPartial() ||
+      genesis?.['@context'] !== 'instantiate_msg.json' ||
+      genesis.ownable_id !== chain.id ||
+      (genesis.network_id !== undefined && genesis.network_id !== chain.networkId)
+    ) {
+      throw new Error('Invalid Ownable genesis in consumption proof');
+    }
+    return requireString(genesis.package, 'Ownable genesis package CID');
+  }
+
+  private async verifyChainSignatures(chain: EventChain, options: ConsumptionVerificationOptions) {
+    // eqty-core reconstructs the network from the chain ID but JSON events default to network zero.
+    for (const event of chain.events) event.networkId = chain.networkId;
+    await chain.validate(options.verifySignature);
+  }
+
+  private async packageWasm(cid: string): Promise<Uint8Array> {
+    const zip: JSZip = await this.packages.zip(cid);
+    const files = await Promise.all(
+      Object.values(zip.files)
+        .filter((file) => !file.dir)
+        .map(async (file) => ({ path: file.name, content: await file.async('uint8array') }))
+    );
+    if ((await calculateOwnablePackageCid(files)) !== cid) {
+      throw new Error('Ownable runtime package does not match its signed CID');
+    }
+    const wasm = files.find(({ path }) => path === 'ownable_bg.wasm')?.content;
+    if (!wasm) throw new Error('Ownable runtime package is missing its WASM');
+    return wasm;
+  }
+
+  private async proofAttachment(
+    cid: string,
+    context: ConsumptionReplayContext,
+    inline?: Uint8Array
+  ) {
+    if (inline) await assertAttachmentCid(cid, inline);
+    const cached = context.attachments.get(cid);
+    if (cached) return cached;
+    const bytes = inline ?? (await context.options.getAttachment(cid));
+    if (!bytes) throw new Error(`Missing consumption attachment ${cid}`);
+    context.remainingBytes -= bytes.byteLength;
+    if (context.remainingBytes < 0 || context.attachments.size >= 10_000) {
+      throw new Error('Consumption proof exceeds its size limit');
+    }
+    if (!inline) await assertAttachmentCid(cid, bytes);
+    context.attachments.set(cid, bytes);
+    return bytes;
+  }
+
+  private async validateProofAnchors(chain: EventChain, context: ConsumptionReplayContext) {
+    const evidence = await context.options.verifyAnchors(chain);
+    for (const pair of chain.anchorMap) {
+      const record = evidence.details[pair.key.hex];
+      if (!record?.transactionHash) {
+        context.verified = false;
+      } else if (!record.verified || record.value.toLowerCase() !== pair.value.hex.toLowerCase()) {
+        throw new Error(`Ownable ${chain.id} has contradictory authoritative anchor evidence`);
+      }
+    }
+    if (!evidence.verified) context.verified = false;
+    return evidence;
+  }
+
+  private async validateDossierAttachments(event: Event, context: ConsumptionReplayContext) {
+    const attachments = event.parsedData.attach?.attachments;
+    if (!Array.isArray(attachments)) return;
+    for (const attachment of attachments) {
+      const cid = requireString(attachment?.cid, 'Dossier attachment CID');
+      const inline = event.attachments.find((item) => item.name === cid);
+      await this.proofAttachment(cid, context, inline?.data);
+    }
+  }
+
+  private proofPublicEvents(
+    chain: EventChain,
+    events: IndexedPublicEvent[],
+    context: ConsumptionReplayContext
+  ) {
+    const indexed = this.replay.dedupe(events).events;
+    const registered = new Set<string>();
+    const byKey = new Map(indexed.map((event) => [this.replay.key(event), event]));
+    for (const event of chain.events) {
+      if (event.parsedData['@context'] !== 'register_msg.json') continue;
+      const message = event.parsedData as PublicEvent;
+      const key = this.replay.key(message);
+      const authoritative = byKey.get(key);
+      if (registered.has(key) || (authoritative && !samePublicEvent(message, authoritative))) {
+        throw new Error('Signed register event disagrees with authoritative public evidence');
+      }
+      if (!authoritative) context.verified = false;
+      registered.add(key);
+    }
+    return {
+      unregistered: indexed.filter((event) => !registered.has(this.replay.key(event))),
+      registered: [...registered],
+    };
+  }
+
+  private publicEventsBeforeNextAnchor(
+    events: IndexedPublicEvent[],
+    anchors: AnchorValidationResult,
+    keys: EventChain['anchorMap']
+  ): Map<number, IndexedPublicEvent[]> {
+    const byPrivateIndex = new Map<number, IndexedPublicEvent[]>();
+    if (!events.length) return byPrivateIndex;
+    if (!anchors.verified) throw new ConsumptionEvidencePendingError();
+    const positions = keys.map(({ key }) => anchors.details[key.hex]!);
+    const genesis = positions[0]!;
+    for (let index = 1; index < positions.length; index++) {
+      if (compareLogPosition(positions[index - 1]!, positions[index]!) >= 0) {
+        throw new Error('Authoritative anchors do not order this chain against public events');
+      }
+    }
+    let index = 1;
+    for (const event of events) {
+      if (compareLogPosition(event, genesis) <= 0) continue;
+      while (index < positions.length && compareLogPosition(event, positions[index]!) >= 0) index++;
+      if (index === positions.length) break;
+      const before = byPrivateIndex.get(index) ?? [];
+      before.push(event);
+      byPrivateIndex.set(index, before);
+    }
+    return byPrivateIndex;
+  }
+
+  private async replayProofChain(
+    chain: EventChain,
+    wasm: Uint8Array,
+    context: ConsumptionReplayContext,
+    depth: number
+  ): Promise<{
+    stateDump: StateDump;
+    consume?: ReplayedConsume;
+    appliedPublicReplayKeys: string[];
+  }> {
+    this.consumePackageCid(chain);
+    await this.verifyChainSignatures(chain, context.options);
+    const anchors = await this.validateProofAnchors(chain, context);
+    const publicEvents = this.proofPublicEvents(
+      chain,
+      await context.options.getPublicEvents(chain, anchors),
+      context
+    );
+    const publicBefore = this.publicEventsBeforeNextAnchor(
+      publicEvents.unregistered,
+      anchors,
+      chain.anchorMap
+    );
+    const appliedPublicReplayKeys = publicEvents.registered;
+    const used = new Set<string>();
+    const rpc = this.runtimeRpc.create(`${chain.id}:proof:${++this.archiveWorkerId}`);
+    let stateDump: StateDump = [];
+    let consume: ReplayedConsume | undefined;
+    try {
+      await rpc.initialize(this.runtimeSource.getWorkerSource(), wasm);
+      for (const [index, event] of chain.events.entries()) {
+        for (const external of publicBefore.get(index) ?? []) {
+          const payload = this.toRegisterRpcPayload(this.toRegisterRuntimeEvent(external));
+          const info = { sender: external.source, funds: [] };
+          stateDump = (await rpc.register(payload, info, stateDump)).state;
+          appliedPublicReplayKeys.push(this.replay.key(external));
+        }
+        const { '@context': kind, ...message } = event.parsedData;
+        const info = { sender: event.signerAddress!, funds: [] };
+        switch (kind) {
+          case 'instantiate_msg.json':
+            if (index !== 0) throw new Error('Repeated Ownable genesis in consumption proof');
+            stateDump = (await rpc.instantiate(message, info)).state;
+            break;
+          case 'execute_msg.json': {
+            await this.validateDossierAttachments(event, context);
+            const result = await rpc.execute(message, info, stateDump);
+            stateDump = result.state;
+            if (index === chain.events.length - 1 && message.consume?.consumer_id !== undefined) {
+              const target = requireString(message.consume.consumer_id, 'signed consumer ID');
+              const { owner, issuer } = (await rpc.query(
+                { get_info: {} },
+                stateDump
+              )) as TypedOwnableInfo;
+              consume = {
+                id: chain.id,
+                owner,
+                issuer,
+                event: event.hash.hex,
+                target,
+                attributes: consumeAttributes(result.events, target),
+              };
+            }
+            break;
+          }
+          case 'register_msg.json': {
+            const payload = this.toRegisterRpcPayload(message as PublicEvent);
+            stateDump = (await rpc.register(payload, info, stateDump)).state;
+            break;
+          }
+          case 'ingest_msg.json': {
+            if (isLegacyConsume(event.parsedData) && !isBoundIngest(event.parsedData)) {
+              throw new Error('Historical consume event has no verification proof');
+            }
+            let payload = message as OwnableEvent;
+            if (isBoundIngest(event.parsedData)) {
+              const claim = readConsumeIngest(message);
+              const identity = `${claim.source.id}:${claim.source.event}`;
+              if (used.has(identity))
+                throw new Error('Duplicate consume event in the receiving chain');
+              used.add(identity);
+              await this.verifyIngestProof(chain.id, claim, context, depth + 1);
+              payload = consumeRpcPayload(claim);
+            }
+            stateDump = (await rpc.ingest(payload, info, stateDump)).state;
+            break;
+          }
+          default:
+            throw new Error('Unknown Ownable event in consumption proof');
+        }
+      }
+      return { stateDump, appliedPublicReplayKeys, ...(consume ? { consume } : {}) };
+    } finally {
+      rpc.terminate();
+    }
+  }
+
+  private async verifyIngestProof(
+    receivingId: string,
+    claim: SignedConsumeIngestEvent,
+    context: ConsumptionReplayContext,
+    depth: number
+  ): Promise<void> {
+    if (claim.target.id !== receivingId || claim.source.id === receivingId) {
+      throw new Error('Consume target does not match the receiving Ownable');
+    }
+    const { cid, id, event, owner, issuer } = claim.source;
+    if (depth > MAX_PROOF_DEPTH || context.active.has(cid)) {
+      throw new Error('Cyclic or deeply nested consumption proof');
+    }
+    let actual = context.completed.get(cid);
+    if (!actual) {
+      context.active.add(cid);
+      try {
+        const bytes = await this.proofAttachment(cid, context);
+        const snapshot = await readConsumptionSnapshot(bytes, {
+          maxExpandedBytes: context.remainingBytes,
+        });
+        context.remainingBytes -= snapshot.expandedBytes;
+        const chain = snapshot.chain;
+        const packageCid = this.consumePackageCid(chain);
+        const terminal = chain.events.at(-1);
+        if (
+          chain.id !== id ||
+          terminal?.hash.hex !== event ||
+          terminal.parsedData['@context'] !== 'execute_msg.json' ||
+          terminal.parsedData.consume?.consumer_id !== receivingId
+        ) {
+          throw new Error(
+            'Snapshot does not end at the signed consume command bound to the receiver'
+          );
+        }
+        const calculated = await calculateOwnablePackageCid(
+          Array.from(snapshot.assets, ([path, content]) => ({ path, content }))
+        );
+        const wasm = snapshot.assets.get('ownable_bg.wasm');
+        if (calculated !== packageCid || !wasm) {
+          throw new Error('Consumption snapshot runtime package does not match its signed CID');
+        }
+        actual = (await this.replayProofChain(chain, wasm, context, depth)).consume;
+        if (!actual) throw new Error('Snapshot has no verified terminal consume result');
+        context.completed.set(cid, actual);
+      } finally {
+        context.active.delete(cid);
+      }
+    }
+    if (
+      actual.id !== id ||
+      actual.event !== event ||
+      actual.target !== receivingId ||
+      !sameAddress(actual.owner, owner) ||
+      !sameAddress(actual.issuer, issuer) ||
+      !attributesMatch(actual.attributes, claim.attributes)
+    ) {
+      throw new Error('Signed consume claim differs from the verified source result');
+    }
+  }
+
   private async applyEvent(
     rpc: OwnableRPC,
     event: Event,
@@ -530,6 +1043,8 @@ export default class OwnableService {
         result = await rpc.register(this.toRegisterRpcPayload(msg as PublicEvent), info, stateDump);
         break;
       case 'ingest_msg.json':
+        if (isBoundIngest(event.parsedData))
+          throw new Error('Consumption requires full-chain verification');
         result = await rpc.ingest(msg as OwnableEvent, info, stateDump);
         break;
       default:
@@ -544,6 +1059,14 @@ export default class OwnableService {
   }
 
   async apply(partialChain: EventChain, stateDump: StateDump): Promise<StateDump> {
+    if (OwnableService.hasBoundConsumptionClaims(partialChain)) {
+      if (!partialChain.isPartial()) return this.verifyConsumptionChain(partialChain);
+      const stored = await this.stateStore.get(`ownable:${partialChain.id}`, 'chain');
+      if (!stored) throw new Error('Consumption requires the receiving chain from genesis');
+      const fullChain = EventChain.from(stored);
+      fullChain.add(partialChain);
+      return this.verifyConsumptionChain(fullChain);
+    }
     const rpc = this.rpc(partialChain.id);
     const snapshot = await this.getLatestSnapshot(partialChain.id);
     let startIndex = 0;
@@ -828,24 +1351,47 @@ export default class OwnableService {
     attachments: EventAttachmentInput[] = []
   ): Promise<StateDump> {
     const progress = new ProgressService(onProgress);
+    const candidate = EventChain.from(chain.toJSON());
     const info = { sender: this.eqty.address, funds: [] } as CosmWasmMessageInfo;
-    const { state: newStateDump } = await this.rpc(chain.id).execute(msg, info, stateDump);
-
-    delete msg['@context']; // Shouldn't be set
-
-    const event = new Event({ '@context': 'execute_msg.json', ...msg }).addTo(chain);
+    const { '@context': _context, ...message } = msg;
+    const { state: newStateDump } = await this.rpc(chain.id).execute(message, info, stateDump);
+    const event = new Event({ '@context': 'execute_msg.json', ...message }).addTo(candidate);
+    const declaredAttachments = message.attach?.attachments;
+    const signedCids = new Set<string>();
+    if (Array.isArray(declaredAttachments)) {
+      for (const attachment of declaredAttachments) {
+        signedCids.add(requireString(attachment?.cid, 'Dossier attachment CID'));
+      }
+    }
+    const referenced = new Map<string, Uint8Array>();
+    const attachmentTypes = new Map<string, string>();
     for (const attachment of attachments) {
-      event.addAttachment(
-        attachment.name,
-        new Uint8Array(await attachment.file.arrayBuffer()),
-        attachment.file.type || 'application/octet-stream'
-      );
+      const bytes = new Uint8Array(await attachment.file.arrayBuffer());
+      if (signedCids.has(attachment.name)) {
+        await assertAttachmentCid(attachment.name, bytes);
+        referenced.set(attachment.name, bytes);
+        attachmentTypes.set(attachment.name, attachment.file.type);
+      } else {
+        event.addAttachment(
+          attachment.name,
+          bytes,
+          attachment.file.type || 'application/octet-stream'
+        );
+      }
+    }
+    for (const cid of signedCids) {
+      if (referenced.has(cid)) continue;
+      const bytes = await this.getAttachment(cid);
+      if (!bytes) throw new Error(`Missing Dossier attachment ${cid}`);
+      await assertAttachmentCid(cid, bytes);
     }
 
     await progress.step('signEvent', () => this.eqty.sign(event));
+    if (referenced.size) await this.putAttachments(referenced, attachmentTypes);
 
     // Store without submitting anchors yet; submission is controlled by caller
-    await this.store(chain, newStateDump);
+    await this.store(candidate, newStateDump);
+    chain.events = candidate.events;
 
     return newStateDump;
   }
@@ -1028,78 +1574,233 @@ export default class OwnableService {
     }
   }
 
+  private async withOwnableWrites<T>(ids: string[], operation: () => Promise<T>): Promise<T> {
+    const sorted = [...new Set(ids)].sort();
+    const predecessors = sorted.map((id) => this.ownableWrites.get(id));
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    for (const id of sorted) this.ownableWrites.set(id, pending);
+    await Promise.all(predecessors);
+    try {
+      // IndexedDB is shared across same-origin wallet tabs.
+      const locks = typeof window === 'undefined' ? undefined : window.navigator.locks;
+      let lockedOperation = operation;
+      if (locks) {
+        for (const id of [...sorted].reverse()) {
+          const next = lockedOperation;
+          lockedOperation = async () => await locks.request(`ownable-write:${id}`, next);
+        }
+      }
+      return await lockedOperation();
+    } finally {
+      for (const id of sorted) {
+        if (this.ownableWrites.get(id) === pending) this.ownableWrites.delete(id);
+      }
+      release();
+    }
+  }
+
+  private async getAttachment(cid: string): Promise<Uint8Array | undefined> {
+    const attached = await this.consumption?.getAttachment(cid);
+    if (attached) return attached;
+    if (!(await this.stateStore.hasStore(ATTACHMENT_STORE))) return undefined;
+    return this.stateStore.get(ATTACHMENT_STORE, cid);
+  }
+
+  private async putAttachments(
+    attachments: Map<string, Uint8Array>,
+    mediaTypes?: ReadonlyMap<string, string>
+  ): Promise<void> {
+    if (this.consumption?.putAttachment) {
+      for (const [cid, bytes] of attachments) {
+        await this.consumption.putAttachment(cid, bytes, mediaTypes?.get(cid));
+      }
+      return;
+    }
+    if (!(await this.stateStore.hasStore(ATTACHMENT_STORE))) {
+      await this.stateStore.createStore(ATTACHMENT_STORE);
+    }
+    await this.stateStore.setAll(ATTACHMENT_STORE, attachments);
+  }
+
+  private async storedChain(chain: EventChain): Promise<EventChain> {
+    const stored = await this.stateStore.get(`ownable:${chain.id}`, 'chain');
+    return stored ? EventChain.from(stored) : chain;
+  }
+
+  private priorConsume(
+    consumer: EventChain,
+    consumable: EventChain,
+    submitted: EventChain
+  ): Event | undefined {
+    const terminal = consumable.events.at(-1);
+    if (!terminal || terminal.parsedData.consume?.consumer_id !== consumer.id) return;
+    if (
+      submitted.latestHash.hex !== terminal.hash.hex &&
+      submitted.latestHash.hex !== terminal.previous?.hex
+    )
+      return;
+    return consumer.events.find(
+      ({ parsedData }) =>
+        isBoundIngest(parsedData) &&
+        parsedData.source?.id === consumable.id &&
+        parsedData.source.event === terminal.hash.hex
+    );
+  }
+
+  private async anchorConsumption(
+    consumer: EventChain,
+    consumable: EventChain,
+    ingest: Event,
+    fresh: boolean,
+    onProgress?: LogProgress
+  ): Promise<void> {
+    if (!this.anchoring) return;
+    const storeId = `ownable:${consumer.id}`;
+    const key = `consume-anchor:${ingest.hash.hex}`;
+    if (!fresh && (await this.stateStore.get(storeId, key)) !== 'pending') return;
+
+    if (!this.queuedConsumptionAnchors.has(key)) {
+      const source = consumable.anchorMap.at(-1)!;
+      const receiver = consumer.anchorMap.find(({ value }) => value.hex === ingest.hash.hex)!;
+      const pairs = [source, receiver];
+      if (pairs.some(({ signer }) => !sameAddress(signer, this.eqty.address))) {
+        throw new Error('Consumption anchors must be submitted by the wallet that signed them');
+      }
+      let missing = pairs;
+      if (!fresh) {
+        const options = this.consumption;
+        if (!options) throw new ConsumptionEvidencePendingError();
+        const chains = [consumable, consumer];
+        const evidence = await Promise.all(chains.map((chain) => options.verifyAnchors(chain)));
+        missing = pairs.filter((pair, index) => {
+          const record = evidence[index]?.details[pair.key.hex];
+          if (!record?.transactionHash) return true;
+          if (!record.verified || record.value.toLowerCase() !== pair.value.hex.toLowerCase()) {
+            throw new Error('Consumption anchor conflicts with an authoritative anchor');
+          }
+          return false;
+        });
+      }
+      if (missing.length) {
+        await this.eqty.anchor(...missing);
+        this.queuedConsumptionAnchors.add(key);
+      }
+    }
+    if (this.queuedConsumptionAnchors.has(key)) {
+      await this.submitAnchors(onProgress);
+      this.queuedConsumptionAnchors.delete(key);
+    }
+    await this.stateStore.set(storeId, key, 'submitted');
+  }
+
   async consume(
     consumer: EventChain,
     consumable: EventChain,
     onProgress?: LogProgress
   ): Promise<void> {
-    const progress = new ProgressService(onProgress);
-    const info: CosmWasmMessageInfo = {
-      sender: this.eqty.address,
-      funds: [],
-    };
-    const consumeMessage = { consume: {} };
-    const consumerState = await this.eventChains.getStateDump(consumer.id, consumer.state.hex);
-    const consumableState = await this.eventChains.getStateDump(
-      consumable.id,
-      consumable.state.hex
-    );
-    if (!consumerState || !consumableState) throw Error('State mismatch for consume');
+    if (consumer.id === consumable.id) throw new Error('An Ownable cannot consume itself');
+    if (consumer.networkId !== consumable.networkId) {
+      throw new Error('Both Ownables must belong to the same network');
+    }
+    await this.withOwnableWrites([consumer.id, consumable.id], async () => {
+      const progress = new ProgressService(onProgress);
+      const persistedConsumer = await this.storedChain(consumer);
+      const persistedConsumable = await this.storedChain(consumable);
+      const prior = this.priorConsume(persistedConsumer, persistedConsumable, consumable);
+      if (prior) {
+        consumer.add(persistedConsumer);
+        consumable.add(persistedConsumable);
+        await this.anchorConsumption(consumer, consumable, prior, false, onProgress);
+        return;
+      }
 
-    const { events, state: consumableStateDump } = await this.rpc(consumable.id).execute(
-      consumeMessage,
-      info,
-      consumableState
-    );
+      const consumerHash = consumer.latestHash.hex;
+      const consumableHash = consumable.latestHash.hex;
+      if (
+        consumerHash !== persistedConsumer.latestHash.hex ||
+        consumableHash !== persistedConsumable.latestHash.hex
+      ) {
+        throw new Error('State mismatch for consume');
+      }
+      const [consumerState, consumableState] = await Promise.all([
+        this.eventChains.getStateDump(consumer.id, consumer.state.hex),
+        this.eventChains.getStateDump(consumable.id, consumable.state.hex),
+      ]);
+      if (!consumerState || !consumableState) throw new Error('State mismatch for consume');
 
-    const consumeEvent:
-      | { contract?: string; type: string; attributes: TypedDict<string> }
-      | undefined = events.find((event) => event.type === 'consume');
-    if (!consumeEvent) throw Error('No consume event emitted');
-    const consumableInfo = (await this.rpc(consumable.id).query(
-      { get_info: {} },
-      consumableStateDump
-    )) as TypedOwnableInfo;
+      const info = { sender: this.eqty.address, funds: [] };
+      const message = { consume: { consumer_id: consumer.id } };
+      const sourceRpc = this.rpc(consumable.id);
+      const result = await sourceRpc.execute(message, info, consumableState);
+      const attributes = consumeAttributes(result.events, consumer.id);
+      const { owner, issuer } = (await sourceRpc.query(
+        { get_info: {} },
+        result.state
+      )) as TypedOwnableInfo;
 
-    const ingestEvent: OwnableEvent = {
-      source: {
-        id: consumable.id,
-        owner: consumableInfo.owner,
-        issuer: consumableInfo.issuer,
-      },
-      attributes: consumeEvent.attributes,
-      eventType: consumeEvent.type,
-    };
+      const source = EventChain.from(consumable.toJSON());
+      const receiver = EventChain.from(consumer.toJSON());
+      const signedConsume = new Event({ '@context': 'execute_msg.json', ...message }).addTo(source);
+      await progress.step('signConsumableEvent', () => this.eqty.sign(signedConsume));
+      if (!signedConsume.signerAddress || !sameAddress(signedConsume.signerAddress, info.sender)) {
+        throw new Error('Consumable signing account changed during consumption');
+      }
 
-    const { state: consumerStateDump } = await this.rpc(consumer.id).ingest(
-      ingestEvent,
-      info,
-      consumerState
-    );
+      const snapshot = await createConsumptionSnapshot(
+        source,
+        await this.packages.zip(this.consumePackageCid(source))
+      );
+      const claim: SignedConsumeIngestEvent = {
+        type: 'consume',
+        source: { id: source.id, owner, issuer, event: signedConsume.hash.hex, cid: snapshot.cid },
+        target: { id: receiver.id },
+        attributes,
+      };
+      const { state: receiverState } = await this.rpc(receiver.id).ingest(
+        consumeRpcPayload(claim),
+        info,
+        consumerState
+      );
+      const signedIngest = new Event({ '@context': 'ingest_msg.json', ...claim }).addTo(receiver);
+      await progress.step('signConsumerEvent', () => this.eqty.sign(signedIngest));
+      if (!signedIngest.signerAddress || !sameAddress(signedIngest.signerAddress, info.sender)) {
+        throw new Error('Consumer signing account changed during consumption');
+      }
 
-    await progress.step('signConsumableEvent', () =>
-      this.eqty.sign(
-        new Event({ '@context': 'execute_msg.json', ...consumeMessage }).addTo(consumable)
-      )
-    );
-
-    await progress.step('signConsumerEvent', () =>
-      this.eqty.sign(
-        new Event({
-          '@context': 'ingest_msg.json',
-          ...ingestEvent,
-        }).addTo(consumer)
-      )
-    );
-
-    // Store both chains; emit anchor progress only once to represent anchoring both
-    // Queue anchors for both chains without submitting yet
-    await this.store(consumable, consumableStateDump);
-    await this.stateStore.set(`ownable:${consumable.id}`, 'isConsumed', true);
-    await this.store(consumer, consumerStateDump);
-
-    // Submit a single anchor tx for both
-    await this.submitAnchors(onProgress);
+      const attachments = await collectOwnableAttachments(source, (cid) => this.getAttachment(cid));
+      attachments.set(snapshot.cid, snapshot.bytes);
+      await this.putAttachments(attachments);
+      if (
+        consumer.latestHash.hex !== consumerHash ||
+        consumable.latestHash.hex !== consumableHash
+      ) {
+        throw new Error('State mismatch for consume');
+      }
+      const sourceStore = `ownable:${source.id}`;
+      const receiverStore = `ownable:${receiver.id}`;
+      await this.stateStore.setAll({
+        [sourceStore]: {
+          chain: source.toJSON(),
+          latestHash: source.latestHash.hex,
+          state: source.state.hex,
+          isConsumed: true,
+        },
+        [`${sourceStore}.state`]: new Map(result.state),
+        [receiverStore]: {
+          chain: receiver.toJSON(),
+          latestHash: receiver.latestHash.hex,
+          state: receiver.state.hex,
+          ...(this.anchoring ? { [`consume-anchor:${signedIngest.hash.hex}`]: 'pending' } : {}),
+        },
+        [`${receiverStore}.state`]: new Map(receiverState),
+      });
+      consumable.events = source.events;
+      consumer.events = receiver.events;
+      await this.anchorConsumption(receiver, source, signedIngest, true, onProgress);
+    });
   }
 
   private async retryOperation<T>(
@@ -1184,13 +1885,27 @@ export default class OwnableService {
   }
 
   async store(chain: EventChain, stateDump: StateDump): Promise<void> {
-    const anchors: Array<any> = [];
+    return this.withOwnableWrites([chain.id], () =>
+      this.writeChain(chain, stateDump, this.anchoring)
+    );
+  }
+
+  private async writeChain(
+    chain: EventChain,
+    stateDump: StateDump,
+    anchor: boolean
+  ): Promise<void> {
     const storeId = `ownable:${chain.id}`;
     const stateStoreId = `${storeId}.state`;
 
     await this.retryOperation(async () => {
       const storedState = await this.stateStore.get(storeId, 'state');
-      if (storedState === chain.state) return;
+      if (storedState === chain.state || storedState === chain.state.hex) return;
+      const previousHash = await this.stateStore.get(storeId, 'latestHash');
+      const suffix =
+        typeof previousHash === 'string'
+          ? chain.startingAfter(Binary.fromHex(previousHash))
+          : chain;
 
       const data = {
         [storeId]: {
@@ -1201,17 +1916,11 @@ export default class OwnableService {
         [stateStoreId]: new Map(stateDump),
       };
 
-      if (this.anchoring) {
-        const previousHash = await this.stateStore.get(`ownable:${chain.id}`, 'latestHash');
-        anchors.push(...chain.startingAfter(Binary.fromHex(previousHash)).anchorMap);
-      }
-
-      if (anchors.length > 0) {
-        // Queue anchors only; submission handled separately to allow batching
-        await this.eqty.anchor(...anchors);
-      }
-
       await this.stateStore.setAll(data);
+      if (anchor && suffix.events.length) {
+        // Queue anchors only; submission handled separately to allow batching.
+        await this.eqty.anchor(...suffix.anchorMap);
+      }
 
       const eventCount = chain.events.length;
       if (eventCount % this.SNAPSHOT_INTERVAL === 0) {
@@ -1240,7 +1949,9 @@ export default class OwnableService {
     const packageCid: string = firstEvent.parsedData.package;
 
     const zip = await this.packages.zip(packageCid);
-    zip.file('chain.json', JSON.stringify(chain.toJSON()));
+    const attachments = await collectOwnableAttachments(chain, (cid) => this.getAttachment(cid));
+    for (const [cid, bytes] of attachments) zip.file(`${OWNABLE_ATTACHMENT_PREFIX}${cid}`, bytes);
+    zip.file('chain.json', JSON.stringify(serializeOwnableChain(chain)));
 
     return zip;
   }

@@ -1,4 +1,6 @@
-import type { Binary } from 'eqty-core';
+import type { Binary, EventChain } from 'eqty-core';
+import type { AnchorValidationResult } from './AnchorValidation.js';
+import type { IndexedPublicEvent } from './Replay.js';
 import type TypedDict from './TypedDict.js';
 
 export type StateDump = Array<[ArrayLike<number>, ArrayLike<number>]>;
@@ -39,10 +41,42 @@ export interface OwnableEventSource {
   issuer: string;
 }
 
-export interface OwnableEvent {
+export interface LegacyOwnableEvent {
   source: OwnableEventSource;
   eventType: string;
   attributes: TypedDict;
+}
+
+export interface ConsumeIngestEvent {
+  type: 'consume';
+  source: OwnableEventSource & { event: string };
+  target: { id: string };
+  attributes: TypedDict<string>;
+}
+
+export interface SignedConsumeIngestEvent extends ConsumeIngestEvent {
+  source: ConsumeIngestEvent['source'] & { cid: string };
+}
+
+export type OwnableEvent = LegacyOwnableEvent | ConsumeIngestEvent;
+
+export interface ConsumptionVerificationOptions {
+  getAttachment(cid: string): Promise<Uint8Array | undefined>;
+  putAttachment?(cid: string, bytes: Uint8Array, mediaType?: string): Promise<void>;
+  verifySignature: NonNullable<Parameters<EventChain['validate']>[0]>;
+  verifyAnchors(chain: EventChain): Promise<AnchorValidationResult>;
+  getPublicEvents(
+    chain: EventChain,
+    anchors: AnchorValidationResult
+  ): Promise<IndexedPublicEvent[]>;
+  maxSnapshotBytes?: number;
+}
+
+export class ConsumptionEvidencePendingError extends Error {
+  constructor(message = 'Missing authoritative anchor or public event evidence for consumption') {
+    super(message);
+    this.name = 'ConsumptionEvidencePendingError';
+  }
 }
 
 export interface EventAttachmentInput {

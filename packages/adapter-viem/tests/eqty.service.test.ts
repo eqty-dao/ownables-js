@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { Binary } from 'eqty-core';
+import { Binary, Event, EventChain } from 'eqty-core';
 import { defineChain, encodeAbiParameters, encodeEventTopics, parseAbiItem } from 'viem';
 import EQTYService from '../src/services/EQTY.service';
 
@@ -29,6 +29,130 @@ describe('EQTYService', () => {
       anchor: deps.anchor ?? { contractAddress: defaultAnchorAddress },
       logger: deps.logger ?? logger,
     });
+
+  it('checks Ownable anchors for the event signer and uses the latest authoritative position', async () => {
+    const sender = '0x1111111111111111111111111111111111111111';
+    const chain = EventChain.create(sender, 84532);
+    await new Event({ event: 'instantiate' }).addTo(chain).signWith({
+      getAddress: async () => sender,
+      signTypedData: async () => `0x${'aa'.repeat(65)}`,
+    });
+    const { key, value } = chain.anchorMap[0]!;
+    const wrongValue = `0x${'ee'.repeat(32)}`;
+    const log = (value: string, blockNumber: bigint, logIndex: number) => ({
+      args: { key: key.hex, sender, value, timestamp: 100n },
+      blockNumber,
+      transactionIndex: 5,
+      logIndex,
+      transactionHash: `0x${'cc'.repeat(32)}`,
+    });
+    const getLogs = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([log(wrongValue, 5n, 2), log(value.hex, 5n, 0)]);
+    const service = createService(
+      sender,
+      84532,
+      { account: sender },
+      { getBlockNumber: vi.fn().mockResolvedValue(20_000n), getLogs }
+    );
+
+    const result = await service.validateOwnableAnchors(chain);
+    expect(getLogs).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        address: defaultAnchorAddress,
+        args: { key: key.hex, sender },
+        fromBlock: 10_001n,
+        toBlock: 20_000n,
+        strict: true,
+      })
+    );
+    expect(getLogs).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        fromBlock: 0n,
+        toBlock: 10_000n,
+      })
+    );
+    expect(result.verified).toBe(false);
+    expect(result.details[key.hex]).toMatchObject({
+      value: wrongValue,
+      blockNumber: 5,
+      logIndex: 2,
+    });
+  });
+
+  it('fetches canonical public events by Ownable subject through the terminal anchor and fails closed on RPC errors', async () => {
+    const sender = '0x1111111111111111111111111111111111111111';
+    const chain = EventChain.create(sender, 84532);
+    const signer = {
+      getAddress: async () => sender,
+      signTypedData: async () => `0x${'aa'.repeat(65)}`,
+    };
+    for (const kind of ['instantiate', 'consume']) {
+      await new Event({ kind }).addTo(chain).signWith(signer);
+    }
+    const subjectId = Binary.fromHex(chain.id).hash().hex;
+    const details = Object.fromEntries(
+      chain.anchorMap.map(({ key, value }, index) => [
+        key.hex,
+        {
+          key: key.hex,
+          expectedValue: value.hex,
+          value: value.hex,
+          blockNumber: index + 100,
+          source: 'provider' as const,
+          verified: true,
+        },
+      ])
+    );
+    const anchors = { anchors: {}, map: {}, verified: true, details };
+    const transactionHash = `0x${'bb'.repeat(32)}`;
+    const getLogs = vi
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          args: { subjectId, source: sender, eventType: 'stack', data: '0x1234', timestamp: 100n },
+          blockNumber: 101n,
+          transactionIndex: 1,
+          logIndex: 2,
+          transactionHash,
+        },
+      ])
+      .mockRejectedValueOnce(new Error('Provider unavailable'));
+    const service = createService(sender, 84532, { account: sender }, { getLogs });
+
+    await expect(service.getOwnablePublicEvents(chain, anchors)).resolves.toEqual([
+      {
+        source: sender,
+        eventType: 'stack',
+        data: '0x1234',
+        timestamp: 100,
+        blockNumber: 101,
+        transactionIndex: 1,
+        logIndex: 2,
+        transactionHash,
+      },
+    ]);
+    expect(getLogs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: PUBLIC_EVENT_ABI,
+        address: defaultAnchorAddress,
+        args: { subjectId },
+        fromBlock: 100n,
+        toBlock: 101n,
+        strict: true,
+      })
+    );
+    await expect(service.getOwnablePublicEvents(chain, anchors)).rejects.toThrow(
+      'Provider unavailable'
+    );
+    await expect(
+      service.getOwnablePublicEvents(chain, { ...anchors, verified: false })
+    ).resolves.toEqual([]);
+    expect(getLogs).toHaveBeenCalledTimes(2);
+  });
 
   it('requires an explicit anchor contract address', () => {
     expect(

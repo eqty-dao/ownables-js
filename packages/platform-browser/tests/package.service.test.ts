@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import JSZip from 'jszip';
-import { EventChain } from 'eqty-core';
+import { Event, EventChain } from 'eqty-core';
+import { calculateAttachmentCid, serializeOwnableChain } from '@ownables/core/utils';
 
 import PackageService from '../src/services/Package.service';
 
-vi.mock('@ownables/core/utils', () => ({
+vi.mock('@ownables/core/utils', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   calculateOwnablePackageCid: vi.fn().mockResolvedValue('cid-1'),
 }));
 
@@ -17,6 +19,53 @@ describe('PackageService', () => {
   };
   const createService = (idb: any, relay: any, localStorage: any, options: any = {}) =>
     new PackageService(idb, relay, localStorage, { ...options, logger: options.logger ?? logger });
+
+  const createArchiveStorage = () => {
+    const records = new Map<string, File>();
+    return {
+      records,
+      idb: {
+        get: vi.fn(async (_store: string, key: string) => records.get(key)),
+        getAllByPrefix: vi.fn(async (_store: string, prefix: string) =>
+          [...records].filter(([key]) => key.startsWith(prefix)).map(([, value]) => value)
+        ),
+        hasStore: vi.fn(async (name: string) => name === 'package-assets'),
+        keysByPrefix: vi.fn(async (_store: string, prefix: string) =>
+          [...records.keys()].filter((key) => key.startsWith(prefix))
+        ),
+        setAll: vi.fn(async (_store: string, entries: Record<string, File>) => {
+          for (const [key, value] of Object.entries(entries)) records.set(key, value);
+        }),
+      },
+      localStorage: { get: () => [], set: vi.fn() },
+    };
+  };
+
+  const createDossierArchive = async (format: 'flat' | 'inline' | 'wrong' | 'missing') => {
+    const address = '0x0000000000000000000000000000000000000001';
+    const chain = EventChain.create(address, 84532, 'dossier');
+    const bytes = new TextEncoder().encode('Dossier file');
+    const attachmentCid = await calculateAttachmentCid(bytes);
+    const event = new Event({
+      '@context': 'execute_msg.json',
+      attach: { attachments: [{ cid: attachmentCid, name: 'dossier.txt' }] },
+    });
+    event.signerAddress = address;
+    event.timestamp = 1;
+    chain.add(event);
+    if (format === 'inline') event.addAttachment(attachmentCid, bytes, 'text/plain');
+
+    const chainJson = format === 'inline' ? chain.toJSON() : serializeOwnableChain(chain);
+    const zip = new JSZip();
+    zip.file('package.json', JSON.stringify({ name: 'dossier' }));
+    zip.file('chain.json', JSON.stringify(chainJson));
+    if (format === 'flat' || format === 'wrong') {
+      zip.file(`attachments/${attachmentCid}`, format === 'flat' ? bytes : 'different bytes');
+    }
+
+    const archive = await zip.generateAsync({ type: 'uint8array' });
+    return { archive, chainJson, bytes, attachmentCid, file: new File([archive], 'dossier.zip') };
+  };
 
   const capabilities = {
     isDynamic: false,
@@ -250,11 +299,12 @@ describe('PackageService', () => {
       {} as any,
       { get: () => [], set: () => undefined } as any
     );
-    vi.spyOn(service as any, 'extractAssets').mockResolvedValue([
-      new File(['{}'], 'package.json', { type: 'application/json' }),
-    ]);
+    vi.spyOn(service as any, 'readOwnableArchive').mockResolvedValue({
+      files: [new File(['{}'], 'package.json', { type: 'application/json' })],
+      chainJson: { events: [] },
+      attachments: new Map(),
+    });
     vi.spyOn(service as any, 'getPackageJson').mockResolvedValue({ name: 'pkg' });
-    vi.spyOn(service as any, 'getChainJson').mockResolvedValue({ events: [] });
     vi.spyOn(service as any, 'isCurrentEvent').mockResolvedValue(false);
 
     const result = await service.processPackage(
@@ -280,7 +330,6 @@ describe('PackageService', () => {
       relay as any,
       { get: () => [], set: () => undefined } as any
     );
-    vi.spyOn(service as any, 'extractAssets').mockResolvedValue([{ name: 'package.json' }]);
     vi.spyOn(service, 'processPackage').mockResolvedValue({ cid: 'cid-1', name: 'pkg' } as any);
 
     const result = await service.importFromRelay();
@@ -353,10 +402,13 @@ describe('PackageService', () => {
     expect(parsed.events[0].parsedData).toEqual({ hello: 'world' });
   });
 
-  it('evaluates current event length logic', async () => {
+  it('accepts a chain extension and manual same-head import while rejecting stale or conflicting chains', async () => {
+    const first = { hash: 'first-event' };
+    const second = { hash: 'second-event' };
+    const third = { hash: 'third-event' };
     const idb = {
       hasStore: vi.fn().mockResolvedValue(true),
-      get: vi.fn().mockResolvedValue({ events: [1, 2] }),
+      get: vi.fn().mockResolvedValue({ events: [first, second] }),
     };
     const service = createService(
       idb as any,
@@ -364,12 +416,15 @@ describe('PackageService', () => {
       { get: () => [], set: () => undefined } as any
     );
 
-    await expect(service.isCurrentEvent({ id: 'chain-1', events: [1, 2, 3] } as any)).resolves.toBe(
-      true
-    );
-    await expect(
-      service.isCurrentEvent({ id: 'chain-1', events: [1] } as any)
-    ).resolves.toBeUndefined();
+    const isCurrent = (events: { hash: string }[], acceptSameHead = false) =>
+      service.isCurrentEvent({ id: 'chain-1', events }, acceptSameHead);
+
+    await expect(isCurrent([first, second, third])).resolves.toBe(true);
+    await expect(isCurrent([first, second], true)).resolves.toBe(true);
+    await expect(isCurrent([first, second])).resolves.toBe(false);
+    await expect(isCurrent([first], true)).resolves.toBe(false);
+    await expect(isCurrent([first, third], true)).resolves.toBe(false);
+    await expect(isCurrent([first, third, second], true)).resolves.toBe(false);
   });
 
   it('computes capabilities for static and dynamic packages', async () => {
@@ -578,25 +633,88 @@ describe('PackageService', () => {
     await expect(service.getAssetAsText('cid-legacy', 'legacy.txt')).resolves.toBe('legacy');
   });
 
-  it('imports package and chain payload from Hub', async () => {
-    const service = createService(
-      { hasStore: vi.fn().mockResolvedValue(false) } as any,
-      {} as any,
-      { get: () => [], set: () => undefined } as any
+  it('distinguishes absent attachments from storage read errors', async () => {
+    const hasStore = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+    const get = vi.fn().mockResolvedValueOnce(null).mockRejectedValue(new Error('read failed'));
+    const service = createService({ hasStore, get }, {}, { get: () => [], set: vi.fn() });
+    await expect(service.findAttachment('absent')).resolves.toBeUndefined();
+    await expect(service.getAttachment('absent')).rejects.toThrow(
+      'Attachment absent is not stored locally'
     );
-    vi.spyOn(service, 'extractAssets').mockResolvedValue([new File(['{}'], 'package.json')] as any);
-    vi.spyOn(service as any, 'finalizeImportedPackage').mockResolvedValue({
-      cid: 'cid-hub',
-      chain: { id: 'ownable-1' },
-    } as any);
-
-    const pkg = await service.importFromHub(new File(['zip'], 'dossier.zip'), { id: 'ownable-1' });
-
-    expect(pkg).toEqual({
-      cid: 'cid-hub',
-      chain: { id: 'ownable-1' },
-    });
+    await expect(service.findAttachment('unknown')).rejects.toThrow('read failed');
   });
+
+  it.each(['file', 'hub', 'relay'] as const)(
+    'stores verified flat attachments from %s',
+    async (source) => {
+      const { file, archive, chainJson, attachmentCid, bytes } = await createDossierArchive('flat');
+      const { idb, localStorage, records } = createArchiveStorage();
+      const message = { data: archive };
+      const relay = {
+        readAll: async () => [{ message, hash: 'relay-message' }],
+        checkDuplicateMessage: async () => [{ message, messageHash: 'relay-message' }],
+      };
+      const service = createService(idb, relay, localStorage);
+
+      const pkg =
+        source === 'file'
+          ? await service.importOwnable(file)
+          : source === 'hub'
+            ? await service.importFromHub(file, chainJson)
+            : (await service.importFromRelay())?.[0][0];
+
+      expect(pkg?.chain?.id).toBe(chainJson.id);
+      expect([...records.keys()].sort()).toEqual([
+        `attachment:${attachmentCid}`,
+        'cid-1:package.json',
+      ]);
+      const attachment = await service.getAttachment(attachmentCid);
+      expect(new Uint8Array(await attachment.arrayBuffer())).toEqual(bytes);
+      expect(Object.keys((await service.zip('cid-1')).files)).toEqual(['package.json']);
+      await expect(service.getAssetAsText('cid-1', `attachments/${attachmentCid}`)).rejects.toBe(
+        `Asset "attachments/${attachmentCid}" is not in package cid-1`
+      );
+    }
+  );
+
+  it('extracts a historical inline Dossier attachment without changing the recorded event', async () => {
+    const { file, chainJson, attachmentCid, bytes } = await createDossierArchive('inline');
+    const { idb, localStorage } = createArchiveStorage();
+    const service = createService(idb, {}, localStorage);
+
+    const pkg = await service.importOwnable(file);
+
+    expect(pkg.chain?.events[0].attachments).toEqual([]);
+    expect(pkg.chain?.events[0].hash.hex).toBe(chainJson.events[0].hash);
+    const attachment = await service.getAttachment(attachmentCid);
+    expect(new Uint8Array(await attachment.arrayBuffer())).toEqual(bytes);
+  });
+
+  it('keeps static package imports separate from chain and attachment storage', async () => {
+    const { file } = await createDossierArchive('flat');
+    const { idb, localStorage, records } = createArchiveStorage();
+    const service = createService(idb, {}, localStorage);
+
+    const pkg = await service.import(file);
+
+    expect(pkg.chain).toBeUndefined();
+    expect([...records.keys()]).toEqual(['cid-1:package.json']);
+  });
+
+  it.each(['wrong', 'missing'] as const)(
+    'rejects a %s attachment before writing package state',
+    async (format) => {
+      const { file } = await createDossierArchive(format);
+      const { idb, localStorage } = createArchiveStorage();
+      const service = createService(idb, {}, localStorage);
+
+      await expect(service.importOwnable(file)).rejects.toThrow(
+        /missing attachment|do not match CID/i
+      );
+      expect(idb.setAll).not.toHaveBeenCalled();
+      expect(localStorage.set).not.toHaveBeenCalled();
+    }
+  );
 
   it('propagates idb read errors from getAsset and zips stored files', async () => {
     const fileReaderFactory = vi.fn(() => ({
@@ -612,10 +730,9 @@ describe('PackageService', () => {
           { name: 'a.txt', content: 'a' },
           { name: 'b.txt', content: 'b' },
         ]),
-        getAllByPrefix: vi.fn().mockResolvedValue([
-          { name: 'a.txt', content: 'a' },
-          { name: 'b.txt', content: 'b' },
-        ]),
+        getAllByPrefix: vi
+          .fn()
+          .mockResolvedValue([new File(['a'], 'a.txt'), new File(['b'], 'b.txt')]),
       } as any,
       {} as any,
       { get: () => [], set: () => undefined } as any,
@@ -928,7 +1045,7 @@ describe('PackageService', () => {
     );
 
     (service as any).getPackageJson.mockResolvedValue({ name: 'pkg' });
-    vi.spyOn(service as any, 'getChainJson').mockResolvedValue(undefined);
+    vi.spyOn(service as any, 'readOwnableArchive').mockResolvedValue({ files: [] });
     await expect(
       service.processPackage({ data: { buffer: new Uint8Array([1]) } }, 'm1', true)
     ).rejects.toThrow('Missing chain.json for relay package');
@@ -952,26 +1069,26 @@ describe('PackageService', () => {
         },
       } as any
     );
-    vi.spyOn(service as any, 'extractAssets').mockResolvedValue([
-      new File(['{}'], 'package.json'),
-    ] as any);
+    const chain = EventChain.create('0x0000000000000000000000000000000000000001', 84532, 'relay');
+    vi.spyOn(service as any, 'readOwnableArchive').mockResolvedValue({
+      files: [new File(['{}'], 'package.json')],
+      chainJson: chain.toJSON(),
+      attachments: new Map(),
+    });
     vi.spyOn(service as any, 'getPackageJson').mockResolvedValue({
       name: 'relay-pkg',
       keywords: [],
     });
-    vi.spyOn(service as any, 'getChainJson').mockResolvedValue({ id: 'chain-1', events: [] });
     vi.spyOn(service as any, 'getCapabilities').mockResolvedValue(capabilities);
     vi.spyOn(service as any, 'storeAssets').mockResolvedValue(undefined);
-    const fromSpy = vi.spyOn(EventChain, 'from').mockReturnValue({ id: 'chain-1' } as any);
 
     const pkg = await service.processPackage(
       { data: { buffer: new Uint8Array([1]) } },
       'mh-1',
       true
     );
-    expect(pkg?.chain).toEqual({ id: 'chain-1' });
+    expect(pkg?.chain?.id).toBe(chain.id);
     expect(pkg?.uniqueMessageHash).toBe('mh-1');
-    fromSpy.mockRestore();
   });
 
   it('covers import verification fallback paths', async () => {

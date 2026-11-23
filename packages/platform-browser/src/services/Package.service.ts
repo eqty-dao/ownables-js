@@ -12,14 +12,37 @@ import mime from 'mime/lite';
 import IDBService from './IDB.service.js';
 import { RelayService } from './Relay.service.js';
 import { Buffer } from 'buffer';
-import { EventChain } from 'eqty-core';
-import { calculateOwnablePackageCid } from '@ownables/core/utils';
+import { EventChain, type IEventChainJSON } from 'eqty-core';
+import {
+  assertAttachmentCid,
+  calculateOwnablePackageCid,
+  collectOwnableAttachments,
+  OWNABLE_ATTACHMENT_PREFIX,
+  readOwnableBundleArchive,
+} from '@ownables/core/utils';
 
 const getMimeType = (filename: string): string | null | undefined =>
   (mime as any)?.getType?.(filename);
 
 const PACKAGE_ASSET_STORE = 'package-assets';
 const ATTACHMENT_PREFIX = 'attachment:';
+
+const isAttachmentPath = (name: string): boolean => {
+  const path = name.replaceAll('\\', '/').replace(/^\.?\//, '');
+  return path === 'attachments' || path.startsWith(OWNABLE_ATTACHMENT_PREFIX);
+};
+
+const isChainPath = (name: string): boolean => name === 'chain.json' || name === 'eventChain.json';
+
+const fileFromBytes = (name: string, bytes: Uint8Array): File =>
+  new File([Uint8Array.from(bytes)], name, {
+    type: getMimeType(name) || 'application/octet-stream',
+  });
+
+type ComparableChain = {
+  id: string;
+  events: readonly { hash?: string | { hex: string }; state?: string }[];
+};
 
 const capabilitiesStaticOwnable = {
   isDynamic: false,
@@ -168,23 +191,16 @@ export default class PackageService {
   }
 
   async extractAssets(zipFile: File, chain?: boolean): Promise<File[]> {
-    const zip = await JSZip.loadAsync(zipFile);
-
-    if (chain) {
-      return await Promise.all(
-        Array.from(Object.entries(zip.files))
-          .filter(([filename]) => !filename.startsWith('.'))
-          .map(async ([filename, file]) => {
-            const blob = await file.async('blob');
-            const type = getMimeType(filename) || 'application/octet-stream';
-            return new File([blob], filename, { type });
-          })
-      );
-    }
+    const zip = await JSZip.loadAsync(await zipFile.arrayBuffer());
 
     return await Promise.all(
-      Array.from(Object.entries(zip.files))
-        .filter(([filename]) => !filename.startsWith('.') && filename !== 'chain.json')
+      Object.entries(zip.files)
+        .filter(
+          ([filename]) =>
+            !filename.startsWith('.') &&
+            !isAttachmentPath(filename) &&
+            (chain || !isChainPath(filename))
+        )
         .map(async ([filename, file]) => {
           const blob = await file.async('blob');
           const type = getMimeType(filename) || 'application/octet-stream';
@@ -193,7 +209,11 @@ export default class PackageService {
     );
   }
 
-  private async storeAssets(cid: string, files: File[]): Promise<void> {
+  private async storeAssets(
+    cid: string,
+    files: File[],
+    attachments: ReadonlyMap<string, Uint8Array> = new Map()
+  ): Promise<void> {
     const storeName = PACKAGE_ASSET_STORE;
 
     try {
@@ -201,10 +221,13 @@ export default class PackageService {
         await this.idb.createStore(storeName);
       }
 
-      await this.idb.setAll(
-        storeName,
-        Object.fromEntries(files.map((file) => [this.assetKey(cid, file.name), file]))
+      const entries = Object.fromEntries(
+        files.map((file) => [this.assetKey(cid, file.name), file])
       );
+      for (const [attachmentCid, bytes] of attachments) {
+        entries[this.attachmentKey(attachmentCid)] = fileFromBytes(attachmentCid, bytes);
+      }
+      await this.idb.setAll(storeName, entries);
 
       // Verify store exists and has data
       await this.verifyPackageAssets(cid, files.length);
@@ -350,7 +373,7 @@ export default class PackageService {
     const json = JSON.parse(fileContent);
 
     json.events = json.events.map((event: MessageExt) => {
-      if (event.data.startsWith('base64:')) {
+      if (event.data?.startsWith('base64:')) {
         const base64Data = event.data.slice(7);
         const bufferData = this.base64ToBuffer(base64Data);
         event.parsedData = JSON.parse(this.bufferToString(bufferData));
@@ -417,24 +440,36 @@ export default class PackageService {
     }
   }
 
+  private async readOwnableArchive(input: File | Uint8Array | ArrayBuffer) {
+    const { assets, chain, attachments } = await readOwnableBundleArchive(input);
+
+    return {
+      files: Array.from(assets, ([name, bytes]) => fileFromBytes(name, bytes)),
+      chainJson: chain
+        ? (JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(chain)) as IEventChainJSON)
+        : undefined,
+      attachments,
+    };
+  }
+
   async processPackage(message: any, uniqueMessageHash?: string, isNotLocal = false) {
-    let chainJson: any;
-    let files: File[];
+    if (!isNotLocal) return this.finalizeImportedPackage(message, undefined, uniqueMessageHash);
 
-    //Extract files
-    if (isNotLocal) {
-      files = await this.extractAssets(message.data.buffer, false);
-      chainJson = await this.getChainJson('chain.json', message.data.buffer);
-    } else {
-      files = message; // Local files
-    }
-
-    return this.finalizeImportedPackage(files, chainJson, uniqueMessageHash, isNotLocal);
+    const data = message.data;
+    const { files, chainJson, attachments } = await this.readOwnableArchive(
+      data instanceof Uint8Array ? data : data.buffer
+    );
+    if (!chainJson) throw new Error('Missing chain.json for relay package');
+    return this.finalizeImportedPackage(files, { chainJson, attachments }, uniqueMessageHash);
   }
 
   async importFromHub(packageZipFile: File, chainJson: unknown): Promise<TypedPackage> {
-    const files = await this.extractAssets(packageZipFile);
-    const pkg = await this.finalizeImportedPackage(files, chainJson, undefined, true);
+    const { files, attachments } = await this.readOwnableArchive(packageZipFile);
+    if (!chainJson) throw new Error('Hub notification package did not include chain state');
+    const pkg = await this.finalizeImportedPackage(files, {
+      chainJson: chainJson as IEventChainJSON,
+      attachments,
+    });
 
     if (!pkg?.chain) {
       throw new Error('Hub notification package did not include chain state');
@@ -443,21 +478,37 @@ export default class PackageService {
     return pkg;
   }
 
+  async importOwnable(zipFile: File): Promise<TypedPackage> {
+    const { files, chainJson, attachments } = await this.readOwnableArchive(zipFile);
+    if (!chainJson) throw new Error('Invalid package: missing chain.json');
+
+    const pkg = await this.finalizeImportedPackage(files, {
+      chainJson,
+      attachments,
+      acceptSameHead: true,
+    });
+    if (!pkg?.chain)
+      throw new Error('The incoming Ownable chain is older than or conflicts with the local chain');
+    return pkg;
+  }
+
   private async finalizeImportedPackage(
-    files: File[],
-    chainJson?: any,
-    uniqueMessageHash?: string,
-    isNotLocal = false
+    importedFiles: File[],
+    bundle?: {
+      chainJson: IEventChainJSON;
+      attachments: ReadonlyMap<string, Uint8Array>;
+      acceptSameHead?: boolean;
+    },
+    uniqueMessageHash?: string
   ) {
+    const files = importedFiles.filter(
+      (file) => !isAttachmentPath(file.name) && !isChainPath(file.name)
+    );
     const packageJson: TypedDict = await this.getPackageJson('package.json', files);
 
     if (!packageJson) {
       throw new Error('Missing package.json in extracted assets');
     }
-    if (isNotLocal && !chainJson) {
-      throw new Error('Missing chain.json for relay package');
-    }
-
     const cid = await calculateOwnablePackageCid(
       await Promise.all(
         files.map(async (file) => ({
@@ -467,11 +518,9 @@ export default class PackageService {
       )
     );
 
-    if (await this.hasPackageAssets(cid)) {
-      if (isNotLocal && chainJson && !(await this.isCurrentEvent(chainJson))) {
-        this.logger.warn(`Package with CID ${cid} is already current or newer.`);
-        return null;
-      }
+    if (bundle && !(await this.isCurrentEvent(bundle.chainJson, bundle.acceptSameHead))) {
+      this.logger.warn(`Package with CID ${cid} contains a duplicate, older or conflicting chain.`);
+      return null;
     }
 
     const name = packageJson.name || 'Unnamed Package';
@@ -487,8 +536,21 @@ export default class PackageService {
     this.validatePackageFormat(packageJson, files);
     const capabilities = await this.getCapabilities(files);
 
-    //Store assets
-    await this.storeAssets(cid, files);
+    let chain: EventChain | undefined;
+    let attachments: ReadonlyMap<string, Uint8Array> | undefined;
+    if (bundle) {
+      chain = EventChain.from({ ...bundle.chainJson, events: [...bundle.chainJson.events] });
+      attachments = await collectOwnableAttachments(chain, async (attachmentCid) =>
+        bundle.attachments.get(attachmentCid)
+      );
+      for (const [attachmentCid, bytes] of bundle.attachments) {
+        if (attachments.get(attachmentCid) !== bytes)
+          await assertAttachmentCid(attachmentCid, bytes);
+      }
+      for (const event of chain.events) event.attachments.length = 0;
+    }
+
+    await this.storeAssets(cid, files, attachments);
 
     //Store package info
     const pkg = this.storePackageInfo(
@@ -501,18 +563,12 @@ export default class PackageService {
       cid,
       keywords,
       capabilities,
-      isNotLocal,
+      bundle !== undefined,
       uniqueMessageHash
     );
 
     //Attach chain if needed
-    if (isNotLocal && chainJson) {
-      pkg.chain = EventChain.from(chainJson);
-    }
-
-    if (uniqueMessageHash) {
-      pkg.uniqueMessageHash = uniqueMessageHash;
-    }
+    if (chain) pkg.chain = chain;
 
     return pkg;
   }
@@ -553,7 +609,7 @@ export default class PackageService {
     return pkg;
   }
 
-  async importFromRelay() {
+  async importFromRelay(): Promise<[TypedPackage[], boolean] | null> {
     try {
       const relayData = await this.relay.readAll();
 
@@ -594,12 +650,7 @@ export default class PackageService {
         filteredMessages.map(async (data: any) => {
           try {
             const { message, messageHash } = data;
-            const files = await this.extractAssets(message.data.buffer);
-
-            if (files.length === 0) return null;
-
-            // Pass the hash to the processing function
-            const pkg = await this.processPackage(files, messageHash, true);
+            const pkg = await this.processPackage(message, messageHash, true);
 
             if (!pkg) return;
 
@@ -626,22 +677,29 @@ export default class PackageService {
     }
   }
 
-  async isCurrentEvent(chainJson: EventChain) {
-    let existingChain;
-    if (await this.idb.hasStore(`ownable:${chainJson.id}`)) {
-      existingChain = await this.idb.get(`ownable:${chainJson.id}`, 'chain');
-    }
+  async isCurrentEvent(chain: ComparableChain, acceptSameHead = false): Promise<boolean> {
+    const store = `ownable:${chain.id}`;
+    if (!(await this.idb.hasStore(store))) return true;
 
-    if (existingChain === undefined || existingChain.events === undefined) {
-      return true;
-    }
-    if (existingChain.events?.length) {
-      if (chainJson.events.length > existingChain.events.length) {
-        return true;
-      }
-    } else {
+    const existing = (await this.idb.get(store, 'chain')) as IEventChainJSON | undefined;
+    if (!existing?.events) return true;
+    if (
+      existing.events.length === 0 ||
+      chain.events.length < existing.events.length ||
+      (!acceptSameHead && chain.events.length === existing.events.length)
+    ) {
       return false;
     }
+
+    return existing.events.every((event, index) => {
+      const incoming = chain.events[index];
+      if (!incoming) return false;
+      const incomingHash = typeof incoming.hash === 'string' ? incoming.hash : incoming.hash?.hex;
+      const storedState = 'state' in event ? event.state : undefined;
+      return (
+        event.hash !== undefined && incomingHash === event.hash && incoming.state === storedState
+      );
+    });
   }
 
   async downloadExample(key: string): Promise<TypedPackage> {
@@ -668,6 +726,10 @@ export default class PackageService {
     name: string,
     read: (fr: FileReader, contents: Blob | File) => void
   ): Promise<string | ArrayBuffer> {
+    if (isAttachmentPath(name)) {
+      return Promise.reject(`Asset "${name}" is not in package ${cid}`);
+    }
+
     return new Promise((resolve, reject) => {
       const fileReader = this.fileReaderFactory();
       void (async () => {
@@ -730,11 +792,16 @@ export default class PackageService {
   }
 
   async getAttachment(cid: string): Promise<File> {
-    const file = await this.idb.get(PACKAGE_ASSET_STORE, this.attachmentKey(cid));
+    const file = await this.findAttachment(cid);
     if (!file) {
       throw new Error(`Attachment ${cid} is not stored locally`);
     }
-    return file as File;
+    return file;
+  }
+
+  async findAttachment(cid: string): Promise<File | undefined> {
+    if (!(await this.idb.hasStore(PACKAGE_ASSET_STORE))) return undefined;
+    return (await this.idb.get(PACKAGE_ASSET_STORE, this.attachmentKey(cid))) ?? undefined;
   }
 
   async zip(cid: string): Promise<JSZip> {
@@ -751,7 +818,9 @@ export default class PackageService {
           : [];
 
     for (const file of packageFiles) {
-      zip.file(file.name, file);
+      if (!isAttachmentPath(file.name) && !isChainPath(file.name)) {
+        zip.file(file.name, await file.arrayBuffer());
+      }
     }
     return zip;
   }

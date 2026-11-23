@@ -59,6 +59,16 @@ describe('@ownables/core package root', () => {
       { cwd: PACKAGE_ROOT }
     );
 
-    expect(JSON.parse(stdout)).toEqual(['calculateOwnablePackageCid']);
+    expect(JSON.parse(stdout)).toEqual([
+      'OWNABLE_ATTACHMENT_PREFIX',
+      'assertAttachmentCid',
+      'calculateAttachmentCid',
+      'calculateOwnablePackageCid',
+      'collectOwnableAttachments',
+      'createConsumptionSnapshot',
+      'readConsumptionSnapshot',
+      'serializeOwnableChain',
+      'splitOwnableArchiveEntries',
+    ]);
   }, 15000);
 });

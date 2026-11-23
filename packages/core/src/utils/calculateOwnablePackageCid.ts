@@ -1,5 +1,6 @@
 import { BlackHoleBlockstore } from 'blockstore-core';
 import { importer } from 'ipfs-unixfs-importer';
+import { OWNABLE_ATTACHMENT_PREFIX } from './ownableArchive.js';
 
 export interface OwnablePackageCidEntry {
   path: string;
@@ -12,7 +13,12 @@ function normalizePath(path: string): string {
 
 function includeForCid(path: string): boolean {
   const normalized = normalizePath(path);
-  return normalized !== 'chain.json' && normalized !== 'timestamp.txt';
+  return (
+    normalized !== 'chain.json' &&
+    normalized !== 'eventChain.json' &&
+    normalized !== 'timestamp.txt' &&
+    !normalized.startsWith(OWNABLE_ATTACHMENT_PREFIX)
+  );
 }
 
 export async function calculateOwnablePackageCid(

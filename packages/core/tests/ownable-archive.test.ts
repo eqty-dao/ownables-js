@@ -97,6 +97,17 @@ describe('Ownable archive attachments', () => {
     const bundle = await readOwnableBundleArchive(blob, { maxExpandedBytes: 1_029 });
     expect(bundle.attachments.get(cid)).toEqual(attachment);
     expect(bundle.assets.get('contract.wasm')).toEqual(new Uint8Array([1, 2, 3]));
+
+    const chainOnly = await readOwnableBundleArchive(blob, {
+      chainOnly: true,
+      maxExpandedBytes: 2,
+    });
+    expect(chainOnly.chain).toEqual(encode('{}'));
+    expect(chainOnly.assets.size).toBe(0);
+    expect(chainOnly.attachments.size).toBe(0);
+    await expect(
+      readOwnableBundleArchive(blob, { chainOnly: true, maxExpandedBytes: 1 })
+    ).rejects.toThrow('exceeds its expanded size limit');
   });
 
   it('relocates only legacy Dossier attachments named in the event body and preserves its hash', async () => {

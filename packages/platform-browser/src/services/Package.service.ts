@@ -481,6 +481,10 @@ export default class PackageService {
   async importOwnable(zipFile: File): Promise<TypedPackage> {
     const { files, chainJson, attachments } = await this.readOwnableArchive(zipFile);
     if (!chainJson) throw new Error('Invalid package: missing chain.json');
+    const genesis = chainJson.events?.[0];
+    if (!genesis || !('signature' in genesis) || !genesis.signature) {
+      throw new Error('Ownable archive must include a signed genesis event');
+    }
 
     const pkg = await this.finalizeImportedPackage(files, {
       chainJson,

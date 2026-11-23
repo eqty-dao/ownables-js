@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import JSZip from 'jszip';
-import { Event, EventChain } from 'eqty-core';
+import { Binary, Event, EventChain } from 'eqty-core';
 import { calculateAttachmentCid, serializeOwnableChain } from '@ownables/core/utils';
 
 import PackageService from '../src/services/Package.service';
@@ -52,6 +52,7 @@ describe('PackageService', () => {
     });
     event.signerAddress = address;
     event.timestamp = 1;
+    event.signature = Binary.fromHex(`0x${'11'.repeat(65)}`);
     chain.add(event);
     if (format === 'inline') event.addAttachment(attachmentCid, bytes, 'text/plain');
 
@@ -699,6 +700,21 @@ describe('PackageService', () => {
 
     expect(pkg.chain).toBeUndefined();
     expect([...records.keys()]).toEqual(['cid-1:package.json']);
+  });
+
+  it('requires a signed genesis event on standalone Ownable import', async () => {
+    const chain = EventChain.create('0x0000000000000000000000000000000000000001', 84532, 'empty');
+    const zip = new JSZip()
+      .file('package.json', '{}')
+      .file('chain.json', JSON.stringify(chain.toJSON()));
+    const archive = await zip.generateAsync({ type: 'uint8array' });
+    const { idb, localStorage } = createArchiveStorage();
+    const service = createService(idb, {}, localStorage);
+
+    await expect(service.importOwnable(new File([archive], 'unsigned.zip'))).rejects.toThrow(
+      'signed genesis'
+    );
+    expect(idb.setAll).not.toHaveBeenCalled();
   });
 
   it.each(['wrong', 'missing'] as const)(

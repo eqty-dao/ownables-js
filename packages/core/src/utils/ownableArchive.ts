@@ -142,7 +142,7 @@ function readZipFile(file: JSZip.JSZipObject, maxBytes: number): Promise<Uint8Ar
 async function readZipEntries(
   zip: JSZip,
   maxBytes: number,
-  mode: 'bundle' | 'snapshot' | 'package'
+  mode: 'bundle' | 'chain' | 'snapshot' | 'package'
 ) {
   const files = Object.values(zip.files);
   if (files.length > MAX_ARCHIVE_ENTRIES) throw new Error('Too many entries in Ownable archive');
@@ -156,8 +156,9 @@ async function readZipEntries(
     assertArchivePath(path);
     const isAttachment = path === 'attachments' || path.startsWith(OWNABLE_ATTACHMENT_PREFIX);
     const isChain = path === CHAIN_PATH || path === LEGACY_CHAIN_PATH;
+    if (mode === 'chain' && !isChain) continue;
     if (mode === 'package' && (isAttachment || isChain)) continue;
-    if (mode !== 'bundle' && (isAttachment || path === LEGACY_CHAIN_PATH)) {
+    if (mode === 'snapshot' && (isAttachment || path === LEGACY_CHAIN_PATH)) {
       throw new Error(`Unexpected entry in consumption snapshot: ${path}`);
     }
     const bytes = await readZipFile(file, maxBytes - expandedBytes);
@@ -169,7 +170,7 @@ async function readZipEntries(
 
 export async function readOwnableBundleArchive(
   input: Blob | Uint8Array | ArrayBuffer,
-  limits: ConsumptionSnapshotLimits = {}
+  options: ConsumptionSnapshotLimits & { chainOnly?: boolean } = {}
 ): Promise<OwnableArchiveEntries> {
   const inputSize = 'byteLength' in input ? input.byteLength : input.size;
   if (inputSize > DEFAULT_MAX_EXPANDED_BYTES) {
@@ -178,8 +179,8 @@ export async function readOwnableBundleArchive(
   const zip = await JSZip.loadAsync('byteLength' in input ? input : await input.arrayBuffer());
   const { assets, chain, attachments } = await readZipEntries(
     zip,
-    limits.maxExpandedBytes ?? DEFAULT_MAX_EXPANDED_BYTES,
-    'bundle'
+    options.maxExpandedBytes ?? DEFAULT_MAX_EXPANDED_BYTES,
+    options.chainOnly ? 'chain' : 'bundle'
   );
   return { assets, attachments, ...(chain ? { chain } : {}) };
 }

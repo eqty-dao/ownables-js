@@ -67,6 +67,7 @@ describe('@ownables/core package root', () => {
       'collectOwnableAttachments',
       'createConsumptionSnapshot',
       'readConsumptionSnapshot',
+      'readOwnableBundleArchive',
       'serializeOwnableChain',
       'splitOwnableArchiveEntries',
     ]);

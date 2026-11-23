@@ -9,7 +9,7 @@ export const OWNABLE_ATTACHMENT_PREFIX = 'attachments/';
 const CHAIN_PATH = 'chain.json';
 const LEGACY_CHAIN_PATH = 'eventChain.json';
 const DEFAULT_MAX_EXPANDED_BYTES = 256 * 1024 * 1024;
-const MAX_SNAPSHOT_ENTRIES = 10_000;
+const MAX_ARCHIVE_ENTRIES = 10_000;
 const MAX_SNAPSHOT_DEPTH = 16;
 
 export interface OwnableArchiveEntries {
@@ -120,7 +120,7 @@ function readZipFile(file: JSZip.JSZipObject, maxBytes: number): Promise<Uint8Ar
         length += chunk.byteLength;
         if (length > maxBytes) {
           stream.pause();
-          reject(new Error('Consumption snapshot exceeds its expanded size limit'));
+          reject(new Error('Ownable archive exceeds its expanded size limit'));
           return;
         }
         chunks.push(chunk);
@@ -139,21 +139,25 @@ function readZipFile(file: JSZip.JSZipObject, maxBytes: number): Promise<Uint8Ar
   });
 }
 
-async function readSnapshotEntries(zip: JSZip, maxBytes: number, skipReserved = false) {
+async function readZipEntries(
+  zip: JSZip,
+  maxBytes: number,
+  mode: 'bundle' | 'snapshot' | 'package'
+) {
   const files = Object.values(zip.files);
-  if (files.length > MAX_SNAPSHOT_ENTRIES)
-    throw new Error('Too many entries in consumption snapshot');
+  if (files.length > MAX_ARCHIVE_ENTRIES) throw new Error('Too many entries in Ownable archive');
 
   const entries = new Map<string, Uint8Array>();
   let expandedBytes = 0;
   for (const file of files) {
     if (file.dir) continue;
-    assertArchivePath(file.unsafeOriginalName ?? file.name);
-    const path = file.name;
+    if (mode === 'bundle' && file.name.startsWith('.')) continue;
+    const path = file.unsafeOriginalName ?? file.name;
+    assertArchivePath(path);
     const isAttachment = path === 'attachments' || path.startsWith(OWNABLE_ATTACHMENT_PREFIX);
     const isChain = path === CHAIN_PATH || path === LEGACY_CHAIN_PATH;
-    if (skipReserved && (isAttachment || isChain)) continue;
-    if (isAttachment || path === LEGACY_CHAIN_PATH) {
+    if (mode === 'package' && (isAttachment || isChain)) continue;
+    if (mode !== 'bundle' && (isAttachment || path === LEGACY_CHAIN_PATH)) {
       throw new Error(`Unexpected entry in consumption snapshot: ${path}`);
     }
     const bytes = await readZipFile(file, maxBytes - expandedBytes);
@@ -161,6 +165,23 @@ async function readSnapshotEntries(zip: JSZip, maxBytes: number, skipReserved = 
     expandedBytes += bytes.byteLength;
   }
   return { ...splitOwnableArchiveEntries(entries), expandedBytes };
+}
+
+export async function readOwnableBundleArchive(
+  input: Blob | Uint8Array | ArrayBuffer,
+  limits: ConsumptionSnapshotLimits = {}
+): Promise<OwnableArchiveEntries> {
+  const inputSize = 'byteLength' in input ? input.byteLength : input.size;
+  if (inputSize > DEFAULT_MAX_EXPANDED_BYTES) {
+    throw new Error('Ownable archive is too large');
+  }
+  const zip = await JSZip.loadAsync('byteLength' in input ? input : await input.arrayBuffer());
+  const { assets, chain, attachments } = await readZipEntries(
+    zip,
+    limits.maxExpandedBytes ?? DEFAULT_MAX_EXPANDED_BYTES,
+    'bundle'
+  );
+  return { assets, attachments, ...(chain ? { chain } : {}) };
 }
 
 export async function createConsumptionSnapshot(
@@ -172,10 +193,10 @@ export async function createConsumptionSnapshot(
   const chainLength = new TextEncoder().encode(serializedChain).byteLength;
   if (chainLength > DEFAULT_MAX_EXPANDED_BYTES)
     throw new Error('Consumption snapshot chain is too large');
-  const { assets } = await readSnapshotEntries(
+  const { assets } = await readZipEntries(
     packageZip,
     DEFAULT_MAX_EXPANDED_BYTES - chainLength,
-    true
+    'package'
   );
   const zip = new JSZip();
   const date = new Date('1980-01-01T00:00:00Z');
@@ -196,9 +217,10 @@ export async function readConsumptionSnapshot(
   if (bytes.byteLength > DEFAULT_MAX_EXPANDED_BYTES)
     throw new Error('Consumption snapshot is too large');
   const zip = await JSZip.loadAsync(bytes);
-  const { assets, chain, expandedBytes } = await readSnapshotEntries(
+  const { assets, chain, expandedBytes } = await readZipEntries(
     zip,
-    limits.maxExpandedBytes ?? DEFAULT_MAX_EXPANDED_BYTES
+    limits.maxExpandedBytes ?? DEFAULT_MAX_EXPANDED_BYTES,
+    'snapshot'
   );
   if (!chain) throw new Error('Consumption snapshot is missing chain.json');
   const json = record(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(chain)));
@@ -275,7 +297,7 @@ export async function collectOwnableAttachments(
         if (!bytes) throw new Error(`Missing attachment ${cid}`);
         if (!attachments.has(cid)) {
           remainingBytes -= bytes.byteLength;
-          if (remainingBytes < 0 || attachments.size >= MAX_SNAPSHOT_ENTRIES) {
+          if (remainingBytes < 0 || attachments.size >= MAX_ARCHIVE_ENTRIES) {
             throw new Error('Ownable attachment collection exceeds its size limit');
           }
           await assertAttachmentCid(cid, bytes);

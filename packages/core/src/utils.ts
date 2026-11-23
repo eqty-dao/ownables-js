@@ -9,6 +9,7 @@ export {
   createConsumptionSnapshot,
   OWNABLE_ATTACHMENT_PREFIX,
   readConsumptionSnapshot,
+  readOwnableBundleArchive,
   serializeOwnableChain,
   splitOwnableArchiveEntries,
   type ConsumptionSnapshot,

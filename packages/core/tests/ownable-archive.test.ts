@@ -10,6 +10,7 @@ import {
   collectOwnableAttachments,
   createConsumptionSnapshot,
   readConsumptionSnapshot,
+  readOwnableBundleArchive,
   serializeOwnableChain,
   splitOwnableArchiveEntries,
 } from '../src/utils/ownableArchive.js';
@@ -81,6 +82,21 @@ describe('Ownable archive attachments', () => {
         ['chain.json', encode('different')],
       ])
     ).toThrow('Conflicting Ownable chain files');
+  });
+
+  it('bounds decompression across all files in an outer bundle', async () => {
+    const attachment = new Uint8Array(1_024);
+    const cid = await calculateAttachmentCid(attachment);
+    const zip = packageZip().file('chain.json', '{}').file(`attachments/${cid}`, attachment);
+    const bytes = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+    const blob = new Blob([bytes]);
+
+    await expect(readOwnableBundleArchive(blob, { maxExpandedBytes: 1_028 })).rejects.toThrow(
+      'exceeds its expanded size limit'
+    );
+    const bundle = await readOwnableBundleArchive(blob, { maxExpandedBytes: 1_029 });
+    expect(bundle.attachments.get(cid)).toEqual(attachment);
+    expect(bundle.assets.get('contract.wasm')).toEqual(new Uint8Array([1, 2, 3]));
   });
 
   it('relocates only legacy Dossier attachments named in the event body and preserves its hash', async () => {

@@ -1,3 +1,20 @@
+# [0.15.0](https://github.com/eqty-dao/ownables-js/compare/v0.14.4...v0.15.0) (2026-11-24)
+
+
+### Bug Fixes
+
+* **browser:** bound relay archive scans and require signed imports ([6e9843b](https://github.com/eqty-dao/ownables-js/commit/6e9843b7406509a4c17d7e1c9ad9ed91b1046e52))
+
+
+### Features
+
+* **browser:** import CID-addressed Ownable attachments ([50ad8bf](https://github.com/eqty-dao/ownables-js/commit/50ad8bfd1b1f55a22bfbb5d8cbc9344849d8fdaa))
+* **core:** bound outer Ownable bundle decompression ([8703b5a](https://github.com/eqty-dao/ownables-js/commit/8703b5ac2017ec0f647fa1010f9b2701884d34af))
+* **core:** encode flat consumption proof attachments ([a0a2fcc](https://github.com/eqty-dao/ownables-js/commit/a0a2fccb15cbe9ba48ae11f8ae8f58f47252624d))
+* **core:** keep proof attachments out of static package identity ([486bdd4](https://github.com/eqty-dao/ownables-js/commit/486bdd4d9b774c4b11574a77b9a2c82de00a55e9))
+* **core:** verify signed consumption proofs before ingest ([03e0923](https://github.com/eqty-dao/ownables-js/commit/03e0923f0b9dff59b77e66a74d690da14759c9ff))
+* **viem:** verify canonical consumption anchor and public logs ([c3b4b59](https://github.com/eqty-dao/ownables-js/commit/c3b4b599070ec3e0821334ae782c6de37c540407))
+
 ## [0.14.4](https://github.com/eqty-dao/ownables-js/compare/v0.14.3...v0.14.4) (2026-11-17)
 
 

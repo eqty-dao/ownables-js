@@ -1,6 +1,7 @@
-import { EventChain, Message, Relay, Binary, IMessageMeta } from 'eqty-core';
+import { Message, Relay, Binary, IMessageMeta, type IEventChainJSON } from 'eqty-core';
 import JSZip from 'jszip';
 import mime from 'mime/lite';
+import { readOwnableBundleArchive } from '@ownables/core/utils';
 import {
   SIWEClient,
   ProgressService,
@@ -342,12 +343,6 @@ export class RelayService {
     );
   }
 
-  private async getChainJson(filename: string, files: File[]): Promise<EventChain> {
-    const file = files.find((f) => f.name === filename);
-    if (!file) throw new Error(`Invalid package: missing ${filename}`);
-    return JSON.parse(await file.text());
-  }
-
   async checkDuplicateMessage(messages: MessageExt[]) {
     const uniqueItems = new Map<
       string,
@@ -366,8 +361,11 @@ export class RelayService {
         continue;
       }
 
-      const assets = await this.extractAssets(data.buffer);
-      const chain = await this.getChainJson('chain.json', assets);
+      const { chain: chainBytes } = await readOwnableBundleArchive(data, { chainOnly: true });
+      if (!chainBytes) throw new Error('Invalid package: missing chain.json');
+      const chain = JSON.parse(
+        new TextDecoder('utf-8', { fatal: true }).decode(chainBytes)
+      ) as IEventChainJSON;
 
       const currentLength = uniqueItems.get(chain.id)?.eventsLength || 0;
       if (chain.events.length > currentLength) {

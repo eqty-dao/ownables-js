@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Binary, Event, EventChain } from 'eqty-core';
+import JSZip from 'jszip';
+import { calculateOwnablePackageCid } from '../src/utils/calculateOwnablePackageCid';
+import { calculateAttachmentCid } from '../src/utils/ownableArchive';
 
 import OwnableService from '../src/services/Ownable.service';
 import { PublicEventReplayService } from '../src/services/ReplayAuthority.service';
@@ -384,26 +387,43 @@ describe('OwnableService', () => {
     await expect(service.apply(chain, [] as any)).rejects.toThrow('Unknown event type');
   });
 
-  it('consumes ownable and submits shared anchors', async () => {
-    const consumer = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
-    const consumable = EventChain.create('0x2222222222222222222222222222222222222222', 84532);
+  it('binds a staged consume to the receiver, preserves ZIP bytes, and submits shared anchors once', async () => {
+    const address = '0x1111111111111111111111111111111111111111';
+    const signer = {
+      getAddress: async () => address,
+      signTypedData: async () => `0x${'ab'.repeat(65)}`,
+    };
+    const consumer = EventChain.create(address, 84532);
+    const consumable = EventChain.create(address, 84532);
+    const wasm = new Uint8Array([1, 2, 3]);
+    const wasmPath = 'ownable_bg.wasm';
+    const cid = await calculateOwnablePackageCid([{ path: wasmPath, content: wasm }]);
+    const zip = () => new JSZip().file(wasmPath, wasm);
+    for (const chain of [consumer, consumable]) {
+      await new Event({
+        '@context': 'instantiate_msg.json',
+        ownable_id: chain.id,
+        network_id: chain.networkId,
+        package: cid,
+      })
+        .addTo(chain)
+        .signWith(signer);
+    }
+    const initialConsumer = EventChain.from(consumer.toJSON());
+    const initialConsumable = EventChain.from(consumable.toJSON());
+    const stateStore = createStateStore();
     const eventChains = {
       getStateDump: vi.fn().mockResolvedValue([['state', 1]]),
+      anchoring: true,
     };
     const eqty = {
-      address: '0xabc',
-      sign: vi.fn(),
+      address,
+      sign: vi.fn((event: Event) => event.signWith(signer)),
+      anchor: vi.fn(),
       submitAnchors: vi.fn().mockResolvedValue('0xtx'),
     };
-    const service = createService(
-      { set: vi.fn().mockResolvedValue(undefined) } as any,
-      eventChains as any,
-      eqty as any,
-      {} as any
-    );
-    const rpcConsumer = {
-      ingest: vi.fn().mockResolvedValue({ state: [['consumer', 1]] }),
-    };
+    const service = createService(stateStore, eventChains, eqty, { zip: vi.fn(zip) });
+    const rpcConsumer = { ingest: vi.fn().mockResolvedValue({ state: [['consumer', 1]] }) };
     const rpcConsumable = {
       execute: vi.fn().mockResolvedValue({
         events: [{ type: 'consume', attributes: { any: 'value' } }],
@@ -413,27 +433,129 @@ describe('OwnableService', () => {
     };
     (service as any)._rpc.set(consumer.id, rpcConsumer);
     (service as any)._rpc.set(consumable.id, rpcConsumable);
-    vi.spyOn(service, 'store').mockResolvedValue(undefined as any);
-    vi.spyOn(service, 'submitAnchors').mockResolvedValue('0xtx');
+    const attachments = new Map();
+    (service as any).consumption = {
+      putAttachment: async (hash: string, bytes: Uint8Array) => attachments.set(hash, bytes),
+      getAttachment: async (hash: string) => attachments.get(hash),
+    };
 
-    await service.consume(consumer, consumable);
+    eqty.sign
+      .mockImplementationOnce((event) => event.signWith(signer))
+      .mockRejectedValueOnce(new Error('Signing cancelled'));
+    await expect(service.consume(consumer, consumable)).rejects.toThrow('Signing cancelled');
+    expect(consumer.latestHash.hex).toBe(initialConsumer.latestHash.hex);
+    expect(consumable.latestHash.hex).toBe(initialConsumable.latestHash.hex);
+    expect(attachments.size).toBe(0);
+    expect(stateStore.setAll).not.toHaveBeenCalled();
+    expect(eqty.anchor).not.toHaveBeenCalled();
+    eqty.sign.mockClear();
+    rpcConsumer.ingest.mockClear();
+    rpcConsumable.execute.mockClear();
 
-    expect(rpcConsumable.execute).toHaveBeenCalled();
-    expect(rpcConsumable.query).toHaveBeenCalledWith({ get_info: {} }, [['consumable', 1]]);
-    expect(rpcConsumer.ingest).toHaveBeenCalledWith(
+    await Promise.all([
+      service.consume(consumer, consumable),
+      service.consume(initialConsumer, initialConsumable),
+    ]);
+    const consumeEvent = consumable.events.at(-1)!;
+    expect(consumeEvent.parsedData.consume).toEqual({ consumer_id: consumer.id });
+    expect(rpcConsumable.execute).toHaveBeenCalledExactlyOnceWith(
+      { consume: { consumer_id: consumer.id } },
+      { sender: address, funds: [] },
+      [['state', 1]]
+    );
+    const signedClaim = consumer.events.at(-1)!.parsedData;
+    expect(signedClaim.source.cid).toEqual(expect.any(String));
+    expect(rpcConsumer.ingest).toHaveBeenCalledExactlyOnceWith(
       {
+        type: 'consume',
         source: {
           id: consumable.id,
           owner: 'owner-1',
           issuer: 'issuer-1',
+          event: consumeEvent.hash.hex,
         },
-        eventType: 'consume',
+        target: { id: consumer.id },
         attributes: { any: 'value' },
       },
-      { sender: '0xabc', funds: [] },
+      { sender: address, funds: [] },
       [['state', 1]]
     );
     expect(eqty.sign).toHaveBeenCalledTimes(2);
+    expect(eqty.anchor).toHaveBeenCalledTimes(1);
+    expect(eqty.anchor.mock.calls[0]).toHaveLength(2);
+    expect(stateStore.setAll).toHaveBeenCalledTimes(1);
+    expect(await stateStore.get(`ownable:${consumable.id}`, 'isConsumed')).toBe(true);
+    expect(initialConsumer.latestHash.hex).toBe(consumer.latestHash.hex);
+    const anchorStatusKey = `consume-anchor:${consumer.latestHash.hex}`;
+    const receiverStore = `ownable:${consumer.id}`;
+    expect(eqty.submitAnchors).toHaveBeenCalledTimes(1);
+    expect(await stateStore.get(receiverStore, anchorStatusKey)).toBe('submitted');
+
+    // Simulate an interruption after the local commit but before anchor submission was recorded.
+    await stateStore.set(receiverStore, anchorStatusKey, 'pending');
+    const afterReload = createService(stateStore, eventChains, eqty, { zip: vi.fn(zip) });
+    (afterReload as any).consumption = {
+      verifyAnchors: async (chain: EventChain) => {
+        const entry = chain.anchorMap.at(-1)!;
+        return {
+          details:
+            chain.id === consumable.id
+              ? {
+                  [entry.key.hex]: {
+                    verified: true,
+                    value: entry.value.hex,
+                    transactionHash: '0xexisting',
+                  },
+                }
+              : {},
+        };
+      },
+    };
+    await afterReload.consume(initialConsumer, initialConsumable);
+    expect(eqty.anchor).toHaveBeenCalledTimes(2);
+    expect(eqty.anchor.mock.calls[1]).toEqual([consumer.anchorMap.at(-1)]);
+    expect(await stateStore.get(receiverStore, anchorStatusKey)).toBe('submitted');
+    expect(rpcConsumable.execute).toHaveBeenCalledTimes(1);
+
+    const archive = await service.zip(consumer);
+    const chain = JSON.parse(await archive.file('chain.json')!.async('string'));
+    expect(chain.events[1]).not.toHaveProperty('attachments');
+    expect(
+      await archive.file(`attachments/${signedClaim.source.cid}`)!.async('uint8array')
+    ).toEqual(attachments.get(signedClaim.source.cid));
+  });
+
+  it('stores signed Dossier file bytes once by CID and exports the flat attachment', async () => {
+    const address = '0x1111111111111111111111111111111111111111';
+    const signer = {
+      getAddress: async () => address,
+      signTypedData: async () => `0x${'ab'.repeat(65)}`,
+    };
+    const stateStore = createStateStore();
+    const eqty = { address, sign: vi.fn((event: Event) => event.signWith(signer)) };
+    const service = createService(stateStore, { anchoring: false }, eqty, {
+      zip: async () => new JSZip(),
+    });
+    const chain = EventChain.create(address, 84532);
+    await new Event({ '@context': 'instantiate_msg.json', package: 'package-cid' })
+      .addTo(chain)
+      .signWith(signer);
+    (service as any)._rpc.set(chain.id, { execute: vi.fn().mockResolvedValue({ state: [] }) });
+    const bytes = Uint8Array.of(10, 20, 30);
+    const cid = await calculateAttachmentCid(bytes);
+    const file = new File([bytes], 'notes.txt', { type: 'text/plain' });
+    const cache = new Map<string, Uint8Array>();
+    const putAttachment = vi.fn(async (cid, bytes) => {
+      cache.set(cid, bytes);
+    });
+    (service as any).consumption = { putAttachment, getAttachment: async (cid) => cache.get(cid) };
+    const msg = { attach: { attachments: [{ cid, name: file.name }] } };
+
+    await service.execute(chain, msg, [], undefined, [{ name: cid, file }]);
+    expect(chain.events.at(-1)?.attachments).toEqual([]);
+    expect(putAttachment).toHaveBeenCalledExactlyOnceWith(cid, bytes, 'text/plain');
+    const archive = await service.zip(chain);
+    expect(await archive.file(`attachments/${cid}`)!.async('uint8array')).toEqual(bytes);
   });
 
   it('initializes rpc with package assets and persists initial store', async () => {
@@ -444,7 +566,7 @@ describe('OwnableService', () => {
     };
     const runtimeRpc = { create: vi.fn().mockReturnValue(rpc) };
     const service = createService(
-      {} as any,
+      createStateStore() as any,
       {} as any,
       {} as any,
       {
@@ -468,14 +590,16 @@ describe('OwnableService', () => {
 
   it('throws when consume state is mismatched', async () => {
     const service = createService(
-      {} as any,
+      createStateStore(),
       { getStateDump: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce([]) } as any,
       { address: '0xabc' } as any,
       {} as any
     );
     const chain = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
 
-    await expect(service.consume(chain, chain)).rejects.toThrow('State mismatch for consume');
+    const source = EventChain.create('0x2222222222222222222222222222222222222222', 84532);
+    await expect(service.consume(chain, source)).rejects.toThrow('State mismatch for consume');
+    await expect(service.consume(chain, chain)).rejects.toThrow('An Ownable cannot consume itself');
   });
 
   it('delegates loadAll/delete/deleteAll to event chain service', async () => {
@@ -527,6 +651,7 @@ describe('OwnableService', () => {
       events: [{}, {}],
       toJSON: () => ({ id: 'chain-anchor', events: [{}, {}] }),
       startingAfter: vi.fn().mockReturnValue({
+        events: [{}],
         anchorMap: [
           {
             key: Binary.fromHex(`0x${'1'.repeat(64)}`),
@@ -832,7 +957,7 @@ describe('OwnableService', () => {
     const stateRef = { hex: '0xstate' };
     const service = createService(
       {
-        get: vi.fn().mockResolvedValue(stateRef),
+        get: vi.fn(async (_store, key) => (key === 'state' ? stateRef : undefined)),
         setAll: vi.fn(),
       } as any,
       {
@@ -841,8 +966,8 @@ describe('OwnableService', () => {
       { address: '0xabc', sign: vi.fn(), anchor: vi.fn() } as any,
       {} as any
     );
-    const consumer = { id: 'consumer-1', state: { hex: '0x1' } } as any;
-    const consumable = { id: 'consumable-1', state: { hex: '0x2' } } as any;
+    const consumer = EventChain.create('0x1111111111111111111111111111111111111111', 84532);
+    const consumable = EventChain.create('0x2222222222222222222222222222222222222222', 84532);
     (service as any)._rpc.set(consumable.id, {
       execute: vi.fn().mockResolvedValue({ events: [], state: [['x', 1]] }),
       query: vi.fn().mockResolvedValue({ owner: 'owner-1', issuer: 'issuer-1' }),

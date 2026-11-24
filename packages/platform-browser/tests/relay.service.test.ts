@@ -257,24 +257,23 @@ describe('RelayService', () => {
       storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
     });
 
-    vi.spyOn(service as any, 'extractAssets').mockResolvedValue([
-      { name: 'chain.json', text: async () => '{}' },
-    ]);
-    vi.spyOn(service as any, 'getChainJson')
-      .mockResolvedValueOnce({ id: 'c1', events: [1] })
-      .mockResolvedValueOnce({ id: 'c1', events: [1, 2] })
-      .mockResolvedValueOnce({ id: 'c2', events: [1] });
+    const extractAssets = vi.spyOn(service, 'extractAssets');
+    const makeArchive = (id: string, events: number[], chainPath = 'chain.json') =>
+      new JSZip()
+        .file(chainPath, JSON.stringify({ id, events }))
+        .generateAsync({ type: 'uint8array' });
 
     const messages = [
-      { message: { data: { buffer: new Uint8Array([1]) } }, messageHash: 'h1' },
-      { message: { data: { buffer: new Uint8Array([2]) } }, messageHash: 'h2' },
-      { message: { data: { buffer: new Uint8Array([3]) } }, messageHash: 'h3' },
+      { message: { data: await makeArchive('c1', [1]) }, messageHash: 'h1' },
+      { message: { data: await makeArchive('c1', [1, 2]) }, messageHash: 'h2' },
+      { message: { data: await makeArchive('c2', [1], 'eventChain.json') }, messageHash: 'h3' },
       { message: null, messageHash: 'hx' } as any,
     ];
 
     const deduped = await service.checkDuplicateMessage(messages as any);
     expect(deduped).toHaveLength(2);
     expect(deduped.map((m) => m.messageHash).sort()).toEqual(['h2', 'h3']);
+    expect(extractAssets).not.toHaveBeenCalled();
   });
 
   it('extracts assets from JSZip and skips hidden files', async () => {
@@ -446,18 +445,9 @@ describe('RelayService', () => {
     const files = await service.extractAssets(zipBytes as any);
     expect(files.map((f) => f.name)).toEqual(['chain.json']);
 
-    await expect((service as any).getChainJson('chain.json', files)).resolves.toEqual({
-      id: 'c1',
-      events: [{}],
-    });
-    await expect((service as any).getChainJson('missing.json', files)).rejects.toThrow(
-      'Invalid package: missing missing.json'
-    );
-
-    vi.spyOn(service as any, 'extractAssets').mockResolvedValue(files as any);
     const deduped = await service.checkDuplicateMessage([
       { message: { data: null }, messageHash: 'h0' },
-      { message: { data: { buffer: new Uint8Array([1]) } }, messageHash: 'h1' },
+      { message: { data: zipBytes }, messageHash: 'h1' },
     ] as any);
     expect(deduped.length).toBe(1);
   });
@@ -508,12 +498,12 @@ describe('RelayService', () => {
       siweClient: { authenticate: vi.fn() } as any,
       storage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
     });
-    vi.spyOn(service as any, 'extractAssets').mockResolvedValue([]);
+    const zipBytes = await new JSZip()
+      .file('package.json', '{}')
+      .generateAsync({ type: 'uint8array' });
 
     await expect(
-      service.checkDuplicateMessage([
-        { message: { data: { buffer: new Uint8Array([1]) } }, messageHash: 'h1' },
-      ] as any)
+      service.checkDuplicateMessage([{ message: { data: zipBytes }, messageHash: 'h1' }] as any)
     ).rejects.toThrow('Invalid package: missing chain.json');
   });
 });

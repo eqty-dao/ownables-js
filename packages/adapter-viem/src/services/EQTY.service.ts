@@ -1,4 +1,12 @@
-import { AnchorClient, Binary, Event, Message, ViemContract, ViemSigner } from 'eqty-core';
+import {
+  AnchorClient,
+  Binary,
+  Event,
+  type EventChain,
+  Message,
+  ViemContract,
+  ViemSigner,
+} from 'eqty-core';
 import type { Chain, PublicClient, WalletClient } from 'viem';
 import {
   createPublicClient,
@@ -15,6 +23,7 @@ import type {
   AnchorValidationPair,
   AnchorValidationRecord,
   AnchorValidationResult,
+  IndexedPublicEvent,
 } from '@ownables/core';
 import type {
   AnchorClientLike,
@@ -524,6 +533,161 @@ export default class EQTYService {
     }
 
     return buildAnchorValidationResult(anchorPairs, records);
+  }
+
+  async validateOwnableAnchors(chain: EventChain): Promise<AnchorValidationResult> {
+    if (chain.networkId !== this.chainId) {
+      throw new Error('Ownable anchor evidence requested on a different network');
+    }
+    const pairs = normalizeAnchorValidationPairs(...chain.anchorMap);
+    if (!pairs.length) return buildAnchorValidationResult(pairs, []);
+
+    const head = await this.publicClient.getBlockNumber();
+    const anchoredEvent = parseAbiItem(
+      'event Anchored(bytes32 indexed key, bytes32 value, address indexed sender, uint64 timestamp)'
+    );
+    const records: Array<AnchorValidationRecord | undefined> = [];
+    for (const { key, value, signer } of chain.anchorMap) {
+      const expectedKey = key.hex.toLowerCase();
+      const expectedValue = value.hex.toLowerCase();
+      const sender = getAddress(signer.toLowerCase());
+      const query = async (fromBlock: bigint, toBlock: bigint) =>
+        this.publicClient.getLogs({
+          address: this.anchorContractAddress,
+          event: anchoredEvent,
+          args: { key: expectedKey as `0x${string}`, sender },
+          strict: true,
+          fromBlock,
+          toBlock,
+        });
+      const recentStart = head > 9_999n ? head - 9_999n : 0n;
+      let logs = await query(recentStart, head);
+      if (!logs.length && recentStart > 0n) {
+        // Filter by both indexed topics across history, rather than trusting a stale receipt.
+        logs = await query(0n, recentStart - 1n);
+      }
+
+      let latest: AnchorValidationRecord | undefined;
+      for (const log of logs) {
+        if (
+          log.removed ||
+          !log.transactionHash ||
+          log.blockNumber == null ||
+          log.transactionIndex == null ||
+          log.logIndex == null ||
+          log.args.key?.toLowerCase() !== expectedKey ||
+          log.args.sender?.toLowerCase() !== sender.toLowerCase() ||
+          typeof log.args.value !== 'string' ||
+          !/^0x[0-9a-f]{64}$/i.test(log.args.value)
+        ) {
+          throw new Error(`Malformed authoritative anchor log for ${expectedKey}`);
+        }
+        const blockNumber = Number(log.blockNumber);
+        if (!Number.isSafeInteger(blockNumber)) throw new Error('Invalid anchor block number');
+        const position = [blockNumber, log.transactionIndex, log.logIndex] as const;
+        if (
+          latest &&
+          (position[0] < latest.blockNumber! ||
+            (position[0] === latest.blockNumber! && position[1] < latest.transactionIndex!) ||
+            (position[0] === latest.blockNumber! &&
+              position[1] === latest.transactionIndex! &&
+              position[2] <= latest.logIndex!))
+        ) {
+          continue;
+        }
+        const actualValue = log.args.value.toLowerCase();
+        latest = {
+          key: key.hex,
+          expectedValue,
+          value: actualValue,
+          transactionHash: log.transactionHash,
+          timestamp: Number(log.args.timestamp),
+          blockNumber,
+          transactionIndex: log.transactionIndex,
+          logIndex: log.logIndex,
+          verified: actualValue === expectedValue,
+          source: 'provider',
+        };
+      }
+      records.push(latest);
+    }
+    return buildAnchorValidationResult(pairs, records);
+  }
+
+  async getOwnablePublicEvents(
+    chain: EventChain,
+    anchors: AnchorValidationResult
+  ): Promise<IndexedPublicEvent[]> {
+    if (chain.networkId !== this.chainId) {
+      throw new Error('Ownable public evidence requested on a different network');
+    }
+    // The verifier will return pending until it has complete private anchor evidence.
+    if (!anchors.verified) return [];
+
+    const subjectId = Binary.fromHex(chain.id).hash().hex as `0x${string}`;
+    const blocks = chain.anchorMap.map(({ key }) => anchors.details[key.hex]?.blockNumber);
+    if (!blocks.length || blocks.some((block) => !Number.isSafeInteger(block) || block! < 0)) {
+      throw new Error('Missing block position for public event proof');
+    }
+    const lower = Math.min(...(blocks as number[]));
+    const upper = Math.max(...(blocks as number[]));
+    let firstBlock = lower;
+    for (const event of chain.events) {
+      const message = event.parsedData;
+      if (message['@context'] !== 'register_msg.json') continue;
+      if (
+        !Number.isSafeInteger(message.blockNumber) ||
+        message.blockNumber < 0 ||
+        message.blockNumber > upper
+      ) {
+        throw new Error('Signed register event has an invalid block position');
+      }
+      firstBlock = Math.min(firstBlock, message.blockNumber);
+    }
+
+    const events: IndexedPublicEvent[] = [];
+    const toBlock = BigInt(upper);
+    for (let cursor = BigInt(firstBlock); cursor <= toBlock; ) {
+      const window = cursor + 9_999n;
+      const endBlock = window < toBlock ? window : toBlock;
+      const logs = await this.publicClient.getLogs({
+        address: this.anchorContractAddress,
+        event: PUBLIC_EVENT_ABI,
+        args: { subjectId },
+        strict: true,
+        fromBlock: cursor,
+        toBlock: endBlock,
+      });
+      for (const log of logs) {
+        if (
+          log.removed ||
+          !log.transactionHash ||
+          log.blockNumber == null ||
+          log.blockNumber < cursor ||
+          log.blockNumber > endBlock ||
+          log.transactionIndex == null ||
+          log.logIndex == null ||
+          log.args.subjectId?.toLowerCase() !== subjectId.toLowerCase() ||
+          !log.args.source ||
+          !log.args.eventType ||
+          log.args.data === undefined
+        ) {
+          throw new Error(`Malformed authoritative public event for Ownable ${chain.id}`);
+        }
+        events.push({
+          source: log.args.source,
+          eventType: log.args.eventType,
+          data: log.args.data,
+          blockNumber: Number(log.blockNumber),
+          transactionHash: log.transactionHash.toLowerCase(),
+          transactionIndex: log.transactionIndex,
+          logIndex: log.logIndex,
+          timestamp: Number(log.args.timestamp),
+        });
+      }
+      cursor = endBlock + 1n;
+    }
+    return events;
   }
 
   async verifyAnchors(...anchors: any[]): Promise<AnchorValidationResult> {

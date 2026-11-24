@@ -13,6 +13,8 @@ describe('calculateOwnablePackageCid', () => {
       { path: './nested\\b.txt', content: Uint8Array.from([2]) },
       { path: '/a.txt', content: Uint8Array.from([1]) },
       { path: './chain.json', content: Uint8Array.from([3]) },
+      { path: 'eventChain.json', content: Uint8Array.from([3]) },
+      { path: './attachments\\proof-cid', content: Uint8Array.from([5]) },
     ];
 
     await expect(calculateOwnablePackageCid(alternate)).resolves.toBe(

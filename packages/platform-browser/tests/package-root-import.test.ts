@@ -8,6 +8,7 @@ import packageJson from '../package.json';
 import type {
   HubAvailableUploadResult,
   HubPendingUploadResult,
+  HubNetwork,
   HubUploadResult,
 } from '@ownables/platform-browser';
 
@@ -20,6 +21,7 @@ type _UploadIncludesBothVariants = Assert<
   IsAssignable<HubAvailableUploadResult, HubUploadResult> &
     IsAssignable<HubPendingUploadResult, HubUploadResult>
 >;
+type _HubNetworkIncludesBase = Assert<IsAssignable<'base', HubNetwork>>;
 
 const execFileAsync = promisify(execFile);
 const REPO_ROOT = fileURLToPath(new URL('../../..', import.meta.url));
@@ -41,6 +43,7 @@ describe('@ownables/platform-browser package root', () => {
     expect(builtModule.PackageService).toBeTypeOf('function');
     expect(builtModule.IDBService).toBeTypeOf('function');
     expect(builtModule.HubService).toBeTypeOf('function');
+    expect(builtModule.hubNetworkFromChainId).toBeTypeOf('function');
     expect(builtModule.BrowserRuntimeSourceProvider).toBeTypeOf('function');
     expect(builtModule.BrowserRuntimeRpcProvider).toBeTypeOf('function');
     expect(builtModule.calculateCid).toBeUndefined();

@@ -1,3 +1,15 @@
+# [0.16.0](https://github.com/eqty-dao/ownables-js/compare/v0.15.0...v0.16.0) (2026-11-25)
+
+
+### Bug Fixes
+
+* **platform-browser:** reject unsupported hub networks ([cdf91d3](https://github.com/eqty-dao/ownables-js/commit/cdf91d3829e279c3e2fac8b7e95f8e74baf92eaf))
+
+
+### Features
+
+* **platform-browser:** scope hub routes to base network ([8164bd4](https://github.com/eqty-dao/ownables-js/commit/8164bd4e7e4fa97f9b12b51be900e067e7fbf794))
+
 # [0.15.0](https://github.com/eqty-dao/ownables-js/compare/v0.14.4...v0.15.0) (2026-11-24)
 
 

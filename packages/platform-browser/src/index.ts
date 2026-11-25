@@ -2,10 +2,7 @@ export { default as IDBService } from './services/IDB.service.js';
 export { default as LocalStorageService } from './services/LocalStorage.service.js';
 export { default as PackageService } from './services/Package.service.js';
 export { AVAILABLE_OWNABLES_UNAVAILABLE_MESSAGE } from './constants/hub.js';
-export {
-  default as HubService,
-  hubNetworkFromChainId,
-} from './services/Hub.service.js';
+export { default as HubService, hubNetworkFromChainId } from './services/Hub.service.js';
 export type {
   HubAvailableUploadResult,
   HubPendingUploadResult,

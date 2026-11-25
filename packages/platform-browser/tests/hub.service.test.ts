@@ -57,9 +57,26 @@ describe('HubService', () => {
       )
     ).toBe('https://hub.example/base/ownables/ownable-1/bundle');
 
-    for (const chainId of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, '084532', 'eip155:84532']) {
+    for (const chainId of [
+      0,
+      -1,
+      1.5,
+      Number.MAX_SAFE_INTEGER + 1,
+      '084532',
+      'eip155:84532',
+    ]) {
       expect(() => hubNetworkFromChainId(chainId)).toThrow();
     }
+  });
+
+  it('rejects an unsupported runtime network before creating requests', () => {
+    const fetchFn = vi.fn();
+    const unsupportedNetwork = 'other' as unknown as HubNetwork;
+
+    expect(
+      () => new HubService('https://hub.example', unsupportedNetwork, fetchFn)
+    ).toThrow('Unsupported Hub network: other');
+    expect(fetchFn).not.toHaveBeenCalled();
   });
 
   it('uses the network inbox route without an owner query parameter', async () => {

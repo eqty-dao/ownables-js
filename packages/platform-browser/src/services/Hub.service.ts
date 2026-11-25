@@ -67,9 +67,11 @@ export function hubNetworkFromChainId(chainId: number | string): HubNetwork {
 }
 
 export default class HubService {
+  private readonly network: HubNetwork;
+
   constructor(
     private readonly url: string,
-    private readonly network: HubNetwork,
+    network: HubNetwork,
     private readonly fetchFn: (input: string, init?: RequestInit) => Promise<Response> = (
       input,
       init
@@ -83,7 +85,9 @@ export default class HubService {
       }
       return new EventSourceCtor(url);
     }
-  ) {}
+  ) {
+    this.network = normalizeHubNetwork(network);
+  }
 
   get isConfigured(): boolean {
     return this.url.trim().length > 0;
@@ -353,6 +357,14 @@ function normalizeChainId(chainId: number | string): number {
   }
 
   return normalizedChainId;
+}
+
+function normalizeHubNetwork(network: HubNetwork): HubNetwork {
+  if (network === 'base' || network === 'base-sepolia') {
+    return network;
+  }
+
+  throw new Error(`Unsupported Hub network: ${String(network)}`);
 }
 
 function validateInboxAddress(address: string): void {

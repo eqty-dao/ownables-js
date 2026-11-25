@@ -57,14 +57,7 @@ describe('HubService', () => {
       )
     ).toBe('https://hub.example/base/ownables/ownable-1/bundle');
 
-    for (const chainId of [
-      0,
-      -1,
-      1.5,
-      Number.MAX_SAFE_INTEGER + 1,
-      '084532',
-      'eip155:84532',
-    ]) {
+    for (const chainId of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, '084532', 'eip155:84532']) {
       expect(() => hubNetworkFromChainId(chainId)).toThrow();
     }
   });
@@ -73,9 +66,9 @@ describe('HubService', () => {
     const fetchFn = vi.fn();
     const unsupportedNetwork = 'other' as unknown as HubNetwork;
 
-    expect(
-      () => new HubService('https://hub.example', unsupportedNetwork, fetchFn)
-    ).toThrow('Unsupported Hub network: other');
+    expect(() => new HubService('https://hub.example', unsupportedNetwork, fetchFn)).toThrow(
+      'Unsupported Hub network: other'
+    );
     expect(fetchFn).not.toHaveBeenCalled();
   });
 
@@ -125,9 +118,7 @@ describe('HubService', () => {
     expect(() => hub.parseHubDownloadUrl(hub.getOwnableBundleUrl('ownable-1'))).not.toThrow();
     expect(() =>
       hub.parseHubDownloadUrl('https://evil.example/base-sepolia/ownables/bafy/download')
-    ).toThrow(
-      'Hub download URL must use the configured Hub origin'
-    );
+    ).toThrow('Hub download URL must use the configured Hub origin');
     expect(() =>
       hub.parseHubDownloadUrl('https://hub.example/base/ownables/ownable-1/bundle')
     ).toThrow('Hub download URL must use the configured Hub network');

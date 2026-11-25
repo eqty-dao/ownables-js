@@ -55,9 +55,23 @@ export interface HubAvailableOwnablesStreamHandlers {
 
 import { AVAILABLE_OWNABLES_UNAVAILABLE_MESSAGE } from '../constants/hub.js';
 
+export type HubNetwork = 'base' | 'base-sepolia';
+
+export function hubNetworkFromChainId(chainId: number | string): HubNetwork {
+  const normalizedChainId = normalizeChainId(chainId);
+
+  if (normalizedChainId === 8453) return 'base';
+  if (normalizedChainId === 84532) return 'base-sepolia';
+
+  throw new Error(`Unsupported Hub chain ID: ${normalizedChainId}`);
+}
+
 export default class HubService {
+  private readonly network: HubNetwork;
+
   constructor(
-    private readonly url: string = '',
+    private readonly url: string,
+    network: HubNetwork,
     private readonly fetchFn: (input: string, init?: RequestInit) => Promise<Response> = (
       input,
       init
@@ -71,7 +85,9 @@ export default class HubService {
       }
       return new EventSourceCtor(url);
     }
-  ) {}
+  ) {
+    this.network = normalizeHubNetwork(network);
+  }
 
   get isConfigured(): boolean {
     return this.url.trim().length > 0;
@@ -93,6 +109,10 @@ export default class HubService {
     return `${this.url.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
   }
 
+  private networkEndpoint(path: string): string {
+    return this.endpoint(`/${this.network}/${path.replace(/^\//, '')}`);
+  }
+
   parseHubDownloadUrl(url: string): URL {
     let parsed: URL;
 
@@ -106,11 +126,21 @@ export default class HubService {
       throw new Error('Hub download URL must use the configured Hub origin');
     }
 
+    const pathSegments = parsed.pathname.split('/').filter(Boolean);
+    const [network, resource] = pathSegments;
+    if (
+      (network === 'base' || network === 'base-sepolia') &&
+      network !== this.network &&
+      resource === 'ownables'
+    ) {
+      throw new Error('Hub download URL must use the configured Hub network');
+    }
+
     return parsed;
   }
 
   getOwnableBundleUrl(id: string): string {
-    return this.endpoint(`/ownables/${encodeURIComponent(id)}/bundle`);
+    return this.networkEndpoint(`/ownables/${encodeURIComponent(id)}/bundle`);
   }
 
   async isAvailable(): Promise<boolean> {
@@ -139,7 +169,7 @@ export default class HubService {
       const fileContent = new Uint8Array(content.buffer, content.byteOffset, content.byteLength);
       form.append('file', new File([fileContent], filename, { type: 'application/zip' }));
 
-      const response = await this.fetchFn(this.endpoint('/ownables'), {
+      const response = await this.fetchFn(this.networkEndpoint('/ownables'), {
         method: 'POST',
         body: form,
       });
@@ -203,7 +233,7 @@ export default class HubService {
 
   async loadOwnablePublicEvents(ownableId: string): Promise<IndexedPublicEventsSnapshot> {
     const response = await this.fetchFn(
-      this.endpoint(`/ownables/${encodeURIComponent(ownableId)}/public-events`)
+      this.networkEndpoint(`/ownables/${encodeURIComponent(ownableId)}/public-events`)
     );
 
     if (!response.ok) {
@@ -231,7 +261,9 @@ export default class HubService {
       query.set('fromBlock', String(options.fromBlock));
     }
 
-    const stream = this.eventSourceFactory(this.endpoint(`/public-events?${query.toString()}`));
+    const stream = this.eventSourceFactory(
+      this.networkEndpoint(`/streams/public-events?${query.toString()}`)
+    );
     const listener = (event: { data?: string }) => {
       handlers.onEvent(parseJsonMessage<IndexedPublicEventsStreamEvent>(event.data));
     };
@@ -248,11 +280,12 @@ export default class HubService {
   }
 
   watchAvailableOwnables(
-    ownerAccount: string,
+    address: string,
     handlers: HubAvailableOwnablesStreamHandlers
   ): IndexedPublicEventsStreamSubscription {
+    validateInboxAddress(address);
     const stream = this.eventSourceFactory(
-      this.endpoint(`/accounts/${encodeURIComponent(ownerAccount)}/available-ownables/events`)
+      this.networkEndpoint(`/streams/inbox/${encodeURIComponent(address)}`)
     );
     const listener = (event: { data?: string }) => {
       handlers.onEvent(
@@ -271,10 +304,12 @@ export default class HubService {
     };
   }
 
-  async listAvailableOwnables(ownerAccount: string): Promise<HubAvailableOwnablesResponse> {
+  async listAvailableOwnables(address: string): Promise<HubAvailableOwnablesResponse> {
+    validateInboxAddress(address);
+
     try {
       const response = await this.fetchFn(
-        this.endpoint(`/accounts/${encodeURIComponent(ownerAccount)}/available-ownables`)
+        this.networkEndpoint(`/inbox/${encodeURIComponent(address)}`)
       );
 
       if (response.status === 404 || response.status === 501) {
@@ -301,6 +336,40 @@ export default class HubService {
 
       throw new Error(AVAILABLE_OWNABLES_UNAVAILABLE_MESSAGE);
     }
+  }
+}
+
+function normalizeChainId(chainId: number | string): number {
+  if (typeof chainId === 'number') {
+    if (!Number.isSafeInteger(chainId) || chainId <= 0) {
+      throw new Error('Hub chain ID must be a positive safe integer');
+    }
+    return chainId;
+  }
+
+  if (!/^[1-9]\d*$/.test(chainId)) {
+    throw new Error('Hub chain ID must be a positive decimal value');
+  }
+
+  const normalizedChainId = Number(chainId);
+  if (!Number.isSafeInteger(normalizedChainId)) {
+    throw new Error('Hub chain ID must be a positive safe integer');
+  }
+
+  return normalizedChainId;
+}
+
+function normalizeHubNetwork(network: HubNetwork): HubNetwork {
+  if (network === 'base' || network === 'base-sepolia') {
+    return network;
+  }
+
+  throw new Error(`Unsupported Hub network: ${String(network)}`);
+}
+
+function validateInboxAddress(address: string): void {
+  if (!/^0x[0-9a-f]{40}$/i.test(address)) {
+    throw new Error('Inbox address must be a valid EVM address');
   }
 }
 

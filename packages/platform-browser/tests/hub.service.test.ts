@@ -3,7 +3,9 @@ import JSZip from 'jszip';
 
 import HubService, {
   AVAILABLE_OWNABLES_UNAVAILABLE_MESSAGE,
+  hubNetworkFromChainId,
   type HubEventSourceLike,
+  type HubNetwork,
 } from '../src/services/Hub.service';
 import type {
   HubAvailableUploadResult,
@@ -12,7 +14,9 @@ import type {
 } from '../src/index';
 
 describe('HubService', () => {
-  const ACCOUNT = 'eip155:84532:0xabc';
+  const NETWORK: HubNetwork = 'base-sepolia';
+  const ADDRESS = '0xAbCdEf0123456789aBcDeF0123456789AbCdEf01';
+  const ACCOUNT = `eip155:84532:${ADDRESS.toLowerCase()}`;
   const createEventSource = (url: string) => {
     const listeners = new Map<string, Array<(event: { data?: string }) => void>>();
     const stream: HubEventSourceLike & {
@@ -44,19 +48,43 @@ describe('HubService', () => {
     return stream;
   };
 
-  it('uses the account-scoped discovery route without an owner query parameter', async () => {
+  it('maps only supported Base chain IDs to Hub networks', () => {
+    expect(hubNetworkFromChainId(8453)).toBe('base');
+    expect(hubNetworkFromChainId('84532')).toBe('base-sepolia');
+    expect(
+      new HubService('https://hub.example', hubNetworkFromChainId(8453)).getOwnableBundleUrl(
+        'ownable-1'
+      )
+    ).toBe('https://hub.example/base/ownables/ownable-1/bundle');
+
+    for (const chainId of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, '084532', 'eip155:84532']) {
+      expect(() => hubNetworkFromChainId(chainId)).toThrow();
+    }
+  });
+
+  it('rejects an unsupported runtime network before creating requests', () => {
+    const fetchFn = vi.fn();
+    const unsupportedNetwork = 'other' as unknown as HubNetwork;
+
+    expect(() => new HubService('https://hub.example', unsupportedNetwork, fetchFn)).toThrow(
+      'Unsupported Hub network: other'
+    );
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('uses the network inbox route without an owner query parameter', async () => {
     const fetchFn = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ owner: ACCOUNT, entries: [] }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       })
     );
-    const hub = new HubService('https://hub.example', fetchFn);
+    const hub = new HubService('https://hub.example', NETWORK, fetchFn);
 
-    await hub.listAvailableOwnables(ACCOUNT);
+    await hub.listAvailableOwnables(ADDRESS);
 
     expect(fetchFn).toHaveBeenCalledWith(
-      `https://hub.example/accounts/${encodeURIComponent(ACCOUNT)}/available-ownables`
+      `https://hub.example/base-sepolia/inbox/${encodeURIComponent(ADDRESS)}`
     );
   });
 
@@ -73,22 +101,27 @@ describe('HubService', () => {
         }
       )
     );
-    const hub = new HubService('https://hub.example', fetchFn);
+    const hub = new HubService('https://hub.example', NETWORK, fetchFn);
 
     await expect(hub.loadOwnablePublicEvents('ownable-1')).resolves.toEqual({
       ownableId: 'ownable-1',
       publicEvents: [{ transactionHash: '0x1', logIndex: 0 }],
     });
-    expect(fetchFn).toHaveBeenCalledWith('https://hub.example/ownables/ownable-1/public-events');
+    expect(fetchFn).toHaveBeenCalledWith(
+      'https://hub.example/base-sepolia/ownables/ownable-1/public-events'
+    );
   });
 
   it('guards Hub imports to the configured origin', () => {
-    const hub = new HubService('https://hub.example');
+    const hub = new HubService('https://hub.example', NETWORK);
 
     expect(() => hub.parseHubDownloadUrl(hub.getOwnableBundleUrl('ownable-1'))).not.toThrow();
-    expect(() => hub.parseHubDownloadUrl('https://evil.example/ownables/bafy/download')).toThrow(
-      'Hub download URL must use the configured Hub origin'
-    );
+    expect(() =>
+      hub.parseHubDownloadUrl('https://evil.example/base-sepolia/ownables/bafy/download')
+    ).toThrow('Hub download URL must use the configured Hub origin');
+    expect(() =>
+      hub.parseHubDownloadUrl('https://hub.example/base/ownables/ownable-1/bundle')
+    ).toThrow('Hub download URL must use the configured Hub network');
     expect(() => hub.parseHubDownloadUrl('not-a-url')).toThrow('Hub download URL is malformed');
   });
 
@@ -96,9 +129,9 @@ describe('HubService', () => {
     const fetchFn = vi
       .fn()
       .mockResolvedValue(new Response(null, { status: 404, statusText: 'Not Found' }));
-    const hub = new HubService('https://hub.example', fetchFn);
+    const hub = new HubService('https://hub.example', NETWORK, fetchFn);
 
-    await expect(hub.listAvailableOwnables(ACCOUNT)).rejects.toThrow(
+    await expect(hub.listAvailableOwnables(ADDRESS)).rejects.toThrow(
       AVAILABLE_OWNABLES_UNAVAILABLE_MESSAGE
     );
   });
@@ -109,7 +142,7 @@ describe('HubService', () => {
       .mockResolvedValueOnce(new Response(null, { status: 200 }))
       .mockRejectedValueOnce(new Error('offline'));
 
-    const hub = new HubService('https://hub.example', fetchFn);
+    const hub = new HubService('https://hub.example', NETWORK, fetchFn);
 
     await expect(hub.isAvailable()).resolves.toBe(true);
     await expect(hub.isAvailable()).resolves.toBe(false);
@@ -132,12 +165,12 @@ describe('HubService', () => {
         }
       )
     );
-    const hub = new HubService('https://hub.example', fetchFn);
+    const hub = new HubService('https://hub.example', NETWORK, fetchFn);
 
     const result = await hub.uploadOwnable(new Uint8Array([1, 2, 3]), 'dossier.zip');
 
     expect(fetchFn).toHaveBeenCalledTimes(1);
-    expect(fetchFn.mock.calls[0]?.[0]).toBe('https://hub.example/ownables');
+    expect(fetchFn.mock.calls[0]?.[0]).toBe('https://hub.example/base-sepolia/ownables');
     expect(fetchFn.mock.calls[0]?.[1]?.method).toBe('POST');
     expect(fetchFn.mock.calls[0]?.[1]?.body).toBeInstanceOf(FormData);
 
@@ -176,7 +209,7 @@ describe('HubService', () => {
         }
       )
     );
-    const hub = new HubService('https://hub.example', fetchFn);
+    const hub = new HubService('https://hub.example', NETWORK, fetchFn);
     const content = new Uint8Array([99, 1, 2, 3, 88]).subarray(1, 4);
 
     await hub.uploadOwnable(content);
@@ -190,7 +223,7 @@ describe('HubService', () => {
     if (typeof SharedArrayBuffer === 'undefined') return;
 
     const fetchFn = vi.fn();
-    const hub = new HubService('https://hub.example', fetchFn);
+    const hub = new HubService('https://hub.example', NETWORK, fetchFn);
     const content = new Uint8Array(new SharedArrayBuffer(3));
 
     await expect(hub.uploadOwnable(content)).rejects.toThrow(
@@ -214,7 +247,7 @@ describe('HubService', () => {
         }
       )
     );
-    const hub = new HubService('https://hub.example', fetchFn);
+    const hub = new HubService('https://hub.example', NETWORK, fetchFn);
 
     const result = await hub.uploadOwnable(new Uint8Array([1, 2, 3]));
 
@@ -242,7 +275,7 @@ describe('HubService', () => {
         }
       )
     );
-    const hub = new HubService('https://hub.example', fetchFn);
+    const hub = new HubService('https://hub.example', NETWORK, fetchFn);
 
     const result: HubUploadResult = await hub.uploadOwnable(new Uint8Array([1, 2, 3]));
 
@@ -261,7 +294,7 @@ describe('HubService', () => {
         headers: { 'content-type': 'application/json' },
       })
     );
-    const hub = new HubService('https://hub.example', fetchFn);
+    const hub = new HubService('https://hub.example', NETWORK, fetchFn);
 
     await expect(hub.uploadOwnable(new Uint8Array([1, 2, 3]))).rejects.toThrow(
       'Hub upload failed: Upload rejected'
@@ -275,11 +308,13 @@ describe('HubService', () => {
         headers: { 'content-type': 'application/zip' },
       })
     );
-    const hub = new HubService('https://hub.example', fetchFn);
+    const hub = new HubService('https://hub.example', NETWORK, fetchFn);
 
     const result = await hub.downloadOwnable('ownable-download');
 
-    expect(fetchFn).toHaveBeenCalledWith('https://hub.example/ownables/ownable-download/bundle');
+    expect(fetchFn).toHaveBeenCalledWith(
+      'https://hub.example/base-sepolia/ownables/ownable-download/bundle'
+    );
     expect(result.name).toBe('bundle.zip');
     expect(result.type).toBe('application/zip');
   });
@@ -295,7 +330,7 @@ describe('HubService', () => {
         headers: { 'content-type': 'application/zip' },
       })
     );
-    const hub = new HubService('https://hub.example', fetchFn);
+    const hub = new HubService('https://hub.example', NETWORK, fetchFn);
 
     await expect(hub.importFromHub('bafy-1', 'ownable-1')).rejects.toThrow(
       'Hub bundle did not include chain.json'
@@ -318,18 +353,21 @@ describe('HubService', () => {
         headers: { 'content-type': 'application/zip' },
       })
     );
-    const hub = new HubService('https://hub.example', fetchFn);
+    const hub = new HubService('https://hub.example', NETWORK, fetchFn);
 
     const result = await hub.importFromHub('bafy-1', 'ownable-1');
 
-    expect(fetchFn).toHaveBeenNthCalledWith(1, 'https://hub.example/ownables/ownable-1/bundle');
+    expect(fetchFn).toHaveBeenNthCalledWith(
+      1,
+      'https://hub.example/base-sepolia/ownables/ownable-1/bundle'
+    );
     expect(result.packageFile.name).toBe('bafy-1.zip');
     expect(result.chainJson).toEqual({ id: 'ownable-1' });
   });
 
   it('opens a public-events stream with repeated ownableId params and fromBlock', () => {
     const streams: ReturnType<typeof createEventSource>[] = [];
-    const hub = new HubService('https://hub.example', vi.fn(), (url) => {
+    const hub = new HubService('https://hub.example', NETWORK, vi.fn(), (url) => {
       const stream = createEventSource(url);
       streams.push(stream);
       return stream;
@@ -344,7 +382,7 @@ describe('HubService', () => {
     );
 
     expect(streams[0]?.url).toBe(
-      'https://hub.example/public-events?ownableId=ownable-1&ownableId=ownable-2&fromBlock=11'
+      'https://hub.example/base-sepolia/streams/public-events?ownableId=ownable-1&ownableId=ownable-2&fromBlock=11'
     );
 
     streams[0]?.emit('public-event', {
@@ -364,7 +402,7 @@ describe('HubService', () => {
 
   it('rejects an unfiltered public-events stream before creating an EventSource', () => {
     const eventSourceFactory = vi.fn((url: string) => createEventSource(url));
-    const hub = new HubService('https://hub.example', vi.fn(), eventSourceFactory);
+    const hub = new HubService('https://hub.example', NETWORK, vi.fn(), eventSourceFactory);
 
     expect(() => hub.watchOwnablePublicEvents([], { onEvent: vi.fn() })).toThrow(
       'At least one ownable ID is required to watch public events'
@@ -374,7 +412,7 @@ describe('HubService', () => {
 
   it('keeps account discovery streaming separate from indexed public-events transport', () => {
     const streams: ReturnType<typeof createEventSource>[] = [];
-    const hub = new HubService('https://hub.example', vi.fn(), (url) => {
+    const hub = new HubService('https://hub.example', NETWORK, vi.fn(), (url) => {
       const stream = createEventSource(url);
       streams.push(stream);
       return stream;
@@ -382,13 +420,13 @@ describe('HubService', () => {
     const onDiscovery = vi.fn();
     const onError = vi.fn();
 
-    const subscription = hub.watchAvailableOwnables(ACCOUNT, {
+    const subscription = hub.watchAvailableOwnables(ADDRESS, {
       onEvent: onDiscovery,
       onError,
     });
 
     expect(streams[0]?.url).toBe(
-      'https://hub.example/accounts/eip155%3A84532%3A0xabc/available-ownables/events'
+      `https://hub.example/base-sepolia/streams/inbox/${encodeURIComponent(ADDRESS)}`
     );
 
     streams[0]?.emit('available-ownable', {
@@ -414,6 +452,21 @@ describe('HubService', () => {
     });
     expect(onError).toHaveBeenCalledWith(expect.any(Error));
     expect(streams[0]?.closed).toBe(true);
+  });
+
+  it('rejects non-address inbox inputs before network I/O', async () => {
+    const fetchFn = vi.fn();
+    const eventSourceFactory = vi.fn((url: string) => createEventSource(url));
+    const hub = new HubService('https://hub.example', NETWORK, fetchFn, eventSourceFactory);
+
+    await expect(hub.listAvailableOwnables(ACCOUNT)).rejects.toThrow(
+      'Inbox address must be a valid EVM address'
+    );
+    expect(() => hub.watchAvailableOwnables(ACCOUNT, { onEvent: vi.fn() })).toThrow(
+      'Inbox address must be a valid EVM address'
+    );
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(eventSourceFactory).not.toHaveBeenCalled();
   });
 });
 

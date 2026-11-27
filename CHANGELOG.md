@@ -1,3 +1,10 @@
+# [0.17.0](https://github.com/eqty-dao/ownables-js/compare/v0.16.0...v0.17.0) (2026-11-27)
+
+
+### Features
+
+* **platform-browser:** retrieve scoped Hub anchor evidence ([0c7e7c4](https://github.com/eqty-dao/ownables-js/commit/0c7e7c478b97bd355ff49df3bbb87949fa22db16))
+
 # [0.16.0](https://github.com/eqty-dao/ownables-js/compare/v0.15.0...v0.16.0) (2026-11-25)
 
 

@@ -41,6 +41,33 @@ export interface HubAvailableOwnablesResponse {
   entries: HubAvailableOwnableEntry[];
 }
 
+export interface HubAnchorPair {
+  key: string;
+  signer: string;
+}
+
+export interface HubAnchorRecord extends HubAnchorPair {
+  value: string;
+  transactionHash: string;
+  blockNumber: number;
+  transactionIndex: number;
+  logIndex: number;
+}
+
+export interface HubAnchorEvidence {
+  chainId: number;
+  anchorContractAddress: string;
+  records: HubAnchorRecord[];
+}
+
+const MAX_ANCHOR_PAIRS = 100;
+const anchorHash = /^0x[0-9a-f]{64}$/i;
+const anchorAddress = /^0x[0-9a-f]{40}$/i;
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
 export interface HubEventSourceLike {
   addEventListener(type: string, listener: (event: { data?: string }) => void): void;
   removeEventListener(type: string, listener: (event: { data?: string }) => void): void;
@@ -141,6 +168,80 @@ export default class HubService {
 
   getOwnableBundleUrl(id: string): string {
     return this.networkEndpoint(`/ownables/${encodeURIComponent(id)}/bundle`);
+  }
+
+  async loadAnchorEvidence(
+    anchors: readonly HubAnchorPair[],
+    signal?: AbortSignal
+  ): Promise<HubAnchorEvidence> {
+    if (anchors.length === 0) throw new Error('At least one anchor is required');
+    const pairs = new Map<string, HubAnchorPair>();
+    for (const anchor of anchors) {
+      if (!anchorHash.test(anchor.key) || !anchorAddress.test(anchor.signer)) {
+        throw new Error('Invalid anchor key or signer');
+      }
+      const key = anchor.key.toLowerCase();
+      const signer = anchor.signer.toLowerCase();
+      pairs.set(`${key}:${signer}`, { key, signer });
+    }
+
+    const requested = [...pairs.values()];
+    const chainId = this.network === 'base' ? 8453 : 84532;
+    const records: HubAnchorRecord[] = [];
+    let anchorContractAddress = '';
+    for (let offset = 0; offset < requested.length; offset += MAX_ANCHOR_PAIRS) {
+      const anchors = requested.slice(offset, offset + MAX_ANCHOR_PAIRS);
+      const response = await this.fetchFn(this.networkEndpoint('/anchors/evidence'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ anchors }),
+        signal: signal ?? null,
+      });
+      if (!response.ok) throw new Error(`Hub anchor evidence returned HTTP ${response.status}`);
+
+      const evidence = (await response.json()) as Partial<HubAnchorEvidence> | null;
+      if (
+        evidence?.chainId !== chainId ||
+        typeof evidence.anchorContractAddress !== 'string' ||
+        !anchorAddress.test(evidence.anchorContractAddress) ||
+        !Array.isArray(evidence.records)
+      )
+        throw new Error('Invalid Hub anchor evidence network or contract');
+      const contract = evidence.anchorContractAddress.toLowerCase();
+      if (anchorContractAddress && anchorContractAddress !== contract) {
+        throw new Error('Hub anchor contract changed during verification');
+      }
+      anchorContractAddress = contract;
+
+      const pending = new Set(anchors.map(({ key, signer }) => `${key}:${signer}`));
+      for (const row of evidence.records) {
+        if (
+          typeof row?.key !== 'string' ||
+          !anchorHash.test(row.key) ||
+          typeof row.signer !== 'string' ||
+          !anchorAddress.test(row.signer) ||
+          typeof row.value !== 'string' ||
+          !anchorHash.test(row.value) ||
+          typeof row.transactionHash !== 'string' ||
+          !anchorHash.test(row.transactionHash) ||
+          !isNonNegativeInteger(row.blockNumber) ||
+          !isNonNegativeInteger(row.transactionIndex) ||
+          !isNonNegativeInteger(row.logIndex) ||
+          !pending.delete(`${row.key.toLowerCase()}:${row.signer.toLowerCase()}`)
+        )
+          throw new Error('Invalid or unexpected Hub anchor record');
+        records.push({
+          key: row.key.toLowerCase(),
+          signer: row.signer.toLowerCase(),
+          value: row.value.toLowerCase(),
+          transactionHash: row.transactionHash,
+          blockNumber: row.blockNumber,
+          transactionIndex: row.transactionIndex,
+          logIndex: row.logIndex,
+        });
+      }
+    }
+    return { chainId, anchorContractAddress, records };
   }
 
   async isAvailable(): Promise<boolean> {

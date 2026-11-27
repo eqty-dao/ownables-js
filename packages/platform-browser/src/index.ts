@@ -8,6 +8,9 @@ export type {
   HubPendingUploadResult,
   HubUploadResult,
   HubNetwork,
+  HubAnchorEvidence,
+  HubAnchorPair,
+  HubAnchorRecord,
 } from './services/Hub.service.js';
 export { BrowserRuntimeSourceProvider } from './services/BrowserRuntimeSourceProvider.service.js';
 export { BrowserRuntimeRpcProvider } from './services/BrowserRuntimeRpcProvider.service.js';

@@ -72,6 +72,64 @@ describe('HubService', () => {
     expect(fetchFn).not.toHaveBeenCalled();
   });
 
+  it('queries anchor evidence in batches of 100 on the bound network', async () => {
+    const anchors = Array.from({ length: 101 }, (_, index) => ({
+      key: `0x${index.toString(16).padStart(64, '0')}`,
+      signer: ADDRESS,
+    }));
+    const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+      const { anchors } = JSON.parse(String(init?.body));
+      return Response.json({
+        chainId: 84532,
+        anchorContractAddress: ADDRESS,
+        records: anchors.map((anchor: { key: string; signer: string }) => ({
+          ...anchor,
+          value: `0x${'1'.repeat(64)}`,
+          transactionHash: `0x${'2'.repeat(64)}`,
+          blockNumber: 7,
+          transactionIndex: 0,
+          logIndex: 0,
+        })),
+      });
+    });
+    const hub = new HubService('https://hub.example', NETWORK, fetchFn);
+    const result = await hub.loadAnchorEvidence(anchors);
+    expect(result.anchorContractAddress).toBe(ADDRESS.toLowerCase());
+    expect(result.records).toHaveLength(101);
+    expect(
+      fetchFn.mock.calls.map(([url, init]) => [
+        url,
+        init?.method,
+        JSON.parse(String(init?.body)).anchors.length,
+      ])
+    ).toEqual([
+      ['https://hub.example/base-sepolia/anchors/evidence', 'POST', 100],
+      ['https://hub.example/base-sepolia/anchors/evidence', 'POST', 1],
+    ]);
+  });
+
+  it('rejects evidence from another network or sender', async () => {
+    const key = `0x${'1'.repeat(64)}`;
+    const record = {
+      key,
+      signer: `0x${'2'.repeat(40)}`,
+      value: key,
+      transactionHash: key,
+      blockNumber: 7,
+      transactionIndex: 0,
+      logIndex: 0,
+    };
+    const anchor = { key, signer: ADDRESS };
+    const wrongNetwork = new HubService('https://hub.example', NETWORK, async () =>
+      Response.json({ chainId: 8453, anchorContractAddress: ADDRESS, records: [] })
+    );
+    await expect(wrongNetwork.loadAnchorEvidence([anchor])).rejects.toThrow(/network or contract/);
+    const wrongSigner = new HubService('https://hub.example', NETWORK, async () =>
+      Response.json({ chainId: 84532, anchorContractAddress: ADDRESS, records: [record] })
+    );
+    await expect(wrongSigner.loadAnchorEvidence([anchor])).rejects.toThrow(/unexpected Hub anchor/);
+  });
+
   it('uses the network inbox route without an owner query parameter', async () => {
     const fetchFn = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ owner: ACCOUNT, entries: [] }), {
